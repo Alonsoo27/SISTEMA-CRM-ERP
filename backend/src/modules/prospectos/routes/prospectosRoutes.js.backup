@@ -1,0 +1,260 @@
+const express = require('express');
+const rateLimit = require('express-rate-limit');
+const router = express.Router();
+const ProspectosController = require('../controllers/prospectosController');
+
+// CONFIGURACIÓN DE RATE LIMITING PARA CREACIÓN DE PROSPECTOS
+const createProspectoRateLimit = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutos
+    max: 20, // máximo 20 creaciones por IP cada 15 minutos
+    message: {
+        success: false,
+        error: 'Demasiados intentos de creación. Espere 15 minutos antes de intentar nuevamente.',
+        reintentarEn: '15 minutos'
+    },
+    standardHeaders: true,
+    legacyHeaders: false,
+});
+
+// RATE LIMITING PARA ACTUALIZACIONES MASIVAS
+const updateRateLimit = rateLimit({
+    windowMs: 5 * 60 * 1000, // 5 minutos
+    max: 50, // máximo 50 actualizaciones por IP cada 5 minutos
+    message: {
+        success: false,
+        error: 'Demasiadas actualizaciones. Espere 5 minutos antes de continuar.',
+        reintentarEn: '5 minutos'
+    },
+    standardHeaders: true,
+    legacyHeaders: false,
+});
+
+// MIDDLEWARE DE VALIDACIÓN DE DATOS
+const validarDatosProspecto = (req, res, next) => {
+    try {
+        const { nombre_cliente, telefono, canal_contacto } = req.body;
+
+        // Validaciones básicas para creación
+        if (req.method === 'POST') {
+            if (!nombre_cliente?.trim()) {
+                return res.status(400).json({
+                    success: false,
+                    error: 'El nombre del cliente es requerido'
+                });
+            }
+
+            if (!telefono?.trim()) {
+                return res.status(400).json({
+                    success: false,
+                    error: 'El teléfono es requerido'
+                });
+            }
+
+            if (!canal_contacto?.trim()) {
+                return res.status(400).json({
+                    success: false,
+                    error: 'El canal de contacto es requerido'
+                });
+            }
+        }
+
+        // Sanitizar teléfono (remover espacios y caracteres especiales)
+        if (req.body.telefono) {
+            req.body.telefono = req.body.telefono.replace(/[^\d+]/g, '');
+        }
+
+        // Sanitizar strings
+        ['nombre_cliente', 'apellido_cliente', 'empresa', 'observaciones'].forEach(field => {
+            if (req.body[field]) {
+                req.body[field] = req.body[field].trim();
+            }
+        });
+
+        next();
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            error: 'Error en validación de datos: ' + error.message
+        });
+    }
+};
+
+// =====================================================
+// RUTAS PRINCIPALES DEL PIPELINE
+// =====================================================
+
+/**
+ * GET /api/prospectos
+ * Obtener todos los prospectos con filtros
+ * Query params: asesor_id, estado, canal_contacto, fecha_desde, fecha_hasta, antiguedad, busqueda, page, limit
+ */
+router.get('/', ProspectosController.obtenerTodos);
+
+/**
+ * POST /api/prospectos
+ * Crear nuevo prospecto
+ * Body: { nombre_cliente, telefono, canal_contacto, email?, empresa?, productos_interes?, ... }
+ */
+router.post('/', createProspectoRateLimit, validarDatosProspecto, ProspectosController.crearProspecto);
+
+/**
+ * PUT /api/prospectos/:id
+ * Actualizar prospecto completo
+ * Body: { campos_a_actualizar }
+ */
+router.put('/:id', updateRateLimit, validarDatosProspecto, ProspectosController.actualizarProspecto);
+
+/**
+ * PATCH /api/prospectos/:id/estado
+ * Cambiar estado del prospecto (para drag & drop del Kanban)
+ * Body: { estado: 'Prospecto'|'Cotizado'|'Negociacion'|'Cerrado'|'Perdido', motivo?: string }
+ */
+router.patch('/:id/estado', updateRateLimit, ProspectosController.cambiarEstado);
+
+/**
+ * POST /api/prospectos/:id/cerrar-venta
+ * Convertir prospecto en venta (botón "Cerrar venta")
+ * Body: { valor_final?, productos_vendidos?, observaciones_cierre? }
+ */
+router.post('/:id/cerrar-venta', ProspectosController.cerrarVenta);
+
+// =====================================================
+// RUTAS ESPECÍFICAS DEL KANBAN BOARD
+// =====================================================
+
+/**
+ * GET /api/prospectos/kanban/:asesorId
+ * GET /api/prospectos/kanban
+ * Obtener datos organizados para Kanban Board
+ * Params: asesorId (opcional) - 'todos' para ver todos, número para asesor específico
+ * Query: incluir_modo_libre=true para incluir prospectos en modo libre
+ */
+router.get('/kanban/:asesorId', ProspectosController.obtenerKanban);
+router.get('/kanban', ProspectosController.obtenerKanban);
+
+// =====================================================
+// RUTAS DE MÉTRICAS Y ANÁLISIS
+// =====================================================
+
+/**
+ * GET /api/prospectos/metricas/:asesorId
+ * GET /api/prospectos/metricas
+ * Obtener métricas del pipeline (general o por asesor)
+ * Params: asesorId (opcional) - 'todos' para métricas generales
+ * Query: fecha_desde, fecha_hasta (opcional para filtrar por período)
+ */
+router.get('/metricas/:asesorId', ProspectosController.obtenerMetricas);
+router.get('/metricas', ProspectosController.obtenerMetricas);
+
+// =====================================================
+// RUTAS DE UTILIDAD
+// =====================================================
+
+/**
+ * GET /api/prospectos/verificar-duplicado/:telefono
+ * Verificar si existe prospecto con ese teléfono
+ * Params: telefono
+ * Query: excluir_id (opcional, para excluir un ID específico en actualizaciones)
+ */
+router.get('/verificar-duplicado/:telefono', ProspectosController.verificarDuplicado);
+
+// =====================================================
+// HEALTH CHECK
+// =====================================================
+
+/**
+ * GET /api/prospectos/health
+ * Verificar estado del módulo de prospectos
+ */
+router.get('/health', ProspectosController.healthCheck);
+
+// =====================================================
+// RUTAS DE INFORMACIÓN DEL SISTEMA
+// =====================================================
+
+/**
+ * GET /api/prospectos/info/estados
+ * Obtener lista de estados válidos del pipeline
+ */
+router.get('/info/estados', (req, res) => {
+    res.json({
+        success: true,
+        data: {
+            estados: [
+                { codigo: 'Prospecto', nombre: 'Prospecto', descripcion: 'Contacto inicial registrado' },
+                { codigo: 'Cotizado', nombre: 'Cotizado', descripcion: 'Cotización enviada al cliente' },
+                { codigo: 'Negociacion', nombre: 'Negociación', descripcion: 'En proceso de negociación' },
+                { codigo: 'Cerrado', nombre: 'Cerrado', descripcion: 'Venta exitosa' },
+                { codigo: 'Perdido', nombre: 'Perdido', descripcion: 'No se concretó la venta' }
+            ],
+            flujo_normal: 'Prospecto → Cotizado → Negociación → Cerrado',
+            notas: 'Cualquier estado puede ir directamente a Perdido con justificación'
+        }
+    });
+});
+
+/**
+ * GET /api/prospectos/info/canales
+ * Obtener lista de canales de contacto válidos
+ */
+router.get('/info/canales', (req, res) => {
+    res.json({
+        success: true,
+        data: {
+            canales: [
+                { codigo: 'WhatsApp', nombre: 'WhatsApp', icono: '📱' },
+                { codigo: 'Messenger', nombre: 'Facebook Messenger', icono: '💬' },
+                { codigo: 'Facebook', nombre: 'Facebook', icono: '📘' },
+                { codigo: 'TikTok', nombre: 'TikTok', icono: '🎵' },
+                { codigo: 'Llamada', nombre: 'Llamada Telefónica', icono: '📞' },
+                { codigo: 'Presencial', nombre: 'Visita Presencial', icono: '🏢' },
+                { codigo: 'Email', nombre: 'Correo Electrónico', icono: '📧' }
+            ],
+            recomendacion: 'WhatsApp es el canal más efectivo según las métricas'
+        }
+    });
+});
+
+// =====================================================
+// RUTAS CON PARÁMETROS DINÁMICOS (AL FINAL)
+// =====================================================
+
+/**
+ * GET /api/prospectos/:id
+ * Obtener prospecto específico por ID
+ * IMPORTANTE: Esta ruta va AL FINAL para no interferir con rutas específicas
+ */
+router.get('/:id', ProspectosController.obtenerPorId || ((req, res) => {
+    // Endpoint básico hasta implementar método específico
+    res.status(501).json({
+        success: false,
+        error: 'Endpoint en desarrollo - usar /api/prospectos con filtros por ahora'
+    });
+}));
+
+// =====================================================
+// MIDDLEWARE DE MANEJO DE ERRORES
+// =====================================================
+
+router.use((error, req, res, next) => {
+    console.error('Error en rutas de prospectos:', error);
+    
+    // Errores de Supabase
+    if (error.code) {
+        return res.status(500).json({
+            success: false,
+            error: 'Error de base de datos',
+            codigo: error.code,
+            detalles: process.env.NODE_ENV === 'development' ? error.message : 'Error interno'
+        });
+    }
+    
+    // Errores generales
+    res.status(500).json({
+        success: false,
+        error: 'Error interno del servidor en módulo de prospectos',
+        timestamp: new Date().toISOString()
+    });
+});
+
+module.exports = router;

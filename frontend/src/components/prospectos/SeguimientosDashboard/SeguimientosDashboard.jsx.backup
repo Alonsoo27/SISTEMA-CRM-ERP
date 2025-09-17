@@ -1,0 +1,610 @@
+// src/components/prospectos/SeguimientosDashboard/SeguimientosDashboard.jsx
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { 
+  Clock, AlertTriangle, Calendar, Phone, Mail, MessageSquare, 
+  MapPin, CheckCircle, XCircle, RefreshCw, User, Bell, Settings, TrendingUp
+} from 'lucide-react';
+import prospectosService from '../../../services/prospectosService';
+
+const SeguimientosDashboard = ({ asesorId = null, refreshTrigger = 0 }) => {
+  const [seguimientos, setSeguimientos] = useState({
+    pendientes: [],
+    vencidos: [],
+    completados_hoy: [],
+    stats: {}
+  });
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [procesandoVencidos, setProcesandoVencidos] = useState(false);
+  const [notification, setNotification] = useState(null);
+
+  useEffect(() => {
+    cargarDashboardSeguimientos();
+  }, [asesorId, refreshTrigger]);
+
+  const cargarDashboardSeguimientos = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      // USAR LA API MEJORADA DE SEGUIMIENTOS
+      const response = await prospectosService.obtenerDashboardSeguimientos(asesorId);
+      
+      if (!response.success) throw new Error(response.error);
+      
+      // ESTRUCTURA MEJORADA - datos reales del backend optimizado
+      setSeguimientos({
+        pendientes: response.data.seguimientos?.proximos || [],
+        vencidos: response.data.seguimientos?.vencidos || [],
+        completados_hoy: response.data.seguimientos?.hoy || [],
+        stats: {
+          ...response.data.metricas,
+          conteos: response.data.conteos,
+          sistema: response.data.sistema
+        }
+      });
+      
+      console.log(`✅ Seguimientos cargados: ${response.data.conteos?.total || 0} total, ${response.data.conteos?.vencidos || 0} vencidos`);
+      
+    } catch (err) {
+      setError(err.message);
+      console.error('❌ Error cargando seguimientos desde API:', err);
+      
+      // Fallback con datos básicos
+      setSeguimientos({
+        pendientes: [],
+        vencidos: [],
+        completados_hoy: [],
+        stats: { conteos: { total: 0, pendientes: 0, vencidos: 0, completados_hoy: 0 } }
+      });
+    } finally {
+      setLoading(false);
+    }
+  }, [asesorId]);
+
+  const mostrarNotificacion = useCallback((tipo, mensaje) => {
+    setNotification({ tipo, mensaje });
+    setTimeout(() => setNotification(null), 3000);
+  }, []);
+
+  const completarSeguimiento = async (seguimientoId, resultado = '') => {
+    try {
+      if (seguimientoId.startsWith('prospecto_')) {
+        const prospectoId = seguimientoId.replace('prospecto_', '');
+        
+        // Actualizar prospecto para marcar seguimiento como completado
+        await prospectosService.actualizar(prospectoId, {
+          seguimiento_completado: true,
+          fecha_seguimiento: new Date().toISOString(),
+          resultado_seguimiento: resultado
+        });
+        
+        mostrarNotificacion('success', 'Seguimiento marcado como completado');
+        cargarDashboardSeguimientos();
+      }
+    } catch (err) {
+      mostrarNotificacion('error', 'Error completando seguimiento: ' + err.message);
+    }
+  };
+
+  const posponerSeguimiento = async (seguimientoId, nuevaFecha, motivo) => {
+    try {
+      if (seguimientoId.startsWith('prospecto_')) {
+        const prospectoId = seguimientoId.replace('prospecto_', '');
+        
+        // Validar nueva fecha
+        const fechaValida = new Date(nuevaFecha);
+        if (isNaN(fechaValida.getTime())) {
+          throw new Error('Fecha inválida');
+        }
+        
+        // Actualizar la fecha de seguimiento del prospecto  
+        await prospectosService.actualizar(prospectoId, {
+          seguimiento_obligatorio: nuevaFecha,
+          fecha_seguimiento: nuevaFecha,
+          seguimiento_completado: false,
+          motivo_postergacion: motivo
+        });
+        
+        mostrarNotificacion('success', 'Seguimiento reprogramado correctamente');
+        cargarDashboardSeguimientos();
+      }
+    } catch (err) {
+      mostrarNotificacion('error', 'Error posponiendo seguimiento: ' + err.message);
+    }
+  };
+
+  const procesarSeguimientosVencidos = async () => {
+    if (seguimientos.vencidos.length === 0) {
+      mostrarNotificacion('info', 'No hay seguimientos vencidos que procesar');
+      return;
+    }
+
+    try {
+      setProcesandoVencidos(true);
+      
+      let procesados = 0;
+      for (const seguimiento of seguimientos.vencidos) {
+        if (seguimiento.id.startsWith('prospecto_')) {
+          const prospectoId = seguimiento.id.replace('prospecto_', '');
+          
+          // Marcar como vencido en el backend
+          await prospectosService.actualizar(prospectoId, {
+            seguimiento_vencido: true,
+            fecha_vencimiento: new Date().toISOString()
+          });
+          procesados++;
+        }
+      }
+      
+      mostrarNotificacion('success', `${procesados} seguimientos vencidos procesados`);
+      cargarDashboardSeguimientos();
+    } catch (err) {
+      mostrarNotificacion('error', 'Error procesando seguimientos: ' + err.message);
+    } finally {
+      setProcesandoVencidos(false);
+    }
+  };
+
+  const formatearFecha = useCallback((fecha) => {
+    if (!fecha) return 'Sin fecha';
+    const fechaObj = new Date(fecha);
+    const ahora = new Date();
+    const diffHoras = (fechaObj - ahora) / (1000 * 60 * 60);
+    
+    if (diffHoras < 0) {
+      const horasVencidas = Math.abs(Math.floor(diffHoras));
+      return horasVencidas < 24 ? 
+        `Vencido hace ${horasVencidas}h` : 
+        `Vencido hace ${Math.floor(horasVencidas / 24)}d`;
+    } else if (diffHoras < 24) {
+      return `En ${Math.floor(diffHoras)}h`;
+    } else {
+      return fechaObj.toLocaleDateString('es-PE', { 
+        day: '2-digit', 
+        month: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+    }
+  }, []);
+
+  const getTipoIcon = useCallback((tipo) => {
+    const iconos = {
+      'WhatsApp': MessageSquare,
+      'Llamada': Phone,
+      'Email': Mail,
+      'Presencial': MapPin,
+      'Messenger': MessageSquare,
+      'Facebook': MessageSquare,
+      'TikTok': MessageSquare
+    };
+    return iconos[tipo] || Phone;
+  }, []);
+
+  const obtenerUrgenciaSeguimiento = useCallback((fechaProgramada) => {
+    const ahora = new Date();
+    const fecha = new Date(fechaProgramada);
+    const diffHoras = (fecha - ahora) / (1000 * 60 * 60);
+    const diffDias = diffHoras / 24;
+    
+    if (diffDias <= 1) {
+      return {
+        nivel: 'critico',
+        color: 'red',
+        bgColor: 'bg-red-50',
+        borderColor: 'border-l-red-500',
+        textColor: 'text-red-600',
+        descripcion: diffDias < 0 ? 'Vencido' : 'Urgente (hoy/mañana)'
+      };
+    } else if (diffDias <= 5) {
+      return {
+        nivel: 'medio',
+        color: 'yellow',
+        bgColor: 'bg-yellow-50',
+        borderColor: 'border-l-yellow-500',
+        textColor: 'text-yellow-600',
+        descripcion: 'Próximo (hasta 5 días)'
+      };
+    } else {
+      return {
+        nivel: 'bajo',
+        color: 'green',
+        bgColor: 'bg-green-50',
+        borderColor: 'border-l-green-500',
+        textColor: 'text-green-600',
+        descripcion: 'Programado (más de 5 días)'
+      };
+    }
+  }, []);
+
+  // OPTIMIZACIÓN: Calcular categorías una sola vez con useMemo
+  const seguimientosPorUrgencia = useMemo(() => {
+    if (!seguimientos.pendientes.length) {
+      return { criticos: [], medios: [], bajos: [] };
+    }
+
+    return seguimientos.pendientes.reduce((acc, seguimiento) => {
+      const urgencia = obtenerUrgenciaSeguimiento(seguimiento.fecha_programada);
+      
+      switch (urgencia.nivel) {
+        case 'critico':
+          acc.criticos.push(seguimiento);
+          break;
+        case 'medio':
+          acc.medios.push(seguimiento);
+          break;
+        case 'bajo':
+          acc.bajos.push(seguimiento);
+          break;
+      }
+      
+      return acc;
+    }, { criticos: [], medios: [], bajos: [] });
+  }, [seguimientos.pendientes, obtenerUrgenciaSeguimiento]);
+
+  const SeguimientoCard = ({ seguimiento, tipo = 'pendiente' }) => {
+    const IconComponent = getTipoIcon(seguimiento.tipo);
+    const esVencido = tipo === 'vencido';
+    const esCompletado = tipo === 'completado';
+    
+    // Obtener urgencia para seguimientos pendientes
+    const urgencia = !esVencido && !esCompletado ? 
+      obtenerUrgenciaSeguimiento(seguimiento.fecha_programada) : null;
+
+    return (
+      <div className={`bg-white rounded-lg border-l-4 p-4 shadow-sm hover:shadow-md transition-shadow ${
+        esVencido ? 'border-l-red-500 bg-red-50' : 
+        esCompletado ? 'border-l-green-500 bg-green-50' : 
+        urgencia ? `${urgencia.borderColor} ${urgencia.bgColor}` :
+        'border-l-blue-500'
+      }`}>
+        <div className="flex items-start justify-between">
+          <div className="flex-1">
+            <div className="flex items-center mb-2">
+              <IconComponent className={`h-4 w-4 mr-2 ${
+                esVencido ? 'text-red-600' : 
+                esCompletado ? 'text-green-600' : 
+                urgencia ? urgencia.textColor :
+                'text-blue-600'
+              }`} />
+              <h4 className="font-medium text-gray-900">
+                {seguimiento.prospecto_nombre || 'Prospecto'}
+              </h4>
+              <span className="ml-2 text-xs text-gray-500">
+                {seguimiento.prospecto_codigo}
+              </span>
+              
+              {/* Badge de urgencia mejorado */}
+              {urgencia && !esVencido && !esCompletado && (
+                <span className={`ml-2 px-2 py-1 rounded-full text-xs font-medium ${
+                  urgencia.nivel === 'critico' ? 'bg-red-100 text-red-700' :
+                  urgencia.nivel === 'medio' ? 'bg-yellow-100 text-yellow-700' :
+                  'bg-green-100 text-green-700'
+                }`}>
+                  {urgencia.descripcion}
+                </span>
+              )}
+              
+              {/* Badge de horas laborales vencidas */}
+              {esVencido && seguimiento.horas_laborales_pasadas && (
+                <span className="ml-2 px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-700">
+                  +{seguimiento.horas_laborales_pasadas}h laborales
+                </span>
+              )}
+            </div>
+            
+            <p className="text-sm text-gray-600 mb-2">
+              {seguimiento.descripcion || `${seguimiento.tipo} programada`}
+            </p>
+            
+            <div className="flex items-center text-xs text-gray-500 space-x-4">
+              <span className="flex items-center">
+                <Calendar className="h-3 w-3 mr-1" />
+                {formatearFecha(seguimiento.fecha_programada)}
+              </span>
+              <span className="flex items-center">
+                <User className="h-3 w-3 mr-1" />
+                {seguimiento.asesor_nombre}
+              </span>
+              {seguimiento.telefono && (
+                <span className="flex items-center">
+                  <Phone className="h-3 w-3 mr-1" />
+                  {seguimiento.telefono}
+                </span>
+              )}
+            </div>
+          </div>
+
+          {!esCompletado && (
+            <div className="flex space-x-2">
+              <button
+                onClick={() => completarSeguimiento(seguimiento.id, 'Completado desde dashboard')}
+                className="p-1 text-green-600 hover:text-green-800 hover:bg-green-100 rounded transition-colors"
+                title="Marcar como completado"
+              >
+                <CheckCircle className="h-4 w-4" />
+              </button>
+              <button
+                onClick={() => {
+                  const nuevaFecha = prompt('Nueva fecha (YYYY-MM-DD HH:MM):');
+                  const motivo = prompt('Motivo de la postergación:');
+                  if (nuevaFecha && motivo) {
+                    posponerSeguimiento(seguimiento.id, nuevaFecha, motivo);
+                  }
+                }}
+                className="p-1 text-yellow-600 hover:text-yellow-800 hover:bg-yellow-100 rounded transition-colors"
+                title="Posponer"
+              >
+                <Clock className="h-4 w-4" />
+              </button>
+            </div>
+          )}
+        </div>
+
+        {seguimiento.resultado && (
+          <div className="mt-2 p-2 bg-gray-100 rounded text-xs">
+            <strong>Resultado:</strong> {seguimiento.resultado}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  // Componente de notificación
+  const Notification = () => {
+    if (!notification) return null;
+
+    const colors = {
+      success: 'bg-green-50 border-green-200 text-green-800',
+      error: 'bg-red-50 border-red-200 text-red-800',
+      info: 'bg-blue-50 border-blue-200 text-blue-800'
+    };
+
+    return (
+      <div className={`fixed top-4 right-4 p-4 rounded-lg border z-50 ${colors[notification.tipo]}`}>
+        <div className="flex items-center">
+          {notification.tipo === 'success' && <CheckCircle className="h-5 w-5 mr-2" />}
+          {notification.tipo === 'error' && <XCircle className="h-5 w-5 mr-2" />}
+          {notification.tipo === 'info' && <Bell className="h-5 w-5 mr-2" />}
+          <span>{notification.mensaje}</span>
+        </div>
+      </div>
+    );
+  };
+
+  if (loading) {
+    return (
+      <div className="space-y-6">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+          {[1, 2, 3, 4].map((i) => (
+            <div key={i} className="bg-white rounded-lg shadow p-6 animate-pulse">
+              <div className="h-4 bg-gray-200 rounded mb-4"></div>
+              <div className="h-8 bg-gray-200 rounded mb-2"></div>
+              <div className="h-3 bg-gray-200 rounded w-3/4"></div>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  const stats = seguimientos.stats || {};
+  const conteos = stats.conteos || {};
+
+  return (
+    <div className="space-y-6">
+      <Notification />
+      
+      {/* Header con estadísticas mejoradas */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+        <div className="bg-white rounded-lg shadow p-6">
+          <div className="flex items-center">
+            <div className="p-3 rounded-lg bg-yellow-100">
+              <Clock className="h-6 w-6 text-yellow-600" />
+            </div>
+            <div className="ml-4">
+              <p className="text-sm font-medium text-gray-600">Pendientes</p>
+              <p className="text-2xl font-bold text-gray-900">{conteos.pendientes || 0}</p>
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-lg shadow p-6">
+          <div className="flex items-center">
+            <div className="p-3 rounded-lg bg-red-100">
+              <AlertTriangle className="h-6 w-6 text-red-600" />
+            </div>
+            <div className="ml-4">
+              <p className="text-sm font-medium text-gray-600">Vencidos</p>
+              <p className="text-2xl font-bold text-gray-900">{conteos.vencidos || 0}</p>
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-lg shadow p-6">
+          <div className="flex items-center">
+            <div className="p-3 rounded-lg bg-green-100">
+              <CheckCircle className="h-6 w-6 text-green-600" />
+            </div>
+            <div className="ml-4">
+              <p className="text-sm font-medium text-gray-600">Completados Hoy</p>
+              <p className="text-2xl font-bold text-gray-900">{conteos.completados_hoy || 0}</p>
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-lg shadow p-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-gray-600">Efectividad</p>
+              <p className="text-2xl font-bold text-gray-900">{stats.efectividad || 0}%</p>
+            </div>
+            <div className="p-3 rounded-lg bg-blue-100">
+              <TrendingUp className="h-6 w-6 text-blue-600" />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Alertas de seguimientos vencidos */}
+      {seguimientos.vencidos.length > 0 && (
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+          <div className="flex items-center mb-3">
+            <AlertTriangle className="h-5 w-5 text-red-400 mr-2" />
+            <h3 className="text-lg font-medium text-red-800">
+              Seguimientos Vencidos ({seguimientos.vencidos.length})
+            </h3>
+            <button
+              onClick={procesarSeguimientosVencidos}
+              disabled={procesandoVencidos}
+              className="ml-auto px-3 py-1 bg-red-600 text-white rounded text-sm hover:bg-red-700 disabled:opacity-50 transition-colors"
+            >
+              {procesandoVencidos ? 'Procesando...' : 'Procesar Automático'}
+            </button>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {seguimientos.vencidos.map((seguimiento) => (
+              <SeguimientoCard key={seguimiento.id} seguimiento={seguimiento} tipo="vencido" />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Seguimientos pendientes organizados por urgencia */}
+      <div className="bg-white rounded-lg shadow">
+        <div className="p-6 border-b border-gray-200">
+          <h3 className="text-lg font-medium text-gray-900 flex items-center">
+            <Bell className="h-5 w-5 mr-2" />
+            Seguimientos Pendientes ({seguimientos.pendientes.length})
+          </h3>
+        </div>
+        <div className="p-6">
+          {seguimientos.pendientes.length === 0 ? (
+            <div className="text-center py-8">
+              <Clock className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+              <p className="text-gray-600">No hay seguimientos pendientes</p>
+              <p className="text-sm text-gray-500 mt-2">
+                Los seguimientos aparecerán cuando tengas prospectos con fechas programadas
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-6">
+              {/* Críticos (hoy y mañana) */}
+              {seguimientosPorUrgencia.criticos.length > 0 && (
+                <div>
+                  <h4 className="text-sm font-medium text-red-700 mb-3 flex items-center">
+                    <AlertTriangle className="h-4 w-4 mr-2" />
+                    Urgentes - Hoy y Mañana ({seguimientosPorUrgencia.criticos.length})
+                  </h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {seguimientosPorUrgencia.criticos.map((seguimiento) => (
+                      <SeguimientoCard key={seguimiento.id} seguimiento={seguimiento} tipo="pendiente" />
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Medios (hasta 5 días) */}
+              {seguimientosPorUrgencia.medios.length > 0 && (
+                <div>
+                  <h4 className="text-sm font-medium text-yellow-700 mb-3 flex items-center">
+                    <Clock className="h-4 w-4 mr-2" />
+                    Próximos - Hasta 5 Días ({seguimientosPorUrgencia.medios.length})
+                  </h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {seguimientosPorUrgencia.medios.map((seguimiento) => (
+                      <SeguimientoCard key={seguimiento.id} seguimiento={seguimiento} tipo="pendiente" />
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Bajos (más de 5 días) */}
+              {seguimientosPorUrgencia.bajos.length > 0 && (
+                <div>
+                  <h4 className="text-sm font-medium text-green-700 mb-3 flex items-center">
+                    <Calendar className="h-4 w-4 mr-2" />
+                    Programados - Más de 5 Días ({seguimientosPorUrgencia.bajos.length})
+                  </h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {seguimientosPorUrgencia.bajos.map((seguimiento) => (
+                      <SeguimientoCard key={seguimiento.id} seguimiento={seguimiento} tipo="pendiente" />
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Seguimientos completados hoy */}
+      {seguimientos.completados_hoy.length > 0 && (
+        <div className="bg-white rounded-lg shadow">
+          <div className="p-6 border-b border-gray-200">
+            <h3 className="text-lg font-medium text-gray-900 flex items-center">
+              <CheckCircle className="h-5 w-5 mr-2" />
+              Completados Hoy ({seguimientos.completados_hoy.length})
+            </h3>
+          </div>
+          <div className="p-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {seguimientos.completados_hoy.map((seguimiento) => (
+                <SeguimientoCard key={seguimiento.id} seguimiento={seguimiento} tipo="completado" />
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Información del sistema mejorada */}
+      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+        <div className="flex items-start">
+          <Settings className="h-5 w-5 text-blue-400 mr-2 mt-0.5" />
+          <div className="flex-1">
+            <h4 className="text-sm font-medium text-blue-800 mb-1">Sistema de Seguimientos Automáticos</h4>
+            <p className="text-sm text-blue-700 mb-2">
+              Los seguimientos se procesan automáticamente cada hora durante horario laboral (L-V 8am-6pm, Sáb 9am-12pm). 
+              Después de 18 horas laborales sin seguimiento, el prospecto se reasigna automáticamente.
+            </p>
+            <ul className="text-xs text-blue-600 space-y-1">
+              <li>• 1er vencimiento: Reasignación a otro asesor</li>
+              <li>• 2do vencimiento: Segunda reasignación</li>
+              <li>• 3er vencimiento: Modo libre (competencia abierta)</li>
+            </ul>
+            
+            {stats.sistema && (
+              <div className="mt-3 pt-3 border-t border-blue-200 text-xs text-blue-600">
+                <p>Última actualización: {new Date(stats.sistema.ultima_actualizacion).toLocaleString('es-PE')}</p>
+                <p>Prospectos evaluados: {stats.sistema.prospectos_evaluados}</p>
+                {stats.sistema.filtro_asesor && (
+                  <p>Filtrado por asesor ID: {stats.sistema.filtro_asesor}</p>
+                )}
+              </div>
+            )}
+          </div>
+          
+          <button
+            onClick={() => cargarDashboardSeguimientos()}
+            className="p-2 bg-blue-100 text-blue-600 rounded-lg hover:bg-blue-200 transition-colors"
+            title="Refrescar datos"
+          >
+            <RefreshCw className="h-4 w-4" />
+          </button>
+        </div>
+      </div>
+
+      {error && (
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+          <div className="flex items-center">
+            <XCircle className="h-5 w-5 text-red-400 mr-2" />
+            <p className="text-red-700">Error: {error}</p>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default SeguimientosDashboard;

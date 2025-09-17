@@ -1,0 +1,855 @@
+const { createClient } = require('@supabase/supabase-js');
+const winston = require('winston');
+
+// Configuración de Supabase
+const supabaseUrl = process.env.SUPABASE_URL;
+const supabaseKey = process.env.SUPABASE_ANON_KEY;
+const supabase = createClient(supabaseUrl, supabaseKey);
+
+// CONFIGURACIÓN DE LOGGING
+const logger = winston.createLogger({
+    level: 'info',
+    format: winston.format.combine(
+        winston.format.timestamp(),
+        winston.format.errors({ stack: true }),
+        winston.format.json()
+    ),
+    defaultMeta: { service: 'prospectos-pipeline' },
+    transports: [
+        new winston.transports.File({ filename: 'logs/error.log', level: 'error' }),
+        new winston.transports.File({ filename: 'logs/prospectos.log' }),
+        new winston.transports.Console({
+            format: winston.format.combine(
+                winston.format.colorize(),
+                winston.format.simple()
+            )
+        })
+    ]
+});
+
+// VALIDACIONES DE PROSPECTO
+const validarProspecto = (prospecto) => {
+    const errores = [];
+
+    // Validar campos requeridos
+    if (!prospecto.nombre_cliente?.trim()) {
+        errores.push('El nombre del cliente es requerido');
+    } else if (prospecto.nombre_cliente.length > 100) {
+        errores.push('El nombre del cliente no puede exceder 100 caracteres');
+    }
+
+    if (!prospecto.telefono?.trim()) {
+        errores.push('El teléfono es requerido');
+    } else if (prospecto.telefono.length > 20) {
+        errores.push('El teléfono no puede exceder 20 caracteres');
+    }
+
+    if (!prospecto.canal_contacto?.trim()) {
+        errores.push('El canal de contacto es requerido');
+    }
+
+    // Validar canal de contacto válido
+    const canalesValidos = ['WhatsApp', 'Messenger', 'Facebook', 'TikTok', 'Llamada', 'Presencial', 'Email'];
+    if (prospecto.canal_contacto && !canalesValidos.includes(prospecto.canal_contacto)) {
+        errores.push(`Canal de contacto debe ser uno de: ${canalesValidos.join(', ')}`);
+    }
+
+    // Validar email si se proporciona
+    if (prospecto.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(prospecto.email)) {
+        errores.push('El formato del email no es válido');
+    }
+
+    // Validar presupuesto estimado
+    if (prospecto.presupuesto_estimado && (isNaN(prospecto.presupuesto_estimado) || prospecto.presupuesto_estimado < 0)) {
+        errores.push('El presupuesto estimado debe ser un número positivo');
+    }
+
+    // Validar valor estimado
+    if (prospecto.valor_estimado && (isNaN(prospecto.valor_estimado) || prospecto.valor_estimado < 0)) {
+        errores.push('El valor estimado debe ser un número positivo');
+    }
+
+    // Validar probabilidad de cierre
+    if (prospecto.probabilidad_cierre && (isNaN(prospecto.probabilidad_cierre) || prospecto.probabilidad_cierre < 0 || prospecto.probabilidad_cierre > 100)) {
+        errores.push('La probabilidad de cierre debe estar entre 0 y 100');
+    }
+
+    return errores;
+};
+
+class ProspectosController {
+    
+    // =====================================================
+    // ENDPOINTS PRINCIPALES DEL PIPELINE
+    // =====================================================
+    
+    /**
+     * GET /api/prospectos
+     * Obtener todos los prospectos con filtros
+     */
+    static async obtenerTodos(req, res) {
+        try {
+            const { 
+                asesor_id, 
+                estado, 
+                canal_contacto, 
+                fecha_desde, 
+                fecha_hasta, 
+                antiguedad,
+                busqueda,
+                page = 1,
+                limit = 50
+            } = req.query;
+
+            let query = supabase
+                .from('prospectos')
+                .select(`
+                    *,
+                    usuarios!asesor_id(nombre, apellido)
+                `)
+                .eq('activo', true)
+                .order('fecha_ultima_actualizacion', { ascending: false });
+
+            // Aplicar filtros
+            if (asesor_id) {
+                query = query.eq('asesor_id', asesor_id);
+            }
+
+            if (estado) {
+                query = query.eq('estado', estado);
+            }
+
+            if (canal_contacto) {
+                query = query.eq('canal_contacto', canal_contacto);
+            }
+
+            if (fecha_desde) {
+                query = query.gte('fecha_contacto', fecha_desde);
+            }
+
+            if (fecha_hasta) {
+                query = query.lte('fecha_contacto', fecha_hasta);
+            }
+
+            // Filtro por antigüedad
+            if (antiguedad) {
+                const ahora = new Date();
+                let fechaLimite;
+                
+                switch (antiguedad) {
+                    case 'ultimos_7_dias':
+                        fechaLimite = new Date(ahora.getTime() - 7 * 24 * 60 * 60 * 1000);
+                        break;
+                    case 'ultimos_30_dias':
+                        fechaLimite = new Date(ahora.getTime() - 30 * 24 * 60 * 60 * 1000);
+                        break;
+                    case 'mas_de_60_dias':
+                        fechaLimite = new Date(ahora.getTime() - 60 * 24 * 60 * 60 * 1000);
+                        query = query.lt('fecha_contacto', fechaLimite.toISOString());
+                        break;
+                    default:
+                        break;
+                }
+                
+                if (antiguedad !== 'mas_de_60_dias' && fechaLimite) {
+                    query = query.gte('fecha_contacto', fechaLimite.toISOString());
+                }
+            }
+
+            // Búsqueda por texto
+            if (busqueda) {
+                query = query.or(`nombre_cliente.ilike.%${busqueda}%,apellido_cliente.ilike.%${busqueda}%,empresa.ilike.%${busqueda}%,telefono.ilike.%${busqueda}%`);
+            }
+
+            // Paginación
+            const offset = (page - 1) * limit;
+            query = query.range(offset, offset + limit - 1);
+
+            const { data, error, count } = await query;
+
+            if (error) {
+                logger.error('Error al obtener prospectos:', error);
+                throw error;
+            }
+
+            logger.info(`Prospectos obtenidos: ${data?.length || 0} registros`);
+
+            res.json({
+                success: true,
+                data: data || [],
+                pagination: {
+                    page: parseInt(page),
+                    limit: parseInt(limit),
+                    total: count
+                }
+            });
+
+        } catch (error) {
+            logger.error('Error en obtenerTodos:', error);
+            res.status(500).json({
+                success: false,
+                error: 'Error al obtener prospectos: ' + error.message
+            });
+        }
+    }
+
+    /**
+     * GET /api/prospectos/kanban/:asesorId?
+     * Obtener datos organizados para Kanban Board
+     */
+    static async obtenerKanban(req, res) {
+        try {
+            const { asesorId } = req.params;
+            const { incluir_modo_libre = false } = req.query;
+
+            let query = supabase
+                .from('prospectos')
+                .select(`
+                    id, codigo, nombre_cliente, apellido_cliente, empresa, telefono, email,
+                    canal_contacto, estado, valor_estimado, probabilidad_cierre,
+                    fecha_contacto, fecha_seguimiento, productos_interes, observaciones,
+                    asesor_id, asesor_nombre, modo_libre, numero_reasignaciones
+                `)
+                .eq('activo', true);
+
+            // Filtrar por asesor si se especifica
+            if (asesorId && asesorId !== 'todos') {
+                if (incluir_modo_libre === 'true') {
+                    // Incluir prospectos del asesor + los en modo libre
+                    query = query.or(`asesor_id.eq.${asesorId},modo_libre.eq.true`);
+                } else {
+                    query = query.eq('asesor_id', asesorId).eq('modo_libre', false);
+                }
+            }
+
+            const { data, error } = await query;
+
+            if (error) {
+                logger.error('Error al obtener datos del Kanban:', error);
+                throw error;
+            }
+
+            // Agrupar por estado
+            const kanbanData = {
+                Prospecto: [],
+                Cotizado: [],
+                Negociacion: [],
+                Cerrado: [],
+                Perdido: []
+            };
+
+            let valorTotalPipeline = 0;
+
+            (data || []).forEach(prospecto => {
+                if (kanbanData[prospecto.estado]) {
+                    kanbanData[prospecto.estado].push({
+                        ...prospecto,
+                        dias_en_etapa: Math.floor((new Date() - new Date(prospecto.fecha_contacto)) / (1000 * 60 * 60 * 24))
+                    });
+                    
+                    if (['Prospecto', 'Cotizado', 'Negociacion'].includes(prospecto.estado)) {
+                        valorTotalPipeline += parseFloat(prospecto.valor_estimado || 0);
+                    }
+                }
+            });
+
+            // Ordenar cada columna por prioridad
+            Object.keys(kanbanData).forEach(estado => {
+                kanbanData[estado].sort((a, b) => {
+                    // Prioridad: modo libre > número de reasignaciones > fecha más antigua
+                    if (a.modo_libre !== b.modo_libre) return b.modo_libre - a.modo_libre;
+                    if (a.numero_reasignaciones !== b.numero_reasignaciones) return b.numero_reasignaciones - a.numero_reasignaciones;
+                    return new Date(a.fecha_contacto) - new Date(b.fecha_contacto);
+                });
+            });
+
+            const metricas = {
+                total_prospectos: data?.length || 0,
+                valor_total_pipeline: valorTotalPipeline,
+                distribucion: {
+                    prospecto: kanbanData.Prospecto.length,
+                    cotizado: kanbanData.Cotizado.length,
+                    negociacion: kanbanData.Negociacion.length,
+                    cerrado: kanbanData.Cerrado.length,
+                    perdido: kanbanData.Perdido.length
+                },
+                modo_libre_activos: (data || []).filter(p => p.modo_libre).length
+            };
+
+            logger.info(`Kanban obtenido: ${metricas.total_prospectos} prospectos, $${valorTotalPipeline} en pipeline`);
+
+            res.json({
+                success: true,
+                data: kanbanData,
+                metricas: metricas
+            });
+
+        } catch (error) {
+            logger.error('Error en obtenerKanban:', error);
+            res.status(500).json({
+                success: false,
+                error: 'Error al obtener datos del Kanban: ' + error.message
+            });
+        }
+    }
+
+    /**
+     * POST /api/prospectos
+     * Crear nuevo prospecto
+     */
+    static async crearProspecto(req, res) {
+        try {
+            const datosProspecto = req.body;
+            
+            // TODO: Obtener del token JWT cuando esté implementado
+            const asesorId = req.user?.id || 1;
+            const asesorNombre = req.user?.nombre || 'Admin User';
+
+            // Asignación automática del asesor logueado
+            datosProspecto.asesor_id = asesorId;
+            datosProspecto.asesor_nombre = asesorNombre;
+            datosProspecto.asesor_original_id = asesorId;
+            datosProspecto.asesor_original_nombre = asesorNombre;
+
+            // Validaciones
+            const errores = validarProspecto(datosProspecto);
+            if (errores.length > 0) {
+                return res.status(400).json({
+                    success: false,
+                    error: 'Errores de validación',
+                    errores: errores
+                });
+            }
+
+            // Verificar duplicados por teléfono
+            const { data: duplicados } = await supabase
+                .from('prospectos')
+                .select('id, codigo, nombre_cliente, apellido_cliente, estado, asesor_nombre')
+                .eq('telefono', datosProspecto.telefono)
+                .eq('activo', true);
+
+            if (duplicados && duplicados.length > 0) {
+                logger.warn(`Intento de crear prospecto duplicado: ${datosProspecto.telefono}`);
+                return res.status(409).json({
+                    success: false,
+                    error: 'Ya existe un prospecto con este teléfono',
+                    prospecto_existente: duplicados[0]
+                });
+            }
+
+            // Crear prospecto
+            const { data, error } = await supabase
+                .from('prospectos')
+                .insert([{
+                    ...datosProspecto,
+                    productos_interes: datosProspecto.productos_interes || [],
+                    historial_interacciones: JSON.stringify([{
+                        fecha: new Date().toISOString(),
+                        tipo: 'Creación',
+                        descripcion: `Prospecto creado vía ${datosProspecto.canal_contacto}`,
+                        usuario: asesorNombre
+                    }])
+                }])
+                .select()
+                .single();
+
+            if (error) {
+                logger.error('Error al crear prospecto:', error);
+                throw error;
+            }
+
+            logger.info(`Prospecto creado exitosamente: ${data.codigo} - ${data.nombre_cliente}`);
+
+            res.status(201).json({
+                success: true,
+                data: data,
+                message: 'Prospecto creado exitosamente'
+            });
+
+        } catch (error) {
+            logger.error('Error en crearProspecto:', error);
+            res.status(500).json({
+                success: false,
+                error: 'Error al crear prospecto: ' + error.message
+            });
+        }
+    }
+
+    /**
+     * PUT /api/prospectos/:id
+     * Actualizar prospecto
+     */
+    static async actualizarProspecto(req, res) {
+        try {
+            const { id } = req.params;
+            const datosActualizacion = req.body;
+
+            if (!id || isNaN(id)) {
+                return res.status(400).json({
+                    success: false,
+                    error: 'ID de prospecto inválido'
+                });
+            }
+
+            // Verificar que el prospecto existe
+            const { data: prospectoExistente } = await supabase
+                .from('prospectos')
+                .select('*')
+                .eq('id', id)
+                .eq('activo', true)
+                .single();
+
+            if (!prospectoExistente) {
+                return res.status(404).json({
+                    success: false,
+                    error: 'Prospecto no encontrado'
+                });
+            }
+
+            // Validaciones si se actualizan campos críticos
+            if (datosActualizacion.telefono && datosActualizacion.telefono !== prospectoExistente.telefono) {
+                const { data: duplicados } = await supabase
+                    .from('prospectos')
+                    .select('id, codigo, nombre_cliente')
+                    .eq('telefono', datosActualizacion.telefono)
+                    .eq('activo', true)
+                    .neq('id', id);
+
+                if (duplicados && duplicados.length > 0) {
+                    return res.status(409).json({
+                        success: false,
+                        error: 'Ya existe otro prospecto con este teléfono',
+                        prospecto_existente: duplicados[0]
+                    });
+                }
+            }
+
+            // Validar datos si se proporcionan
+            const errores = validarProspecto({ ...prospectoExistente, ...datosActualizacion });
+            if (errores.length > 0) {
+                return res.status(400).json({
+                    success: false,
+                    error: 'Errores de validación',
+                    errores: errores
+                });
+            }
+
+            // Actualizar prospecto
+            const { data, error } = await supabase
+                .from('prospectos')
+                .update(datosActualizacion)
+                .eq('id', id)
+                .select()
+                .single();
+
+            if (error) {
+                logger.error('Error al actualizar prospecto:', error);
+                throw error;
+            }
+
+            logger.info(`Prospecto actualizado: ${data.codigo} - ${data.nombre_cliente}`);
+
+            res.json({
+                success: true,
+                data: data,
+                message: 'Prospecto actualizado exitosamente'
+            });
+
+        } catch (error) {
+            logger.error('Error en actualizarProspecto:', error);
+            res.status(500).json({
+                success: false,
+                error: 'Error al actualizar prospecto: ' + error.message
+            });
+        }
+    }
+
+    /**
+     * PATCH /api/prospectos/:id/estado
+     * Cambiar estado del prospecto (para Kanban drag & drop)
+     */
+    static async cambiarEstado(req, res) {
+        try {
+            const { id } = req.params;
+            const { estado, motivo } = req.body;
+
+            if (!id || isNaN(id)) {
+                return res.status(400).json({
+                    success: false,
+                    error: 'ID de prospecto inválido'
+                });
+            }
+
+            const estadosValidos = ['Prospecto', 'Cotizado', 'Negociacion', 'Cerrado', 'Perdido'];
+            if (!estado || !estadosValidos.includes(estado)) {
+                return res.status(400).json({
+                    success: false,
+                    error: 'Estado inválido',
+                    estados_validos: estadosValidos
+                });
+            }
+
+            // Obtener prospecto actual
+            const { data: prospectoActual } = await supabase
+                .from('prospectos')
+                .select('*')
+                .eq('id', id)
+                .eq('activo', true)
+                .single();
+
+            if (!prospectoActual) {
+                return res.status(404).json({
+                    success: false,
+                    error: 'Prospecto no encontrado'
+                });
+            }
+
+            const datosActualizacion = {
+                estado: estado,
+                estado_anterior: prospectoActual.estado
+            };
+
+            // Lógica especial por estado
+            if (estado === 'Perdido') {
+                if (!motivo) {
+                    return res.status(400).json({
+                        success: false,
+                        error: 'El motivo es requerido cuando se marca como perdido'
+                    });
+                }
+                datosActualizacion.motivo_perdida = motivo;
+                datosActualizacion.fecha_cierre = new Date().toISOString();
+            }
+
+            if (estado === 'Cerrado') {
+                datosActualizacion.fecha_cierre = new Date().toISOString();
+                datosActualizacion.convertido_venta = true;
+            }
+
+            // Registrar en historial de interacciones
+            const historialActual = prospectoActual.historial_interacciones || [];
+            const nuevaInteraccion = {
+                fecha: new Date().toISOString(),
+                tipo: 'Cambio de Estado',
+                descripcion: `Estado cambiado de "${prospectoActual.estado}" a "${estado}"${motivo ? ` - Motivo: ${motivo}` : ''}`,
+                usuario: req.user?.nombre || 'Sistema'
+            };
+            
+            datosActualizacion.historial_interacciones = JSON.stringify([...historialActual, nuevaInteraccion]);
+
+            // Actualizar en base de datos
+            const { data, error } = await supabase
+                .from('prospectos')
+                .update(datosActualizacion)
+                .eq('id', id)
+                .select()
+                .single();
+
+            if (error) {
+                logger.error('Error al cambiar estado:', error);
+                throw error;
+            }
+
+            logger.info(`Estado cambiado: ${data.codigo} de "${prospectoActual.estado}" a "${estado}"`);
+
+            res.json({
+                success: true,
+                data: data,
+                message: `Estado cambiado a ${estado} exitosamente`
+            });
+
+        } catch (error) {
+            logger.error('Error en cambiarEstado:', error);
+            res.status(500).json({
+                success: false,
+                error: 'Error al cambiar estado: ' + error.message
+            });
+        }
+    }
+
+    /**
+     * POST /api/prospectos/:id/cerrar-venta
+     * Convertir prospecto en venta (botón "Cerrar venta")
+     */
+    static async cerrarVenta(req, res) {
+        try {
+            const { id } = req.params;
+            const { valor_final, productos_vendidos, observaciones_cierre } = req.body;
+
+            if (!id || isNaN(id)) {
+                return res.status(400).json({
+                    success: false,
+                    error: 'ID de prospecto inválido'
+                });
+            }
+
+            // Obtener prospecto
+            const { data: prospecto } = await supabase
+                .from('prospectos')
+                .select('*')
+                .eq('id', id)
+                .eq('activo', true)
+                .single();
+
+            if (!prospecto) {
+                return res.status(404).json({
+                    success: false,
+                    error: 'Prospecto no encontrado'
+                });
+            }
+
+            // Validar que esté en estado válido para cerrar
+            if (!['Cotizado', 'Negociacion'].includes(prospecto.estado)) {
+                return res.status(400).json({
+                    success: false,
+                    error: 'Solo se pueden cerrar prospectos en estado Cotizado o Negociación'
+                });
+            }
+
+            const valorVenta = valor_final || prospecto.valor_estimado || 0;
+            const productosVendidos = productos_vendidos || prospecto.productos_interes || [];
+
+            // Actualizar prospecto como cerrado
+            const datosActualizacion = {
+                estado: 'Cerrado',
+                convertido_venta: true,
+                fecha_cierre: new Date().toISOString(),
+                valor_estimado: valorVenta
+            };
+
+            if (observaciones_cierre) {
+                datosActualizacion.observaciones = observaciones_cierre;
+            }
+
+            // Agregar interacción
+            const historialActual = prospecto.historial_interacciones || [];
+            const nuevaInteraccion = {
+                fecha: new Date().toISOString(),
+                tipo: 'Venta Cerrada',
+                descripcion: `Prospecto convertido en venta exitosamente. Valor: $${valorVenta}`,
+                usuario: req.user?.nombre || 'Sistema'
+            };
+            
+            datosActualizacion.historial_interacciones = JSON.stringify([...historialActual, nuevaInteraccion]);
+
+            const { data, error } = await supabase
+                .from('prospectos')
+                .update(datosActualizacion)
+                .eq('id', id)
+                .select()
+                .single();
+
+            if (error) {
+                logger.error('Error al cerrar venta:', error);
+                throw error;
+            }
+
+            logger.info(`Venta cerrada: ${data.codigo} - $${valorVenta}`);
+
+            // TODO: Integrar con módulo de ventas cuando esté implementado
+            
+            res.json({
+                success: true,
+                data: {
+                    prospecto: data,
+                    valor_venta: valorVenta,
+                    productos_vendidos: productosVendidos
+                },
+                message: '¡Venta cerrada exitosamente!'
+            });
+
+        } catch (error) {
+            logger.error('Error en cerrarVenta:', error);
+            res.status(500).json({
+                success: false,
+                error: 'Error al cerrar venta: ' + error.message
+            });
+        }
+    }
+
+    /**
+     * GET /api/prospectos/metricas/:asesorId?
+     * Obtener métricas del pipeline
+     */
+    static async obtenerMetricas(req, res) {
+        try {
+            const { asesorId } = req.params;
+            const { fecha_desde, fecha_hasta } = req.query;
+
+            let query = supabase
+                .from('prospectos')
+                .select('estado, valor_estimado, fecha_contacto, fecha_cierre, convertido_venta')
+                .eq('activo', true);
+
+            if (asesorId && asesorId !== 'todos') {
+                query = query.eq('asesor_id', asesorId);
+            }
+
+            if (fecha_desde) {
+                query = query.gte('fecha_contacto', fecha_desde);
+            }
+
+            if (fecha_hasta) {
+                query = query.lte('fecha_contacto', fecha_hasta);
+            }
+
+            const { data, error } = await query;
+
+            if (error) {
+                logger.error('Error al obtener métricas:', error);
+                throw error;
+            }
+
+            // Calcular métricas
+            const total = data?.length || 0;
+            const cerrados = data?.filter(p => p.estado === 'Cerrado').length || 0;
+            const perdidos = data?.filter(p => p.estado === 'Perdido').length || 0;
+            const activos = data?.filter(p => ['Prospecto', 'Cotizado', 'Negociacion'].includes(p.estado)).length || 0;
+
+            const valorTotalPipeline = data?.reduce((sum, p) => {
+                if (['Prospecto', 'Cotizado', 'Negociacion'].includes(p.estado)) {
+                    return sum + (parseFloat(p.valor_estimado) || 0);
+                }
+                return sum;
+            }, 0) || 0;
+
+            const valorVentas = data?.reduce((sum, p) => {
+                if (p.estado === 'Cerrado') {
+                    return sum + (parseFloat(p.valor_estimado) || 0);
+                }
+                return sum;
+            }, 0) || 0;
+
+            const tasaConversion = total > 0 ? ((cerrados / total) * 100).toFixed(2) : 0;
+            const tasaPerdida = total > 0 ? ((perdidos / total) * 100).toFixed(2) : 0;
+
+            const metricas = {
+                total_prospectos: total,
+                prospectos_activos: activos,
+                cerrados: cerrados,
+                perdidos: perdidos,
+                tasa_conversion: `${tasaConversion}%`,
+                tasa_perdida: `${tasaPerdida}%`,
+                valor_total_pipeline: valorTotalPipeline,
+                valor_ventas_cerradas: valorVentas,
+                valor_promedio_prospecto: total > 0 ? (valorTotalPipeline / activos).toFixed(2) : 0,
+                distribucion: {
+                    prospecto: data?.filter(p => p.estado === 'Prospecto').length || 0,
+                    cotizado: data?.filter(p => p.estado === 'Cotizado').length || 0,
+                    negociacion: data?.filter(p => p.estado === 'Negociacion').length || 0,
+                    cerrado: cerrados,
+                    perdido: perdidos
+                }
+            };
+
+            res.json({
+                success: true,
+                data: metricas
+            });
+
+        } catch (error) {
+            logger.error('Error en obtenerMetricas:', error);
+            res.status(500).json({
+                success: false,
+                error: 'Error al obtener métricas: ' + error.message
+            });
+        }
+    }
+
+    /**
+     * GET /api/prospectos/verificar-duplicado/:telefono
+     * Verificar si existe duplicado por teléfono
+     */
+    static async verificarDuplicado(req, res) {
+        try {
+            const { telefono } = req.params;
+            const { excluir_id } = req.query;
+
+            if (!telefono) {
+                return res.status(400).json({
+                    success: false,
+                    error: 'Teléfono es requerido'
+                });
+            }
+
+            let query = supabase
+                .from('prospectos')
+                .select('id, codigo, nombre_cliente, apellido_cliente, estado, asesor_nombre, empresa')
+                .eq('telefono', telefono)
+                .eq('activo', true);
+
+            if (excluir_id) {
+                query = query.neq('id', excluir_id);
+            }
+
+            const { data, error } = await query;
+
+            if (error) {
+                logger.error('Error al verificar duplicado:', error);
+                throw error;
+            }
+
+            res.json({
+                success: true,
+                existe_duplicado: (data?.length || 0) > 0,
+                data: data || []
+            });
+
+        } catch (error) {
+            logger.error('Error en verificarDuplicado:', error);
+            res.status(500).json({
+                success: false,
+                error: 'Error al verificar duplicado: ' + error.message
+            });
+        }
+    }
+
+    /**
+     * GET /api/prospectos/health
+     * Health check del módulo
+     */
+    static async healthCheck(req, res) {
+        try {
+            // Verificar conexión con base de datos
+            const { count, error } = await supabase
+                .from('prospectos')
+                .select('*', { count: 'exact', head: true })
+                .eq('activo', true);
+
+            if (error) {
+                throw error;
+            }
+
+            res.json({
+                success: true,
+                module: 'Prospectos',
+                status: 'Operativo',
+                timestamp: new Date().toISOString(),
+                version: '1.0.0',
+                data: {
+                    total_prospectos: count,
+                    estados_disponibles: ['Prospecto', 'Cotizado', 'Negociacion', 'Cerrado', 'Perdido'],
+                    funcionalidades: [
+                        'Pipeline Kanban',
+                        'Detección de duplicados',
+                        'Métricas en tiempo real',
+                        'Filtros por fecha/antigüedad',
+                        'Conversión a ventas'
+                    ]
+                }
+            });
+
+        } catch (error) {
+            logger.error('Error en health check:', error);
+            res.status(500).json({
+                success: false,
+                module: 'Prospectos',
+                status: 'Error',
+                timestamp: new Date().toISOString(),
+                error: error.message
+            });
+        }
+    }
+}
+
+module.exports = ProspectosController;

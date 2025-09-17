@@ -1,0 +1,28 @@
+{
+  "name": "sistema-crm-erp",
+  "version": "1.0.0",
+  "description": "SISTEMA DE GESTIÓN INTERNA DE MI ENTORNO LABORAL",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Alonsoo27/SISTEMA-CRM-ERP.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/Alonsoo27/SISTEMA-CRM-ERP/issues"
+  },
+  "homepage": "https://github.com/Alonsoo27/SISTEMA-CRM-ERP#readme",
+  "dependencies": {
+    "jspdf": "^3.0.1",
+    "jspdf-autotable": "^5.0.2",
+    "pdfkit": "^0.17.1"
+  }
+}

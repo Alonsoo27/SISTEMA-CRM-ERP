@@ -1,0 +1,590 @@
+// ============================================
+// VENTAS ROUTES - APIs REST EMPRESARIALES
+// Sistema CRM/ERP v2.0
+// ============================================
+
+const express = require('express');
+const router = express.Router();
+
+// Controllers
+const VentasController = require('../controllers/VentasController');
+const ConversionService = require('../services/ConversionService');
+const VentasService = require('../services/VentasService');
+
+// Middleware de autenticación (ajustar según tu sistema)
+const { authenticateToken } = require('../../../middleware/auth');
+
+// ============================================
+// ENDPOINT PÚBLICO
+// ============================================
+
+// Health check (público para monitoreo)
+router.get('/health', (req, res) => {
+    res.json({
+        success: true,
+        message: 'Módulo de ventas funcionando',
+        timestamp: new Date().toISOString()
+    });
+});
+
+// ============================================
+// RUTAS PRINCIPALES DE VENTAS
+// ============================================
+
+// CRUD Básico
+router.get('/', authenticateToken, VentasController.listarVentas);
+router.post('/', authenticateToken, VentasController.crearVenta);
+router.get('/:id', authenticateToken, VentasController.obtenerVenta);
+router.put('/:id', authenticateToken, VentasController.actualizarVenta);
+router.delete('/:id', authenticateToken, VentasController.eliminarVenta);
+// ============================================
+// GESTIÓN DE ESTADOS
+// ============================================
+
+// Cambiar estado de venta
+router.put('/:id/estado', authenticateToken, async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { nuevo_estado, notas } = req.body;
+
+        // Validar el estado antes del cambio
+        const validacion = await VentasService.validarVentaParaEstado(id, nuevo_estado);
+        if (!validacion.valida) {
+            return res.status(400).json({
+                success: false,
+                message: validacion.mensaje
+            });
+        }
+
+        // Ejecutar cambio de estado
+        await VentasController.cambiarEstado(req, res);
+
+    } catch (error) {
+        console.error('Error al cambiar estado:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error interno del servidor'
+        });
+    }
+});
+
+// Avanzar fase de venta
+router.put('/:id/fase', authenticateToken, async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { nueva_fase, probabilidad } = req.body;
+
+        const fasesValidas = ['Negociacion', 'Propuesta', 'Cierre', 'Ejecucion', 'Entrega'];
+        
+        if (!fasesValidas.includes(nueva_fase)) {
+            return res.status(400).json({
+                success: false,
+                message: 'Fase no válida',
+                fases_validas: fasesValidas
+            });
+        }
+
+        const { query } = require('../../../config/database');
+        const result = await query(`
+            UPDATE ventas 
+            SET fase = $1, probabilidad_cierre = $2, updated_at = NOW(), updated_by = $3
+            WHERE id = $4 AND activo = true
+            RETURNING *
+        `, [nueva_fase, probabilidad || null, req.user.id, id]);
+
+        if (result.rows.length === 0) {
+            return res.status(404).json({
+                success: false,
+                message: 'Venta no encontrada'
+            });
+        }
+
+        res.json({
+            success: true,
+            message: `Fase actualizada a "${nueva_fase}"`,
+            data: result.rows[0]
+        });
+
+    } catch (error) {
+        console.error('Error al cambiar fase:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error al cambiar fase'
+        });
+    }
+});
+
+// Aprobar venta
+router.post('/:id/aprobar', authenticateToken, async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { notas_aprobacion } = req.body;
+
+        // Cambiar estado a 'Aprobada'
+        req.body = { nuevo_estado: 'Aprobada', notas: notas_aprobacion };
+        await VentasController.cambiarEstado(req, res);
+
+    } catch (error) {
+        console.error('Error al aprobar venta:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error al aprobar venta'
+        });
+    }
+});
+
+// ============================================
+// CONVERSIÓN DE PROSPECTOS
+// ============================================
+
+// Convertir prospecto individual
+router.post('/convertir-prospecto/:prospecto_id', authenticateToken, async (req, res) => {
+    try {
+        const { prospecto_id } = req.params;
+        const { valor_estimado, notas } = req.body;
+
+        const config = {
+            prospecto_id: parseInt(prospecto_id),
+            asesor_id: req.user.id,
+            fuente: 'conversion_manual',
+            valor_estimado: valor_estimado
+        };
+
+        const resultado = await ConversionService.convertirProspectoAVenta(config);
+
+        if (resultado.success) {
+            res.json({
+                success: true,
+                message: 'Prospecto convertido exitosamente',
+                data: resultado.venta_creada
+            });
+        } else {
+            res.status(400).json({
+                success: false,
+                message: 'Error al convertir prospecto',
+                error: resultado.error
+            });
+        }
+
+    } catch (error) {
+        console.error('Error en conversión:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error interno del servidor'
+        });
+    }
+});
+
+// Conversión masiva de prospectos
+router.post('/conversion-masiva', authenticateToken, async (req, res) => {
+    try {
+        const { prospectos } = req.body; // Array de {prospecto_id, valor_estimado}
+        
+        if (!Array.isArray(prospectos) || prospectos.length === 0) {
+            return res.status(400).json({
+                success: false,
+                message: 'Se requiere un array de prospectos'
+            });
+        }
+
+        const resultados = await ConversionService.convertirProspectosMasivo(prospectos, req.user.id);
+
+        res.json({
+            success: true,
+            message: `Conversión masiva completada: ${resultados.exitosas.length} éxitos, ${resultados.fallidas.length} fallos`,
+            data: resultados
+        });
+
+    } catch (error) {
+        console.error('Error en conversión masiva:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error en conversión masiva'
+        });
+    }
+});
+
+// Obtener prospectos listos para conversión
+router.get('/prospectos-listos', authenticateToken, async (req, res) => {
+    try {
+        const prospectos = await ConversionService.obtenerProspectosListosParaConversion(req.user.id);
+        
+        res.json({
+            success: true,
+            data: {
+                prospectos_listos: prospectos,
+                total: prospectos.length
+            }
+        });
+
+    } catch (error) {
+        console.error('Error al obtener prospectos listos:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error interno del servidor'
+        });
+    }
+});
+
+// ============================================
+// DASHBOARD Y MÉTRICAS
+// ============================================
+
+// Dashboard personal del asesor
+router.get('/dashboard', authenticateToken, VentasController.dashboard);
+
+// Dashboard de equipo (solo para managers)
+router.get('/dashboard/equipo', authenticateToken, async (req, res) => {
+    try {
+        // Verificar si el usuario tiene permisos de manager
+        const { query } = require('../../../config/database');
+        const userResult = await query(`
+            SELECT rol FROM usuarios WHERE id = $1
+        `, [req.user.id]);
+
+        if (userResult.rows[0]?.rol !== 'manager' && userResult.rows[0]?.rol !== 'admin') {
+            return res.status(403).json({
+                success: false,
+                message: 'Acceso denegado. Solo para managers.'
+            });
+        }
+
+        // Obtener métricas del equipo
+        const equipoResult = await query(`
+            SELECT 
+                u.id, u.nombre_completo,
+                COUNT(v.id) as total_ventas,
+                SUM(v.valor_final) as valor_total,
+                AVG(v.valor_final) as ticket_promedio,
+                COUNT(CASE WHEN v.estado = 'Completada' THEN 1 END) as ventas_completadas
+            FROM usuarios u
+            LEFT JOIN ventas v ON u.id = v.asesor_id 
+                AND v.fecha_creacion >= date_trunc('month', CURRENT_DATE)
+                AND v.activo = true
+            WHERE u.rol = 'asesor' OR u.rol = 'vendedor'
+            GROUP BY u.id, u.nombre_completo
+            ORDER BY valor_total DESC NULLS LAST
+        `);
+
+        res.json({
+            success: true,
+            data: {
+                periodo: 'Mes actual',
+                equipo_ventas: equipoResult.rows
+            }
+        });
+
+    } catch (error) {
+        console.error('Error en dashboard de equipo:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error interno del servidor'
+        });
+    }
+});
+
+// Análisis de conversiones
+router.get('/analisis-conversiones', authenticateToken, async (req, res) => {
+    try {
+        const { fecha_desde, fecha_hasta } = req.query;
+        
+        const analisis = await ConversionService.analizarTasasConversion(
+            req.user.id, 
+            fecha_desde ? new Date(fecha_desde) : null,
+            fecha_hasta ? new Date(fecha_hasta) : null
+        );
+
+        res.json({
+            success: true,
+            data: analisis
+        });
+
+    } catch (error) {
+        console.error('Error en análisis de conversiones:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error interno del servidor'
+        });
+    }
+});
+
+// ============================================
+// REPORTES ESPECÍFICOS
+// ============================================
+
+// Pipeline de ventas
+router.get('/reportes/pipeline', authenticateToken, async (req, res) => {
+    try {
+        const { asesor_id } = req.query;
+        const targetAsesor = asesor_id || req.user.id;
+
+        const { query } = require('../../../config/database');
+        const pipelineResult = await query(`
+            SELECT 
+                fase,
+                COUNT(*) as cantidad,
+                SUM(valor_final) as valor_total,
+                AVG(probabilidad_cierre) as probabilidad_promedio
+            FROM ventas 
+            WHERE asesor_id = $1 AND activo = true AND estado != 'Cancelada'
+            GROUP BY fase
+            ORDER BY 
+                CASE fase
+                    WHEN 'Negociacion' THEN 1
+                    WHEN 'Propuesta' THEN 2
+                    WHEN 'Cierre' THEN 3
+                    WHEN 'Ejecucion' THEN 4
+                    WHEN 'Entrega' THEN 5
+                    ELSE 6
+                END
+        `, [targetAsesor]);
+
+        res.json({
+            success: true,
+            data: {
+                asesor_id: targetAsesor,
+                pipeline: pipelineResult.rows
+            }
+        });
+
+    } catch (error) {
+        console.error('Error en reporte de pipeline:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error interno del servidor'
+        });
+    }
+});
+
+// Reporte de productos más vendidos
+router.get('/reportes/productos-top', authenticateToken, async (req, res) => {
+    try {
+        const { limit = 10, fecha_desde, fecha_hasta } = req.query;
+
+        let whereClause = 'WHERE v.activo = true AND v.estado = \'Completada\'';
+        const params = [];
+
+        if (fecha_desde) {
+            params.push(fecha_desde);
+            whereClause += ` AND v.fecha_creacion >= $${params.length}`;
+        }
+
+        if (fecha_hasta) {
+            params.push(fecha_hasta + ' 23:59:59');
+            whereClause += ` AND v.fecha_creacion <= $${params.length}`;
+        }
+
+        params.push(parseInt(limit));
+
+        const { query } = require('../../../config/database');
+        const productosResult = await query(`
+            SELECT 
+                p.id, p.nombre, p.categoria, p.marca,
+                COUNT(vd.id) as veces_vendido,
+                SUM(vd.cantidad) as cantidad_total,
+                SUM(vd.total_linea) as ingresos_generados,
+                AVG(vd.precio_unitario) as precio_promedio
+            FROM productos p
+            JOIN venta_detalles vd ON p.id = vd.producto_id
+            JOIN ventas v ON vd.venta_id = v.id
+            ${whereClause}
+            GROUP BY p.id, p.nombre, p.categoria, p.marca
+            ORDER BY ingresos_generados DESC
+            LIMIT $${params.length}
+        `, params);
+
+        res.json({
+            success: true,
+            data: {
+                productos_top: productosResult.rows,
+                total: productosResult.rows.length
+            }
+        });
+
+    } catch (error) {
+        console.error('Error en reporte de productos:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error interno del servidor'
+        });
+    }
+});
+
+// ============================================
+// DETALLES DE VENTA Y PRODUCTOS
+// ============================================
+
+// Obtener detalles de productos de una venta
+router.get('/:id/detalles', authenticateToken, async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        const { query } = require('../../../config/database');
+        const detallesResult = await query(`
+            SELECT 
+                vd.*,
+                p.nombre as producto_nombre,
+                p.descripcion as producto_descripcion,
+                p.categoria,
+                p.marca,
+                p.precio as precio_actual_producto
+            FROM venta_detalles vd
+            JOIN productos p ON vd.producto_id = p.id
+            WHERE vd.venta_id = $1
+            ORDER BY vd.orden_linea
+        `, [id]);
+
+        res.json({
+            success: true,
+            data: detallesResult.rows
+        });
+
+    } catch (error) {
+        console.error('Error al obtener detalles:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error interno del servidor'
+        });
+    }
+});
+
+// Agregar producto a venta existente
+router.post('/:id/productos', authenticateToken, async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { producto_id, cantidad, precio_unitario, descripcion_personalizada } = req.body;
+
+        if (!producto_id || !cantidad || !precio_unitario) {
+            return res.status(400).json({
+                success: false,
+                message: 'Datos requeridos: producto_id, cantidad, precio_unitario'
+            });
+        }
+
+        const { query } = require('../../../config/database');
+
+        // Verificar que la venta existe y está activa
+        const ventaResult = await query(`
+            SELECT id, estado FROM ventas WHERE id = $1 AND activo = true
+        `, [id]);
+
+        if (ventaResult.rows.length === 0) {
+            return res.status(404).json({
+                success: false,
+                message: 'Venta no encontrada'
+            });
+        }
+
+        if (ventaResult.rows[0].estado === 'Completada' || ventaResult.rows[0].estado === 'Cancelada') {
+            return res.status(400).json({
+                success: false,
+                message: 'No se pueden agregar productos a una venta completada o cancelada'
+            });
+        }
+
+        // Calcular totales
+        const subtotal = cantidad * precio_unitario;
+        const total_linea = subtotal; // Sin descuentos por ahora
+
+        // Obtener próximo orden_linea
+        const ordenResult = await query(`
+            SELECT COALESCE(MAX(orden_linea), 0) + 1 as siguiente_orden
+            FROM venta_detalles WHERE venta_id = $1
+        `, [id]);
+
+        const siguiente_orden = ordenResult.rows[0].siguiente_orden;
+
+        // Insertar nuevo detalle
+        const detalleResult = await query(`
+            INSERT INTO venta_detalles (
+                venta_id, producto_id, cantidad, precio_unitario, subtotal,
+                total_linea, descripcion_personalizada, orden_linea
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+            RETURNING *
+        `, [id, producto_id, cantidad, precio_unitario, subtotal, total_linea, descripcion_personalizada, siguiente_orden]);
+
+        // Recalcular total de la venta
+        const totalResult = await query(`
+            SELECT SUM(total_linea) as nuevo_total
+            FROM venta_detalles WHERE venta_id = $1
+        `, [id]);
+
+        const nuevo_total = totalResult.rows[0].nuevo_total;
+
+        // Actualizar venta
+        await query(`
+            UPDATE ventas 
+            SET valor_total = $1, valor_final = $1, updated_at = NOW(), updated_by = $2
+            WHERE id = $3
+        `, [nuevo_total, req.user.id, id]);
+
+        res.json({
+            success: true,
+            message: 'Producto agregado exitosamente',
+            data: {
+                detalle_agregado: detalleResult.rows[0],
+                nuevo_total_venta: nuevo_total
+            }
+        });
+
+    } catch (error) {
+        console.error('Error al agregar producto:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error interno del servidor'
+        });
+    }
+});
+
+// ============================================
+// BÚSQUEDAS Y FILTROS AVANZADOS
+// ============================================
+
+// Búsqueda inteligente de ventas
+router.get('/buscar/:termino', authenticateToken, async (req, res) => {
+    try {
+        const { termino } = req.params;
+        const { limite = 20 } = req.query;
+
+        const { query } = require('../../../config/database');
+        const searchResult = await query(`
+            SELECT 
+                v.*,
+                u.nombre_completo as asesor_nombre,
+                p.nombre as prospecto_nombre
+            FROM ventas v
+            LEFT JOIN usuarios u ON v.asesor_id = u.id
+            LEFT JOIN prospectos p ON v.prospecto_id = p.id
+            WHERE v.activo = true
+            AND (
+                v.codigo ILIKE $1 OR
+                v.cliente_nombre ILIKE $1 OR
+                v.cliente_empresa ILIKE $1 OR
+                v.cliente_email ILIKE $1 OR
+                u.nombre_completo ILIKE $1 OR
+                p.nombre ILIKE $1
+            )
+            ORDER BY v.fecha_creacion DESC
+            LIMIT $2
+        `, [`%${termino}%`, parseInt(limite)]);
+
+        res.json({
+            success: true,
+            data: {
+                resultados: searchResult.rows,
+                total: searchResult.rows.length,
+                termino_busqueda: termino
+            }
+        });
+
+    } catch (error) {
+        console.error('Error en búsqueda:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error interno del servidor'
+        });
+    }
+});
+
+// Exportar el router
+module.exports = router;

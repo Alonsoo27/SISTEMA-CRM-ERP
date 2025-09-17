@@ -1,0 +1,744 @@
+// ============================================
+// COMISIONES CONTROLLER - GESTIÓN EMPRESARIAL
+// Sistema CRM/ERP v2.0
+// ============================================
+
+const { query } = require('../../../config/database');
+const ComisionesService = require('../services/ComisionesService');
+
+class ComisionesController {
+
+    // ============================================
+    // LISTAR COMISIONES CON FILTROS
+    // ============================================
+    static async listarComisiones(req, res) {
+        try {
+            const {
+                page = 1,
+                limit = 10,
+                asesor_id,
+                periodo,
+                estado,
+                fecha_desde,
+                fecha_hasta,
+                orden = 'fecha_calculo',
+                direccion = 'DESC'
+            } = req.query;
+
+            const offset = (page - 1) * limit;
+
+            // Construir WHERE dinámico
+            let whereClause = 'WHERE c.activo = true';
+            const params = [];
+            let paramCount = 0;
+
+            // Filtro por asesor (si no es admin, solo sus comisiones)
+            if (req.user.rol !== 'admin' && req.user.rol !== 'manager') {
+                paramCount++;
+                whereClause += ` AND c.asesor_id = $${paramCount}`;
+                params.push(req.user.id);
+            } else if (asesor_id) {
+                paramCount++;
+                whereClause += ` AND c.asesor_id = $${paramCount}`;
+                params.push(asesor_id);
+            }
+
+            if (periodo) {
+                paramCount++;
+                whereClause += ` AND c.periodo_pago = $${paramCount}`;
+                params.push(periodo);
+            }
+
+            if (estado) {
+                paramCount++;
+                whereClause += ` AND c.estado = $${paramCount}`;
+                params.push(estado);
+            }
+
+            if (fecha_desde) {
+                paramCount++;
+                whereClause += ` AND c.fecha_calculo >= $${paramCount}`;
+                params.push(fecha_desde);
+            }
+
+            if (fecha_hasta) {
+                paramCount++;
+                whereClause += ` AND c.fecha_calculo <= $${paramCount}`;
+                params.push(fecha_hasta + ' 23:59:59');
+            }
+
+            // Query principal
+            const comisionesQuery = `
+                SELECT 
+                    c.*,
+                    u.nombre_completo as asesor_nombre,
+                    u.email as asesor_email,
+                    v.codigo as venta_codigo,
+                    v.cliente_nombre,
+                    v.fecha_creacion as fecha_venta,
+                    ua.nombre_completo as aprobado_por_nombre
+                FROM comisiones c
+                LEFT JOIN usuarios u ON c.asesor_id = u.id
+                LEFT JOIN ventas v ON c.venta_id = v.id
+                LEFT JOIN usuarios ua ON c.aprobado_por = ua.id
+                ${whereClause}
+                ORDER BY c.${orden} ${direccion}
+                LIMIT $${paramCount + 1} OFFSET $${paramCount + 2}
+            `;
+
+            params.push(limit, offset);
+
+            // Contar total
+            const countQuery = `
+                SELECT COUNT(*) as total
+                FROM comisiones c
+                LEFT JOIN usuarios u ON c.asesor_id = u.id
+                LEFT JOIN ventas v ON c.venta_id = v.id
+                ${whereClause}
+            `;
+
+            const [comisionesResult, countResult] = await Promise.all([
+                query(comisionesQuery, params),
+                query(countQuery, params.slice(0, -2))
+            ]);
+
+            const total = parseInt(countResult.rows[0].total);
+            const totalPages = Math.ceil(total / limit);
+
+            // Calcular totales de la consulta actual
+            const totalesQuery = `
+                SELECT 
+                    SUM(c.monto_comision) as total_comisiones,
+                    SUM(c.monto_venta) as total_ventas,
+                    COUNT(*) as cantidad_comisiones,
+                    COUNT(CASE WHEN c.estado = 'Pendiente' THEN 1 END) as pendientes,
+                    COUNT(CASE WHEN c.estado = 'Aprobada' THEN 1 END) as aprobadas,
+                    COUNT(CASE WHEN c.estado = 'Pagada' THEN 1 END) as pagadas
+                FROM comisiones c
+                LEFT JOIN usuarios u ON c.asesor_id = u.id
+                LEFT JOIN ventas v ON c.venta_id = v.id
+                ${whereClause}
+            `;
+
+            const totalesResult = await query(totalesQuery, params.slice(0, -2));
+
+            res.json({
+                success: true,
+                data: {
+                    comisiones: comisionesResult.rows,
+                    pagination: {
+                        current_page: parseInt(page),
+                        total_pages: totalPages,
+                        total_records: total,
+                        limit: parseInt(limit)
+                    },
+                    totales: totalesResult.rows[0]
+                }
+            });
+
+        } catch (error) {
+            console.error('Error al listar comisiones:', error);
+            res.status(500).json({
+                success: false,
+                message: 'Error interno del servidor'
+            });
+        }
+    }
+
+    // ============================================
+    // OBTENER DETALLE DE COMISIÓN
+    // ============================================
+    static async obtenerComision(req, res) {
+        try {
+            const { id } = req.params;
+
+            const comisionQuery = `
+                SELECT 
+                    c.*,
+                    u.nombre_completo as asesor_nombre,
+                    u.email as asesor_email,
+                    u.fecha_ingreso as asesor_fecha_ingreso,
+                    v.codigo as venta_codigo,
+                    v.cliente_nombre,
+                    v.cliente_empresa,
+                    v.fecha_creacion as fecha_venta,
+                    v.estado as venta_estado,
+                    ua.nombre_completo as aprobado_por_nombre,
+                    up.nombre_completo as pagado_por_nombre
+                FROM comisiones c
+                LEFT JOIN usuarios u ON c.asesor_id = u.id
+                LEFT JOIN ventas v ON c.venta_id = v.id
+                LEFT JOIN usuarios ua ON c.aprobado_por = ua.id
+                LEFT JOIN usuarios up ON c.pagado_por = up.id
+                WHERE c.id = $1 AND c.activo = true
+            `;
+
+            const result = await query(comisionQuery, [id]);
+
+            if (result.rows.length === 0) {
+                return res.status(404).json({
+                    success: false,
+                    message: 'Comisión no encontrada'
+                });
+            }
+
+            const comision = result.rows[0];
+
+            // Parsear JSONs si existen
+            try {
+                if (comision.bonificaciones_json) {
+                    comision.bonificaciones = JSON.parse(comision.bonificaciones_json);
+                }
+                if (comision.deducciones_json) {
+                    comision.deducciones = JSON.parse(comision.deducciones_json);
+                }
+                if (comision.detalle_calculo_json) {
+                    comision.detalle_calculo = JSON.parse(comision.detalle_calculo_json);
+                }
+            } catch (jsonError) {
+                console.error('Error al parsear JSON de comisión:', jsonError);
+            }
+
+            res.json({
+                success: true,
+                data: comision
+            });
+
+        } catch (error) {
+            console.error('Error al obtener comisión:', error);
+            res.status(500).json({
+                success: false,
+                message: 'Error interno del servidor'
+            });
+        }
+    }
+
+    // ============================================
+    // CALCULAR COMISIÓN MANUAL
+    // ============================================
+    static async calcularComisionManual(req, res) {
+        try {
+            const { venta_id } = req.body;
+
+            if (!venta_id) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'venta_id es requerido'
+                });
+            }
+
+            const resultado = await ComisionesService.calcularComisionAutomatica(venta_id);
+
+            if (resultado.success) {
+                res.json({
+                    success: true,
+                    message: 'Comisión calculada exitosamente',
+                    data: resultado.comision_calculada,
+                    detalle_calculo: resultado.detalle_calculo
+                });
+            } else {
+                res.status(400).json({
+                    success: false,
+                    message: 'Error al calcular comisión',
+                    error: resultado.error
+                });
+            }
+
+        } catch (error) {
+            console.error('Error al calcular comisión manual:', error);
+            res.status(500).json({
+                success: false,
+                message: 'Error interno del servidor'
+            });
+        }
+    }
+
+    // ============================================
+    // APROBAR COMISIONES
+    // ============================================
+    static async aprobarComisiones(req, res) {
+        try {
+            const { comision_ids, notas_aprobacion } = req.body;
+
+            if (!Array.isArray(comision_ids) || comision_ids.length === 0) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Se requiere un array de IDs de comisiones'
+                });
+            }
+
+            // Verificar permisos
+            if (req.user.rol !== 'admin' && req.user.rol !== 'manager') {
+                return res.status(403).json({
+                    success: false,
+                    message: 'No tiene permisos para aprobar comisiones'
+                });
+            }
+
+            const resultado = await ComisionesService.aprobarComisiones(comision_ids, req.user.id);
+
+            if (resultado.success) {
+                // Registrar notas si se proporcionaron
+                if (notas_aprobacion) {
+                    await query(`
+                        UPDATE comisiones 
+                        SET notas_aprobacion = $1
+                        WHERE id = ANY($2)
+                    `, [notas_aprobacion, comision_ids]);
+                }
+
+                res.json({
+                    success: true,
+                    message: `${resultado.comisiones_aprobadas} comisiones aprobadas exitosamente`,
+                    data: {
+                        comisiones_aprobadas: resultado.comisiones_aprobadas,
+                        total_aprobado: resultado.total_aprobado
+                    }
+                });
+            } else {
+                res.status(400).json({
+                    success: false,
+                    message: 'Error al aprobar comisiones',
+                    error: resultado.error
+                });
+            }
+
+        } catch (error) {
+            console.error('Error al aprobar comisiones:', error);
+            res.status(500).json({
+                success: false,
+                message: 'Error interno del servidor'
+            });
+        }
+    }
+
+    // ============================================
+    // MARCAR COMISIONES COMO PAGADAS
+    // ============================================
+    static async marcarComoPagadas(req, res) {
+        try {
+            const { comision_ids, fecha_pago, metodo_pago, referencia_pago, notas_pago } = req.body;
+
+            if (!Array.isArray(comision_ids) || comision_ids.length === 0) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Se requiere un array de IDs de comisiones'
+                });
+            }
+
+            // Verificar permisos
+            if (req.user.rol !== 'admin' && req.user.rol !== 'finanzas') {
+                return res.status(403).json({
+                    success: false,
+                    message: 'No tiene permisos para marcar pagos de comisiones'
+                });
+            }
+
+            const result = await query(`
+                UPDATE comisiones 
+                SET 
+                    estado = 'Pagada',
+                    fecha_pago = $1,
+                    metodo_pago = $2,
+                    referencia_pago = $3,
+                    notas_pago = $4,
+                    pagado_por = $5,
+                    updated_at = NOW()
+                WHERE id = ANY($6) AND estado = 'Aprobada'
+                RETURNING id, monto_comision, asesor_id
+            `, [
+                fecha_pago || new Date(),
+                metodo_pago,
+                referencia_pago,
+                notas_pago,
+                req.user.id,
+                comision_ids
+            ]);
+
+            const totalPagado = result.rows.reduce((sum, c) => sum + parseFloat(c.monto_comision), 0);
+
+            res.json({
+                success: true,
+                message: `${result.rows.length} comisiones marcadas como pagadas`,
+                data: {
+                    comisiones_pagadas: result.rows.length,
+                    total_pagado: totalPagado,
+                    fecha_pago: fecha_pago || new Date()
+                }
+            });
+
+        } catch (error) {
+            console.error('Error al marcar comisiones como pagadas:', error);
+            res.status(500).json({
+                success: false,
+                message: 'Error interno del servidor'
+            });
+        }
+    }
+
+    // ============================================
+    // DASHBOARD DE COMISIONES
+    // ============================================
+    static async dashboardComisiones(req, res) {
+        try {
+            const { asesor_id, periodo } = req.query;
+
+            // Si no es admin/manager, solo puede ver sus propias comisiones
+            let targetAsesor = asesor_id;
+            if (req.user.rol !== 'admin' && req.user.rol !== 'manager') {
+                targetAsesor = req.user.id;
+            }
+
+            // Período por defecto (mes actual)
+            const periodoActual = periodo || `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`;
+
+            let whereClause = 'WHERE c.activo = true';
+            const params = [];
+
+            if (targetAsesor) {
+                whereClause += ' AND c.asesor_id = $1';
+                params.push(targetAsesor);
+            }
+
+            if (periodo) {
+                whereClause += ` AND c.periodo_pago = $${params.length + 1}`;
+                params.push(periodo);
+            }
+
+            // Métricas principales
+            const metricas = await Promise.all([
+                // Resumen general
+                query(`
+                    SELECT 
+                        COUNT(*) as total_comisiones,
+                        SUM(c.monto_comision) as total_monto,
+                        SUM(c.monto_venta) as total_ventas,
+                        AVG(c.porcentaje_aplicado) as porcentaje_promedio
+                    FROM comisiones c
+                    ${whereClause}
+                `, params),
+
+                // Por estado
+                query(`
+                    SELECT 
+                        c.estado,
+                        COUNT(*) as cantidad,
+                        SUM(c.monto_comision) as monto_total
+                    FROM comisiones c
+                    ${whereClause}
+                    GROUP BY c.estado
+                `, params),
+
+                // Evolución mensual (últimos 6 meses)
+                query(`
+                    SELECT 
+                        c.periodo_pago,
+                        COUNT(*) as cantidad,
+                        SUM(c.monto_comision) as monto_total
+                    FROM comisiones c
+                    ${whereClause.replace('periodo_pago = $' + (params.length), 'periodo_pago >= $' + (params.length))}
+                    GROUP BY c.periodo_pago
+                    ORDER BY c.periodo_pago DESC
+                    LIMIT 6
+                `, params.slice(0, -1).concat([
+                    `${new Date().getFullYear() - 1}-${String(new Date().getMonth() + 7).padStart(2, '0')}`
+                ])),
+
+                // Top productos que generan más comisiones
+                query(`
+                    SELECT 
+                        p.nombre as producto_nombre,
+                        p.categoria,
+                        COUNT(c.id) as veces_vendido,
+                        SUM(c.monto_comision) as comisiones_generadas
+                    FROM comisiones c
+                    JOIN ventas v ON c.venta_id = v.id
+                    JOIN venta_detalles vd ON v.id = vd.venta_id
+                    JOIN productos p ON vd.producto_id = p.id
+                    ${whereClause}
+                    GROUP BY p.id, p.nombre, p.categoria
+                    ORDER BY comisiones_generadas DESC
+                    LIMIT 5
+                `, params)
+            ]);
+
+            const dashboard = {
+                periodo: periodoActual,
+                asesor_id: targetAsesor,
+                resumen: {
+                    total_comisiones: parseInt(metricas[0].rows[0].total_comisiones),
+                    total_monto: parseFloat(metricas[0].rows[0].total_monto || 0),
+                    total_ventas: parseFloat(metricas[0].rows[0].total_ventas || 0),
+                    porcentaje_promedio: parseFloat(metricas[0].rows[0].porcentaje_promedio || 0)
+                },
+                por_estado: metricas[1].rows,
+                evolucion_mensual: metricas[2].rows,
+                top_productos: metricas[3].rows
+            };
+
+            res.json({
+                success: true,
+                data: dashboard
+            });
+
+        } catch (error) {
+            console.error('Error en dashboard de comisiones:', error);
+            res.status(500).json({
+                success: false,
+                message: 'Error interno del servidor'
+            });
+        }
+    }
+
+    // ============================================
+    // RECALCULAR COMISIÓN
+    // ============================================
+    static async recalcularComision(req, res) {
+        try {
+            const { id } = req.params;
+
+            // Verificar permisos
+            if (req.user.rol !== 'admin' && req.user.rol !== 'manager') {
+                return res.status(403).json({
+                    success: false,
+                    message: 'No tiene permisos para recalcular comisiones'
+                });
+            }
+
+            const resultado = await ComisionesService.recalcularComision(id, req.user.id);
+
+            if (resultado.success) {
+                res.json({
+                    success: true,
+                    message: 'Comisión recalculada exitosamente',
+                    data: resultado.nueva_comision
+                });
+            } else {
+                res.status(400).json({
+                    success: false,
+                    message: 'Error al recalcular comisión',
+                    error: resultado.error
+                });
+            }
+
+        } catch (error) {
+            console.error('Error al recalcular comisión:', error);
+            res.status(500).json({
+                success: false,
+                message: 'Error interno del servidor'
+            });
+        }
+    }
+
+    // ============================================
+    // OBTENER COMISIONES POR ASESOR
+    // ============================================
+    static async obtenerComisionesPorAsesor(req, res) {
+        try {
+            const { asesor_id } = req.params;
+            const { periodo } = req.query;
+
+            // Verificar permisos
+            if (req.user.rol !== 'admin' && req.user.rol !== 'manager' && req.user.id != asesor_id) {
+                return res.status(403).json({
+                    success: false,
+                    message: 'No tiene permisos para ver estas comisiones'
+                });
+            }
+
+            const resultado = await ComisionesService.obtenerComisionesPorAsesor(asesor_id, periodo);
+
+            res.json({
+                success: true,
+                data: resultado
+            });
+
+        } catch (error) {
+            console.error('Error al obtener comisiones por asesor:', error);
+            res.status(500).json({
+                success: false,
+                message: 'Error interno del servidor'
+            });
+        }
+    }
+
+    // ============================================
+    // REPORTE DE COMISIONES
+    // ============================================
+    static async generarReporteComisiones(req, res) {
+        try {
+            const { formato = 'json', periodo, asesor_id, estado } = req.query;
+
+            // Verificar permisos
+            if (req.user.rol !== 'admin' && req.user.rol !== 'manager') {
+                return res.status(403).json({
+                    success: false,
+                    message: 'No tiene permisos para generar reportes'
+                });
+            }
+
+            let whereClause = 'WHERE c.activo = true';
+            const params = [];
+            let paramCount = 0;
+
+            if (periodo) {
+                paramCount++;
+                whereClause += ` AND c.periodo_pago = $${paramCount}`;
+                params.push(periodo);
+            }
+
+            if (asesor_id) {
+                paramCount++;
+                whereClause += ` AND c.asesor_id = $${paramCount}`;
+                params.push(asesor_id);
+            }
+
+            if (estado) {
+                paramCount++;
+                whereClause += ` AND c.estado = $${paramCount}`;
+                params.push(estado);
+            }
+
+            const reporteQuery = `
+                SELECT 
+                    c.*,
+                    u.nombre_completo as asesor_nombre,
+                    v.codigo as venta_codigo,
+                    v.cliente_nombre,
+                    v.fecha_creacion as fecha_venta
+                FROM comisiones c
+                LEFT JOIN usuarios u ON c.asesor_id = u.id
+                LEFT JOIN ventas v ON c.venta_id = v.id
+                ${whereClause}
+                ORDER BY c.fecha_calculo DESC
+            `;
+
+            const result = await query(reporteQuery, params);
+
+            if (formato === 'pdf') {
+                // Generar PDF del reporte
+                const pdfGenerator = require('../utils/pdfGenerator');
+                const pdfPath = await pdfGenerator.generarReporteComisiones(result.rows, {
+                    periodo,
+                    asesor_id,
+                    estado
+                });
+                
+                res.download(pdfPath, `reporte-comisiones-${Date.now()}.pdf`);
+            } else {
+                // Respuesta JSON
+                const totales = result.rows.reduce((acc, comision) => {
+                    acc.total_comisiones += parseFloat(comision.monto_comision);
+                    acc.total_ventas += parseFloat(comision.monto_venta);
+                    acc.cantidad += 1;
+                    return acc;
+                }, {
+                    total_comisiones: 0,
+                    total_ventas: 0,
+                    cantidad: 0
+                });
+
+                res.json({
+                    success: true,
+                    data: {
+                        comisiones: result.rows,
+                        totales: totales,
+                        filtros_aplicados: { periodo, asesor_id, estado }
+                    }
+                });
+            }
+
+        } catch (error) {
+            console.error('Error al generar reporte de comisiones:', error);
+            res.status(500).json({
+                success: false,
+                message: 'Error interno del servidor'
+            });
+        }
+    }
+
+    // ============================================
+    // CONFIGURAR REGLAS DE COMISIONES
+    // ============================================
+    static async configurarReglasComisiones(req, res) {
+        try {
+            const {
+                asesor_id,
+                rol,
+                porcentaje_base,
+                comision_minima,
+                comision_maxima,
+                bonificacion_meta_porcentaje,
+                activo = true
+            } = req.body;
+
+            // Verificar permisos
+            if (req.user.rol !== 'admin') {
+                return res.status(403).json({
+                    success: false,
+                    message: 'Solo administradores pueden configurar reglas de comisiones'
+                });
+            }
+
+            // Validaciones
+            if (!asesor_id && !rol) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Se requiere asesor_id o rol'
+                });
+            }
+
+            if (!porcentaje_base || porcentaje_base <= 0) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'porcentaje_base debe ser mayor a 0'
+                });
+            }
+
+            // Crear o actualizar regla
+            const reglaQuery = `
+                INSERT INTO reglas_comisiones (
+                    asesor_id, rol, porcentaje_base, comision_minima,
+                    comision_maxima, bonificacion_meta_porcentaje, activo,
+                    created_by, updated_by
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $8)
+                ON CONFLICT (COALESCE(asesor_id, 0), COALESCE(rol, ''))
+                DO UPDATE SET
+                    porcentaje_base = $3,
+                    comision_minima = $4,
+                    comision_maxima = $5,
+                    bonificacion_meta_porcentaje = $6,
+                    activo = $7,
+                    updated_by = $8,
+                    updated_at = NOW()
+                RETURNING *
+            `;
+
+            const result = await query(reglaQuery, [
+                asesor_id || null,
+                rol || null,
+                porcentaje_base,
+                comision_minima || null,
+                comision_maxima || null,
+                bonificacion_meta_porcentaje || 10,
+                activo,
+                req.user.id
+            ]);
+
+            res.json({
+                success: true,
+                message: 'Regla de comisiones configurada exitosamente',
+                data: result.rows[0]
+            });
+
+        } catch (error) {
+            console.error('Error al configurar reglas de comisiones:', error);
+            res.status(500).json({
+                success: false,
+                message: 'Error interno del servidor'
+            });
+        }
+    }
+}
+
+module.exports = ComisionesController;

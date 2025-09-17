@@ -1,0 +1,120 @@
+const express = require('express');
+const router = express.Router();
+
+// MIDDLEWARE TEMPORAL PARA SIMULAR USUARIO AUTENTICADO
+const mockUser = (req, res, next) => {
+    req.user = {
+        id: 1,
+        nombre: 'Admin',
+        apellido: 'Test',
+        email: 'admin@test.com',
+        rol: 'admin',
+        nombre_completo: 'Admin Test'
+    };
+    next();
+};
+
+// =====================================================
+// SEGUIMIENTOS TEMPORALES - SOLO RESPUESTAS BÁSICAS
+// =====================================================
+
+/**
+ * GET /api/seguimientos
+ * Lista básica de seguimientos
+ */
+router.get('/', mockUser, (req, res) => {
+    res.json({
+        success: true,
+        data: [],
+        message: 'Módulo de seguimientos en modo básico - Sin datos complejos',
+        total: 0
+    });
+});
+
+/**
+ * GET /api/seguimientos/pendientes
+ * Seguimientos pendientes
+ */
+router.get('/pendientes', mockUser, (req, res) => {
+    res.json({
+        success: true,
+        data: [],
+        message: 'No hay seguimientos pendientes en modo básico',
+        total: 0
+    });
+});
+
+/**
+ * GET /api/seguimientos/vencidos
+ * Seguimientos vencidos
+ */
+router.get('/vencidos', mockUser, (req, res) => {
+    res.json({
+        success: true,
+        data: [],
+        message: 'No hay seguimientos vencidos en modo básico',
+        total: 0
+    });
+});
+
+/**
+ * GET /api/seguimientos/estadisticas
+ * Estadísticas básicas
+ */
+router.get('/estadisticas', mockUser, (req, res) => {
+    res.json({
+        success: true,
+        data: {
+            total_seguimientos: 0,
+            pendientes: 0,
+            vencidos: 0,
+            completados: 0,
+            tasa_cumplimiento: '0%'
+        },
+        message: 'Estadísticas en modo básico'
+    });
+});
+
+/**
+ * POST /api/seguimientos
+ * Crear seguimiento básico
+ */
+router.post('/', mockUser, (req, res) => {
+    res.json({
+        success: true,
+        data: {
+            id: Date.now(),
+            mensaje: 'Seguimiento registrado en modo básico',
+            fecha_creacion: new Date().toISOString()
+        },
+        message: 'Seguimiento creado en modo básico'
+    });
+});
+
+/**
+ * GET /api/seguimientos/health
+ * Health check del módulo
+ */
+router.get('/health', (req, res) => {
+    res.json({
+        success: true,
+        module: 'Seguimientos',
+        status: 'Modo Básico - Temporal',
+        timestamp: new Date().toISOString(),
+        version: '1.0.0-basic',
+        message: 'Módulo funcionando en modo básico sin lógica compleja'
+    });
+});
+
+// MIDDLEWARE DE MANEJO DE ERRORES
+router.use((error, req, res, next) => {
+    console.error('Error en seguimientos básicos:', error);
+    
+    res.status(500).json({
+        success: false,
+        error: 'Error en módulo de seguimientos básico',
+        timestamp: new Date().toISOString()
+    });
+});
+
+module.exports = router;

@@ -1,0 +1,695 @@
+// ============================================
+// VENTAS CONTROLLER - GESTIÓN EMPRESARIAL
+// Sistema CRM/ERP v2.0
+// ============================================
+
+const { query } = require('../../../config/database');
+const VentasService = require('../services/VentasService');
+
+class VentasController {
+    
+    // ============================================
+    // LISTAR VENTAS CON FILTROS AVANZADOS
+    // ============================================
+    static async listarVentas(req, res) {
+        try {
+            const {
+                page = 1,
+                limit = 10,
+                estado,
+                asesor_id,
+                fecha_desde,
+                fecha_hasta,
+                search,
+                orden = 'fecha_creacion',
+                direccion = 'DESC'
+            } = req.query;
+
+            const offset = (page - 1) * limit;
+            
+            // Construir WHERE dinámico
+            let whereClause = 'WHERE v.activo = true';
+            const params = [];
+            let paramCount = 0;
+
+            if (estado) {
+                paramCount++;
+                whereClause += ` AND v.estado = $${paramCount}`;
+                params.push(estado);
+            }
+
+            if (asesor_id) {
+                paramCount++;
+                whereClause += ` AND v.asesor_id = $${paramCount}`;
+                params.push(asesor_id);
+            }
+
+            if (fecha_desde) {
+                paramCount++;
+                whereClause += ` AND v.fecha_creacion >= $${paramCount}`;
+                params.push(fecha_desde);
+            }
+
+            if (fecha_hasta) {
+                paramCount++;
+                whereClause += ` AND v.fecha_creacion <= $${paramCount}`;
+                params.push(fecha_hasta + ' 23:59:59');
+            }
+
+            if (search) {
+                paramCount++;
+                whereClause += ` AND (v.codigo ILIKE $${paramCount} OR v.cliente_nombre ILIKE $${paramCount} OR v.cliente_empresa ILIKE $${paramCount})`;
+                params.push(`%${search}%`);
+            }
+
+            // Query principal con joins - PATRÓN PROFESIONAL (CORREGIDO)
+            const ventasQuery = `
+                SELECT 
+                    v.*,
+                    u.nombre as asesor_nombre,
+                    u.apellido as asesor_apellido,
+                    CONCAT(COALESCE(p.nombre_cliente, ''), ' ', COALESCE(p.apellido_cliente, '')) as prospecto_nombre,
+                    0 as total_productos,
+                    0 as total_items
+                FROM ventas v
+                LEFT JOIN usuarios u ON v.asesor_id = u.id
+                LEFT JOIN prospectos p ON v.prospecto_id = p.id
+                ${whereClause}
+                ORDER BY v.${orden} ${direccion}
+                LIMIT ${paramCount + 1} OFFSET ${paramCount + 2}
+            `;
+
+            params.push(limit, offset);
+
+            // Contar total de registros
+            const countQuery = `
+                SELECT COUNT(DISTINCT v.id) as total
+                FROM ventas v
+                LEFT JOIN usuarios u ON v.asesor_id = u.id
+                LEFT JOIN prospectos p ON v.prospecto_id = p.id
+                ${whereClause}
+            `;
+
+            const [ventasResult, countResult] = await Promise.all([
+                query(ventasQuery, params.slice(0, -2).concat([limit, offset])),
+                query(countQuery, params.slice(0, -2).length > 0 ? params.slice(0, -2) : [])
+            ]);
+
+            const total = parseInt(countResult.rows[0].total);
+            const totalPages = Math.ceil(total / limit);
+
+            // PROCESAR RESPUESTA - CONCATENAR NOMBRES EN BACKEND
+            const ventasFormateadas = ventasResult.rows.map(venta => ({
+                ...venta,
+                asesor_nombre_completo: venta.asesor_nombre && venta.asesor_apellido 
+                    ? `${venta.asesor_nombre} ${venta.asesor_apellido}`.trim()
+                    : venta.asesor_nombre || 'Sin asignar'
+            }));
+
+            res.json({
+                success: true,
+                data: {
+                    ventas: ventasFormateadas,
+                    pagination: {
+                        current_page: parseInt(page),
+                        total_pages: totalPages,
+                        total_records: total,
+                        limit: parseInt(limit)
+                    }
+                }
+            });
+
+        } catch (error) {
+            console.error('Error al listar ventas:', error);
+            res.status(500).json({
+                success: false,
+                message: 'Error interno del servidor',
+                error: process.env.NODE_ENV === 'development' ? error.message : undefined
+            });
+        }
+    }
+
+    // ============================================
+    // OBTENER DETALLE COMPLETO DE VENTA
+    // ============================================
+    static async obtenerVenta(req, res) {
+        try {
+            const { id } = req.params;
+
+            // Query principal con todos los datos relacionados - PATRÓN PROFESIONAL
+            const ventaQuery = `
+                SELECT 
+                    v.*,
+                    u.nombre as asesor_nombre,
+                    u.apellido as asesor_apellido,
+                    u.email as asesor_email,
+                    CONCAT(p.nombre_cliente, ' ', COALESCE(p.apellido_cliente, '')) as prospecto_nombre,
+                    p.empresa as prospecto_empresa,
+                    s.tipo as seguimiento_tipo,
+                    s.resultado as seguimiento_resultado
+                FROM ventas v
+                LEFT JOIN usuarios u ON v.asesor_id = u.id
+                LEFT JOIN prospectos p ON v.prospecto_id = p.id
+                LEFT JOIN seguimientos s ON v.seguimiento_id = s.id
+                WHERE v.id = $1 AND v.activo = true
+            `;
+
+            // Query para obtener detalles de productos - CORREGIDO
+            const detallesQuery = `
+                SELECT 
+                    vd.*,
+                    pr.id as producto_id_detalle,
+                    'Producto genérico' as producto_nombre,
+                    'Descripción pendiente' as producto_descripcion,
+                    'General' as categoria,
+                    'Sin marca' as marca
+                FROM venta_detalles vd
+                LEFT JOIN productos pr ON vd.producto_id = pr.id
+                WHERE vd.venta_id = $1
+                ORDER BY vd.orden_linea
+            `;
+
+            // Query para obtener cotizaciones
+            const cotizacionesQuery = `
+                SELECT *
+                FROM cotizaciones
+                WHERE venta_id = $1
+                ORDER BY numero_version DESC
+            `;
+
+            // Query para obtener seguimientos post-venta - PATRÓN PROFESIONAL
+            const seguimientosQuery = `
+                SELECT 
+                    vs.*,
+                    u.nombre as responsable_nombre,
+                    u.apellido as responsable_apellido
+                FROM venta_seguimientos vs
+                LEFT JOIN usuarios u ON vs.responsable_id = u.id
+                WHERE vs.venta_id = $1
+                ORDER BY vs.fecha_programada
+            `;
+
+            const [ventaResult, detallesResult, cotizacionesResult, seguimientosResult] = await Promise.all([
+                query(ventaQuery, [id]),
+                query(detallesQuery, [id]),
+                query(cotizacionesQuery, [id]),
+                query(seguimientosQuery, [id])
+            ]);
+
+            if (ventaResult.rows.length === 0) {
+                return res.status(404).json({
+                    success: false,
+                    message: 'Venta no encontrada'
+                });
+            }
+
+            const venta = ventaResult.rows[0];
+            
+            // FORMATEAR NOMBRES PROFESIONALMENTE
+            venta.asesor_nombre_completo = venta.asesor_nombre && venta.asesor_apellido 
+                ? `${venta.asesor_nombre} ${venta.asesor_apellido}`.trim()
+                : venta.asesor_nombre || 'Sin asignar';
+
+            venta.detalles = detallesResult.rows;
+            venta.cotizaciones = cotizacionesResult.rows;
+            
+            // Formatear seguimientos con nombres completos
+            venta.seguimientos_postventa = seguimientosResult.rows.map(seguimiento => ({
+                ...seguimiento,
+                responsable_nombre_completo: seguimiento.responsable_nombre && seguimiento.responsable_apellido
+                    ? `${seguimiento.responsable_nombre} ${seguimiento.responsable_apellido}`.trim()
+                    : seguimiento.responsable_nombre || 'Sin asignar'
+            }));
+
+            res.json({
+                success: true,
+                data: venta
+            });
+
+        } catch (error) {
+            console.error('Error al obtener venta:', error);
+            res.status(500).json({
+                success: false,
+                message: 'Error interno del servidor'
+            });
+        }
+    }
+
+    // ============================================
+    // CREAR NUEVA VENTA MANUAL
+    // ============================================
+    static async crearVenta(req, res) {
+        try {
+            const {
+                prospecto_id,
+                cliente_nombre,
+                cliente_empresa,
+                cliente_email,
+                cliente_telefono,
+                valor_total,
+                descuento_porcentaje = 0,
+                descuento_monto = 0,
+                estado = 'Cotizacion',
+                fase = 'Negociacion',
+                probabilidad_cierre = 50,
+                fecha_entrega_estimada,
+                origen = 'Manual',
+                notas_internas,
+                condiciones_especiales,
+                detalles = [] // Array de productos
+            } = req.body;
+
+            // Validaciones básicas
+            if (!cliente_nombre || !valor_total) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Datos requeridos: cliente_nombre, valor_total'
+                });
+            }
+
+            // Calcular valor final
+            const descuento_total = descuento_monto + (valor_total * descuento_porcentaje / 100);
+            const valor_final = valor_total - descuento_total;
+
+            // Iniciar transacción
+            await query('BEGIN');
+
+            try {
+                // Insertar venta principal
+                const ventaQuery = `
+                    INSERT INTO ventas (
+                        prospecto_id, asesor_id, cliente_nombre, cliente_empresa,
+                        cliente_email, cliente_telefono, valor_total, descuento_porcentaje,
+                        descuento_monto, valor_final, estado, fase, probabilidad_cierre,
+                        fecha_entrega_estimada, origen, notas_internas, condiciones_especiales,
+                        activo, created_by, updated_by
+                    ) VALUES (
+                        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, true, $18, $18
+                    ) RETURNING *
+                `;
+
+                const ventaResult = await query(ventaQuery, [
+                    prospecto_id, req.user.id, cliente_nombre, cliente_empresa,
+                    cliente_email, cliente_telefono, valor_total, descuento_porcentaje,
+                    descuento_monto, valor_final, estado, fase, probabilidad_cierre,
+                    fecha_entrega_estimada, origen, notas_internas, condiciones_especiales,
+                    // activo = true se pasa directamente en el SQL
+                    req.user.id, req.user.id
+                ]);
+
+                const nuevaVenta = ventaResult.rows[0];
+
+                // Insertar detalles de productos si existen
+                if (detalles && detalles.length > 0) {
+                    for (let i = 0; i < detalles.length; i++) {
+                        const detalle = detalles[i];
+                        const subtotal = detalle.cantidad * detalle.precio_unitario;
+                        const descuento_linea = detalle.descuento_monto || 0;
+                        const total_linea = subtotal - descuento_linea;
+
+                        await query(`
+                            INSERT INTO venta_detalles (
+                                venta_id, producto_id, cantidad, precio_unitario, subtotal,
+                                descuento_monto, total_linea, descripcion_personalizada, orden_linea
+                            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+                        `, [
+                            nuevaVenta.id, detalle.producto_id, detalle.cantidad,
+                            detalle.precio_unitario, subtotal, descuento_linea, total_linea,
+                            detalle.descripcion_personalizada, i + 1
+                        ]);
+                    }
+                }
+
+                // Si viene de un prospecto, actualizar su estado (CORREGIDO)
+                if (prospecto_id) {
+                    try {
+                        await query(`
+                            UPDATE prospectos 
+                            SET estado = 'Convertido', venta_id = $1
+                            WHERE id = $2
+                        `, [nuevaVenta.id, prospecto_id]);
+                    } catch (error) {
+                        console.log('Warning: No se pudo actualizar prospecto, continuando...');
+                        // No romper la transacción - la venta es lo importante
+                    }
+                }
+
+                await query('COMMIT');
+
+                // Obtener la venta completa para respuesta
+                const ventaCompleta = await VentasController.obtenerVentaCompleta(nuevaVenta.id);
+
+                res.status(201).json({
+                    success: true,
+                    message: 'Venta creada exitosamente',
+                    data: ventaCompleta
+                });
+
+            } catch (error) {
+                await query('ROLLBACK');
+                throw error;
+            }
+
+        } catch (error) {
+            console.error('Error al crear venta:', error);
+            res.status(500).json({
+                success: false,
+                message: 'Error al crear la venta',
+                error: process.env.NODE_ENV === 'development' ? error.message : undefined
+            });
+        }
+    }
+
+    // ============================================
+    // ACTUALIZAR VENTA
+    // ============================================
+    static async actualizarVenta(req, res) {
+        try {
+            const { id } = req.params;
+            const updates = req.body;
+
+            // Campos permitidos para actualización
+            const camposPermitidos = [
+                'cliente_nombre', 'cliente_empresa', 'cliente_email', 'cliente_telefono',
+                'valor_total', 'descuento_porcentaje', 'descuento_monto', 'valor_final',
+                'estado', 'fase', 'probabilidad_cierre', 'fecha_entrega_estimada',
+                'notas_internas', 'condiciones_especiales'
+            ];
+
+            const camposActualizar = [];
+            const valores = [];
+            let paramCount = 0;
+
+            // Construir query dinámico
+            for (const [key, value] of Object.entries(updates)) {
+                if (camposPermitidos.includes(key) && value !== undefined) {
+                    paramCount++;
+                    camposActualizar.push(`${key} = $${paramCount}`);
+                    valores.push(value);
+                }
+            }
+
+            if (camposActualizar.length === 0) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'No hay campos válidos para actualizar'
+                });
+            }
+
+            // Agregar campos de auditoría
+            paramCount++;
+            camposActualizar.push(`updated_by = $${paramCount}`);
+            valores.push(req.user.id);
+
+            paramCount++;
+            camposActualizar.push(`updated_at = $${paramCount}`);
+            valores.push(new Date());
+
+            // Agregar ID para WHERE
+            paramCount++;
+            valores.push(id);
+
+            const updateQuery = `
+                UPDATE ventas 
+                SET ${camposActualizar.join(', ')}
+                WHERE id = $${paramCount} AND activo = true
+                RETURNING *
+            `;
+
+            const result = await query(updateQuery, valores);
+
+            if (result.rows.length === 0) {
+                return res.status(404).json({
+                    success: false,
+                    message: 'Venta no encontrada'
+                });
+            }
+
+            res.json({
+                success: true,
+                message: 'Venta actualizada exitosamente',
+                data: result.rows[0]
+            });
+
+        } catch (error) {
+            console.error('Error al actualizar venta:', error);
+            res.status(500).json({
+                success: false,
+                message: 'Error al actualizar la venta'
+            });
+        }
+    }
+
+    // ============================================
+    // CAMBIAR ESTADO DE VENTA
+    // ============================================
+    static async cambiarEstado(req, res) {
+        try {
+            const { id } = req.params;
+            const { nuevo_estado, notas } = req.body;
+
+            const estadosValidos = [
+                'Cotizacion', 'Aprobada', 'Contrato', 'Facturada', 
+                'Entregada', 'Completada', 'Cancelada'
+            ];
+
+            if (!estadosValidos.includes(nuevo_estado)) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Estado no válido',
+                    estados_validos: estadosValidos
+                });
+            }
+
+            // Obtener estado actual
+            const ventaActual = await query(
+                'SELECT estado, asesor_id FROM ventas WHERE id = $1 AND activo = true',
+                [id]
+            );
+
+            if (ventaActual.rows.length === 0) {
+                return res.status(404).json({
+                    success: false,
+                    message: 'Venta no encontrada'
+                });
+            }
+
+            const estadoAnterior = ventaActual.rows[0].estado;
+
+            // Actualizar estado con timestamp específico
+            let campoFecha = '';
+            switch (nuevo_estado) {
+                case 'Aprobada':
+                    campoFecha = ', fecha_aprobacion = NOW()';
+                    break;
+                case 'Facturada':
+                    campoFecha = ', fecha_cierre = NOW()';
+                    break;
+                case 'Entregada':
+                    campoFecha = ', fecha_entrega_real = NOW()';
+                    break;
+            }
+
+            const updateQuery = `
+                UPDATE ventas 
+                SET estado = $1, updated_at = NOW(), updated_by = $2 ${campoFecha}
+                WHERE id = $3 AND activo = true
+                RETURNING *
+            `;
+
+            const result = await query(updateQuery, [nuevo_estado, req.user.id, id]);
+
+            // Trigger para automatizaciones según el nuevo estado
+            await VentasService.procesarCambioEstado(id, nuevo_estado, estadoAnterior, req.user.id);
+
+            res.json({
+                success: true,
+                message: `Estado cambiado de "${estadoAnterior}" a "${nuevo_estado}"`,
+                data: result.rows[0]
+            });
+
+        } catch (error) {
+            console.error('Error al cambiar estado:', error);
+            res.status(500).json({
+                success: false,
+                message: 'Error al cambiar el estado de la venta'
+            });
+        }
+    }
+
+    // ============================================
+    // DASHBOARD DE VENTAS
+    // ============================================
+    static async dashboard(req, res) {
+        try {
+            const { asesor_id, fecha_desde, fecha_hasta } = req.query;
+            
+            // Si no se especifica asesor, usar el usuario actual
+            const targetAsesor = asesor_id || req.user.id;
+            
+            // Fechas por defecto (mes actual)
+            const fechaDesde = fecha_desde || new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString();
+            const fechaHasta = fecha_hasta || new Date().toISOString();
+
+            // Métricas principales
+            const metricas = await Promise.all([
+                // Total ventas
+                query(`
+                    SELECT COUNT(*) as total, SUM(valor_final) as valor_total
+                    FROM ventas 
+                    WHERE asesor_id = $1 AND fecha_creacion BETWEEN $2 AND $3 AND activo = true
+                `, [targetAsesor, fechaDesde, fechaHasta]),
+
+                // Ventas por estado
+                query(`
+                    SELECT estado, COUNT(*) as cantidad, SUM(valor_final) as valor
+                    FROM ventas 
+                    WHERE asesor_id = $1 AND fecha_creacion BETWEEN $2 AND $3 AND activo = true
+                    GROUP BY estado
+                `, [targetAsesor, fechaDesde, fechaHasta]),
+
+                // Meta del asesor (mes current)
+                query(`
+                    SELECT meta_cantidad, meta_valor, ventas_logradas, valor_logrado,
+                           porcentaje_cantidad, porcentaje_valor
+                    FROM metas_ventas 
+                    WHERE asesor_id = $1 AND año = $2 AND mes = $3 AND activo = true
+                `, [targetAsesor, new Date().getFullYear(), new Date().getMonth() + 1]),
+
+                // Conversión de prospectos - CORREGIDO
+                query(`
+                    SELECT 
+                        COUNT(DISTINCT p.id) as total_prospectos,
+                        COUNT(DISTINCT v.id) as prospectos_convertidos,
+                        ROUND(CAST(
+                            CASE 
+                                WHEN COUNT(DISTINCT p.id) > 0 
+                                THEN (COUNT(DISTINCT v.id)::float / COUNT(DISTINCT p.id)::float) * 100 
+                                ELSE 0 
+                            END AS NUMERIC), 2
+                        ) as tasa_conversion
+                    FROM prospectos p
+                    LEFT JOIN ventas v ON p.id = v.prospecto_id AND v.activo = true
+                    WHERE p.asesor_id = $1 AND p.fecha_creacion BETWEEN $2 AND $3
+                `, [targetAsesor, fechaDesde, fechaHasta])
+            ]);
+
+            const dashboard = {
+                periodo: {
+                    desde: fechaDesde,
+                    hasta: fechaHasta,
+                    asesor_id: targetAsesor
+                },
+                resumen: {
+                    total_ventas: parseInt(metricas[0].rows[0].total),
+                    valor_total: parseFloat(metricas[0].rows[0].valor_total || 0),
+                    tasa_conversion: parseFloat(metricas[3].rows[0].tasa_conversion || 0)
+                },
+                ventas_por_estado: metricas[1].rows,
+                meta_actual: metricas[2].rows[0] || null,
+                conversion_prospectos: metricas[3].rows[0]
+            };
+
+            res.json({
+                success: true,
+                data: dashboard
+            });
+
+        } catch (error) {
+            console.error('Error en dashboard:', error);
+            res.status(500).json({
+                success: false,
+                message: 'Error al generar dashboard'
+            });
+        }
+    }
+
+    // ============================================
+    // ELIMINAR VENTA (SOFT DELETE)
+    // ============================================
+    static async eliminarVenta(req, res) {
+        try {
+            const { id } = req.params;
+
+            const result = await query(`
+                UPDATE ventas 
+                SET activo = false, updated_at = NOW(), updated_by = $1
+                WHERE id = $2 AND activo = true
+                RETURNING codigo, cliente_nombre
+            `, [req.user.id, id]);
+
+            if (result.rows.length === 0) {
+                return res.status(404).json({
+                    success: false,
+                    message: 'Venta no encontrada'
+                });
+            }
+
+            res.json({
+                success: true,
+                message: `Venta ${result.rows[0].codigo} eliminada exitosamente`
+            });
+
+        } catch (error) {
+            console.error('Error al eliminar venta:', error);
+            res.status(500).json({
+                success: false,
+                message: 'Error al eliminar la venta'
+            });
+        }
+    }
+
+    // ============================================
+    // HELPER: OBTENER VENTA COMPLETA - CORREGIDO
+    // ============================================
+    static async obtenerVentaCompleta(ventaId) {
+        try {
+            // Query con patrón profesional
+            const ventaQuery = `
+                SELECT 
+                    v.*,
+                    u.nombre as asesor_nombre,
+                    u.apellido as asesor_apellido,
+                    CONCAT(p.nombre_cliente, ' ', COALESCE(p.apellido_cliente, '')) as prospecto_nombre
+                FROM ventas v
+                LEFT JOIN usuarios u ON v.asesor_id = u.id
+                LEFT JOIN prospectos p ON v.prospecto_id = p.id
+                WHERE v.id = $1 AND v.activo = true
+            `;
+
+            // Query de detalles simplificada y robusta
+            const detallesQuery = `
+                SELECT 
+                    vd.*,
+                    'Producto genérico' as producto_nombre,
+                    'Descripción pendiente' as producto_descripcion
+                FROM venta_detalles vd
+                WHERE vd.venta_id = $1
+                ORDER BY vd.orden_linea
+            `;
+
+            const [ventaResult, detallesResult] = await Promise.all([
+                query(ventaQuery, [ventaId]),
+                query(detallesQuery, [ventaId])
+            ]);
+
+            const venta = ventaResult.rows[0];
+            
+            // Formatear nombre completo profesionalmente
+            if (venta) {
+                venta.asesor_nombre_completo = venta.asesor_nombre && venta.asesor_apellido 
+                    ? `${venta.asesor_nombre} ${venta.asesor_apellido}`.trim()
+                    : venta.asesor_nombre || 'Sin asignar';
+                    
+                venta.detalles = detallesResult.rows;
+            }
+
+            return venta;
+        } catch (error) {
+            console.error('Error al obtener venta completa:', error);
+            return null;
+        }
+    }
+}
+
+module.exports = VentasController;

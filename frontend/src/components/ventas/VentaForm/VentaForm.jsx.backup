@@ -1,0 +1,693 @@
+// src/components/ventas/VentaForm/VentaForm.jsx
+import React, { useState, useEffect, useCallback } from 'react';
+import {
+  X, Save, AlertCircle, CheckCircle, DollarSign, User,
+  Calendar, Phone, Mail, Building, Package, Plus, Trash2,
+  Search, Eye, EyeOff
+} from 'lucide-react';
+import ventasService from '../../../services/ventasService';
+
+const VentaForm = ({
+  venta = null,
+  mode = 'create', // 'create' | 'edit'
+  onClose,
+  onSave
+}) => {
+  const [formData, setFormData] = useState({
+    codigo: '',
+    cliente_nombre: '',
+    cliente_email: '',
+    cliente_telefono: '',
+    cliente_direccion: '',
+    cliente_id: null,
+    estado: 'Cotizacion',
+    fase: 'inicial',
+    valor_final: '',
+    descuento: '',
+    observaciones: '',
+    fecha_entrega_estimada: '',
+    productos: []
+  });
+  
+  const [errors, setErrors] = useState({});
+  const [loading, setLoading] = useState(false);
+  const [notification, setNotification] = useState(null);
+  const [showClienteSearch, setShowClienteSearch] = useState(false);
+  const [clientesBusqueda, setClientesBusqueda] = useState([]);
+  const [busquedaCliente, setBusquedaCliente] = useState('');
+  const [loadingClientes, setLoadingClientes] = useState(false);
+
+  // Estados disponibles
+  const estadosDisponibles = [
+    { value: 'Cotizacion', label: 'Cotización', descripcion: 'Venta en proceso de cotización' },
+    { value: 'Aprobada', label: 'Aprobada', descripcion: 'Cotización aprobada por el cliente' },
+    { value: 'Contrato', label: 'En Contrato', descripcion: 'Elaborando contrato' },
+    { value: 'Facturada', label: 'Facturada', descripcion: 'Venta facturada' },
+    { value: 'Entregada', label: 'Entregada', descripcion: 'Productos entregados' },
+    { value: 'Completada', label: 'Completada', descripcion: 'Venta finalizada' },
+    { value: 'Cancelada', label: 'Cancelada', descripcion: 'Venta cancelada' }
+  ];
+
+  // Inicializar formulario con datos de venta existente
+  useEffect(() => {
+    if (mode === 'edit' && venta) {
+      setFormData({
+        codigo: venta.codigo || '',
+        cliente_nombre: venta.cliente_nombre || '',
+        cliente_email: venta.cliente_email || '',
+        cliente_telefono: venta.cliente_telefono || '',
+        cliente_direccion: venta.cliente_direccion || '',
+        cliente_id: venta.cliente_id || null,
+        estado: venta.estado || 'Cotizacion',
+        fase: venta.fase || 'inicial',
+        valor_final: venta.valor_final || '',
+        descuento: venta.descuento || '',
+        observaciones: venta.observaciones || '',
+        fecha_entrega_estimada: venta.fecha_entrega_estimada ? 
+          new Date(venta.fecha_entrega_estimada).toISOString().split('T')[0] : '',
+        productos: venta.productos || []
+      });
+    } else {
+      // Generar código automático para nueva venta
+      const codigoAuto = `V-${Date.now().toString().slice(-6)}`;
+      setFormData(prev => ({ ...prev, codigo: codigoAuto }));
+    }
+  }, [mode, venta]);
+
+  // Validar formulario
+  const validarFormulario = useCallback(() => {
+    const newErrors = {};
+
+    if (!formData.cliente_nombre.trim()) {
+      newErrors.cliente_nombre = 'El nombre del cliente es obligatorio';
+    }
+
+    if (!formData.valor_final || parseFloat(formData.valor_final) <= 0) {
+      newErrors.valor_final = 'El valor debe ser mayor a cero';
+    }
+
+    if (formData.cliente_email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.cliente_email)) {
+      newErrors.cliente_email = 'Email inválido';
+    }
+
+    if (formData.cliente_telefono && formData.cliente_telefono.length < 7) {
+      newErrors.cliente_telefono = 'Teléfono debe tener al menos 7 dígitos';
+    }
+
+    if (formData.fecha_entrega_estimada) {
+      const fechaEntrega = new Date(formData.fecha_entrega_estimada);
+      const hoy = new Date();
+      hoy.setHours(0, 0, 0, 0);
+      
+      if (fechaEntrega < hoy) {
+        newErrors.fecha_entrega_estimada = 'La fecha de entrega no puede ser anterior a hoy';
+      }
+    }
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  }, [formData]);
+
+  // Buscar clientes
+  const buscarClientes = useCallback(async (busqueda) => {
+    if (!busqueda || busqueda.length < 2) {
+      setClientesBusqueda([]);
+      return;
+    }
+
+    try {
+      setLoadingClientes(true);
+      const response = await ventasService.obtenerClientes({ busqueda });
+      
+      if (response.success) {
+        setClientesBusqueda(response.data.clientes || []);
+      }
+    } catch (err) {
+      console.error('Error buscando clientes:', err);
+    } finally {
+      setLoadingClientes(false);
+    }
+  }, []);
+
+  // Manejar cambios en el formulario
+  const handleInputChange = useCallback((field, value) => {
+    setFormData(prev => ({ ...prev, [field]: value }));
+    
+    // Limpiar error del campo
+    if (errors[field]) {
+      setErrors(prev => ({ ...prev, [field]: null }));
+    }
+  }, [errors]);
+
+  // Seleccionar cliente de la búsqueda
+  const seleccionarCliente = useCallback((cliente) => {
+    setFormData(prev => ({
+      ...prev,
+      cliente_id: cliente.id,
+      cliente_nombre: cliente.nombre,
+      cliente_email: cliente.email || '',
+      cliente_telefono: cliente.telefono || '',
+      cliente_direccion: cliente.direccion || ''
+    }));
+    setShowClienteSearch(false);
+    setBusquedaCliente('');
+    setClientesBusqueda([]);
+  }, []);
+
+  // Agregar producto
+  const agregarProducto = useCallback(() => {
+    const nuevoProducto = {
+      id: Date.now(),
+      nombre: '',
+      cantidad: 1,
+      precio_unitario: '',
+      subtotal: 0
+    };
+    
+    setFormData(prev => ({
+      ...prev,
+      productos: [...prev.productos, nuevoProducto]
+    }));
+  }, []);
+
+  // Eliminar producto
+  const eliminarProducto = useCallback((productoId) => {
+    setFormData(prev => ({
+      ...prev,
+      productos: prev.productos.filter(p => p.id !== productoId)
+    }));
+  }, []);
+
+  // Actualizar producto
+  const actualizarProducto = useCallback((productoId, campo, valor) => {
+    setFormData(prev => ({
+      ...prev,
+      productos: prev.productos.map(producto => {
+        if (producto.id === productoId) {
+          const updated = { ...producto, [campo]: valor };
+          
+          // Recalcular subtotal
+          if (campo === 'cantidad' || campo === 'precio_unitario') {
+            const cantidad = parseFloat(updated.cantidad) || 0;
+            const precio = parseFloat(updated.precio_unitario) || 0;
+            updated.subtotal = cantidad * precio;
+          }
+          
+          return updated;
+        }
+        return producto;
+      })
+    }));
+  }, []);
+
+  // Calcular totales
+  const calcularTotales = useCallback(() => {
+    const subtotal = formData.productos.reduce((sum, producto) => 
+      sum + (producto.subtotal || 0), 0
+    );
+    const descuento = parseFloat(formData.descuento) || 0;
+    const total = subtotal - descuento;
+    
+    return { subtotal, descuento, total };
+  }, [formData.productos, formData.descuento]);
+
+  // Manejar envío del formulario
+  const handleSubmit = useCallback(async (e) => {
+    e.preventDefault();
+    
+    if (!validarFormulario()) {
+      showNotification('Por favor corrige los errores en el formulario', 'error');
+      return;
+    }
+
+    try {
+      setLoading(true);
+      
+      // Preparar datos para envío
+      const datosVenta = {
+        ...formData,
+        valor_final: parseFloat(formData.valor_final) || 0,
+        descuento: parseFloat(formData.descuento) || 0,
+        fecha_entrega_estimada: formData.fecha_entrega_estimada || null
+      };
+
+      let response;
+      if (mode === 'edit') {
+        response = await ventasService.actualizarVenta(venta.id, datosVenta);
+      } else {
+        response = await ventasService.crearVenta(datosVenta);
+      }
+
+      if (response.success) {
+        showNotification(
+          `Venta ${mode === 'edit' ? 'actualizada' : 'creada'} exitosamente`,
+          'success'
+        );
+        setTimeout(() => {
+          onSave(response.data);
+        }, 1000);
+      } else {
+        showNotification(response.error, 'error');
+      }
+    } catch (err) {
+      showNotification('Error procesando la venta', 'error');
+    } finally {
+      setLoading(false);
+    }
+  }, [formData, mode, venta, validarFormulario, onSave]);
+
+  // Sistema de notificaciones
+  const showNotification = useCallback((mensaje, tipo = 'info') => {
+    setNotification({ mensaje, tipo, id: Date.now() });
+    setTimeout(() => setNotification(null), 3000);
+  }, []);
+
+  // Buscar clientes cuando cambia la búsqueda
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      buscarClientes(busquedaCliente);
+    }, 300);
+
+    return () => clearTimeout(timeoutId);
+  }, [busquedaCliente, buscarClientes]);
+
+  const totales = calcularTotales();
+
+  // Componente de notificación
+  const NotificationComponent = () => {
+    if (!notification) return null;
+
+    const iconos = {
+      success: CheckCircle,
+      error: AlertCircle,
+      info: AlertCircle
+    };
+
+    const colores = {
+      success: 'bg-green-100 border-green-200 text-green-800',
+      error: 'bg-red-100 border-red-200 text-red-800',
+      info: 'bg-blue-100 border-blue-200 text-blue-800'
+    };
+
+    const IconComponent = iconos[notification.tipo];
+
+    return (
+      <div className={`fixed top-4 right-4 z-50 p-4 rounded-lg border shadow-lg ${colores[notification.tipo]} max-w-sm`}>
+        <div className="flex items-center">
+          <IconComponent className="h-5 w-5 mr-2" />
+          <span className="text-sm font-medium">{notification.mensaje}</span>
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-screen overflow-y-auto">
+        {/* Header */}
+        <div className="flex items-center justify-between p-6 border-b border-gray-200">
+          <div>
+            <h2 className="text-xl font-bold text-gray-900">
+              {mode === 'edit' ? 'Editar Venta' : 'Nueva Venta'}
+            </h2>
+            <p className="text-sm text-gray-600">
+              {mode === 'edit' ? 'Actualiza los datos de la venta' : 'Completa la información para crear una nueva venta'}
+            </p>
+          </div>
+          <button
+            onClick={onClose}
+            className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+          >
+            <X className="h-5 w-5 text-gray-500" />
+          </button>
+        </div>
+
+        {/* Formulario */}
+        <form onSubmit={handleSubmit} className="p-6 space-y-6">
+          {/* Información básica */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Código de Venta
+              </label>
+              <input
+                type="text"
+                value={formData.codigo}
+                onChange={(e) => handleInputChange('codigo', e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                placeholder="V-123456"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Estado de la Venta
+              </label>
+              <select
+                value={formData.estado}
+                onChange={(e) => handleInputChange('estado', e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              >
+                {estadosDisponibles.map(estado => (
+                  <option key={estado.value} value={estado.value}>
+                    {estado.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {/* Información del cliente */}
+          <div className="border border-gray-200 rounded-lg p-4">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-gray-900">Información del Cliente</h3>
+              <button
+                type="button"
+                onClick={() => setShowClienteSearch(!showClienteSearch)}
+                className="inline-flex items-center px-3 py-2 border border-gray-300 rounded-md text-gray-700 bg-white hover:bg-gray-50 transition-colors text-sm"
+              >
+                <Search className="h-4 w-4 mr-2" />
+                Buscar Cliente
+              </button>
+            </div>
+
+            {showClienteSearch && (
+              <div className="mb-4 p-3 bg-gray-50 rounded-lg">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                  <input
+                    type="text"
+                    placeholder="Buscar cliente por nombre, email o teléfono..."
+                    value={busquedaCliente}
+                    onChange={(e) => setBusquedaCliente(e.target.value)}
+                    className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
+                
+                {loadingClientes && (
+                  <div className="mt-2 text-sm text-gray-600">Buscando clientes...</div>
+                )}
+                
+                {clientesBusqueda.length > 0 && (
+                  <div className="mt-2 max-h-32 overflow-y-auto border border-gray-200 rounded-md">
+                    {clientesBusqueda.map(cliente => (
+                      <button
+                        key={cliente.id}
+                        type="button"
+                        onClick={() => seleccionarCliente(cliente)}
+                        className="w-full text-left px-3 py-2 hover:bg-blue-50 border-b border-gray-100 last:border-b-0"
+                      >
+                        <div className="font-medium text-gray-900">{cliente.nombre}</div>
+                        <div className="text-sm text-gray-600">{cliente.email} • {cliente.telefono}</div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Nombre del Cliente *
+                </label>
+                <input
+                  type="text"
+                  value={formData.cliente_nombre}
+                  onChange={(e) => handleInputChange('cliente_nombre', e.target.value)}
+                  className={`w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                    errors.cliente_nombre ? 'border-red-300' : 'border-gray-300'
+                  }`}
+                  placeholder="Nombre completo del cliente"
+                />
+                {errors.cliente_nombre && (
+                  <p className="mt-1 text-sm text-red-600">{errors.cliente_nombre}</p>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Email
+                </label>
+                <input
+                  type="email"
+                  value={formData.cliente_email}
+                  onChange={(e) => handleInputChange('cliente_email', e.target.value)}
+                  className={`w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                    errors.cliente_email ? 'border-red-300' : 'border-gray-300'
+                  }`}
+                  placeholder="cliente@email.com"
+                />
+                {errors.cliente_email && (
+                  <p className="mt-1 text-sm text-red-600">{errors.cliente_email}</p>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Teléfono
+                </label>
+                <input
+                  type="tel"
+                  value={formData.cliente_telefono}
+                  onChange={(e) => handleInputChange('cliente_telefono', e.target.value)}
+                  className={`w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                    errors.cliente_telefono ? 'border-red-300' : 'border-gray-300'
+                  }`}
+                  placeholder="Número de teléfono"
+                />
+                {errors.cliente_telefono && (
+                  <p className="mt-1 text-sm text-red-600">{errors.cliente_telefono}</p>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Dirección
+                </label>
+                <input
+                  type="text"
+                  value={formData.cliente_direccion}
+                  onChange={(e) => handleInputChange('cliente_direccion', e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="Dirección del cliente"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Productos (simplificado para esta versión) */}
+          <div className="border border-gray-200 rounded-lg p-4">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-gray-900">Productos</h3>
+              <button
+                type="button"
+                onClick={agregarProducto}
+                className="inline-flex items-center px-3 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors text-sm"
+              >
+                <Plus className="h-4 w-4 mr-2" />
+                Agregar Producto
+              </button>
+            </div>
+
+            {formData.productos.length === 0 ? (
+              <div className="text-center py-8 text-gray-500">
+                <Package className="h-12 w-12 mx-auto mb-2 text-gray-400" />
+                <p>No hay productos agregados</p>
+                <p className="text-sm">Haz clic en "Agregar Producto" para comenzar</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {formData.productos.map((producto) => (
+                  <div key={producto.id} className="grid grid-cols-12 gap-3 items-end">
+                    <div className="col-span-5">
+                      <input
+                        type="text"
+                        placeholder="Nombre del producto"
+                        value={producto.nombre}
+                        onChange={(e) => actualizarProducto(producto.id, 'nombre', e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      />
+                    </div>
+                    <div className="col-span-2">
+                      <input
+                        type="number"
+                        placeholder="Cant."
+                        min="0"
+                        step="0.01"
+                        value={producto.cantidad}
+                        onChange={(e) => actualizarProducto(producto.id, 'cantidad', e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      />
+                    </div>
+                    <div className="col-span-2">
+                      <input
+                        type="number"
+                        placeholder="Precio"
+                        min="0"
+                        step="0.01"
+                        value={producto.precio_unitario}
+                        onChange={(e) => actualizarProducto(producto.id, 'precio_unitario', e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      />
+                    </div>
+                    <div className="col-span-2">
+                      <div className="px-3 py-2 bg-gray-50 border border-gray-300 rounded-md text-right">
+                        ${ventasService.formatearMonto(producto.subtotal || 0)}
+                      </div>
+                    </div>
+                    <div className="col-span-1">
+                      <button
+                        type="button"
+                        onClick={() => eliminarProducto(producto.id)}
+                        className="p-2 text-red-600 hover:bg-red-50 rounded-md transition-colors"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Valores y totales */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Valor Final de la Venta *
+                </label>
+                <div className="relative">
+                  <DollarSign className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={formData.valor_final}
+                    onChange={(e) => handleInputChange('valor_final', e.target.value)}
+                    className={`w-full pl-10 pr-4 py-2 border rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                      errors.valor_final ? 'border-red-300' : 'border-gray-300'
+                    }`}
+                    placeholder="0.00"
+                  />
+                </div>
+                {errors.valor_final && (
+                  <p className="mt-1 text-sm text-red-600">{errors.valor_final}</p>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Descuento
+                </label>
+                <div className="relative">
+                  <DollarSign className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={formData.descuento}
+                    onChange={(e) => handleInputChange('descuento', e.target.value)}
+                    className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    placeholder="0.00"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Fecha de Entrega Estimada
+                </label>
+                <div className="relative">
+                  <Calendar className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                  <input
+                    type="date"
+                    value={formData.fecha_entrega_estimada}
+                    onChange={(e) => handleInputChange('fecha_entrega_estimada', e.target.value)}
+                    className={`w-full pl-10 pr-4 py-2 border rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                      errors.fecha_entrega_estimada ? 'border-red-300' : 'border-gray-300'
+                    }`}
+                  />
+                </div>
+                {errors.fecha_entrega_estimada && (
+                  <p className="mt-1 text-sm text-red-600">{errors.fecha_entrega_estimada}</p>
+                )}
+              </div>
+            </div>
+
+            <div>
+              <div className="bg-gray-50 rounded-lg p-4">
+                <h4 className="font-semibold text-gray-900 mb-3">Resumen de Totales</h4>
+                <div className="space-y-2 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Subtotal productos:</span>
+                    <span className="font-medium">${ventasService.formatearMonto(totales.subtotal)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Descuento:</span>
+                    <span className="font-medium text-red-600">-${ventasService.formatearMonto(totales.descuento)}</span>
+                  </div>
+                  <div className="border-t border-gray-200 pt-2 flex justify-between">
+                    <span className="font-semibold text-gray-900">Total:</span>
+                    <span className="font-bold text-lg text-green-600">${ventasService.formatearMonto(totales.total)}</span>
+                  </div>
+                </div>
+                
+                {formData.valor_final && parseFloat(formData.valor_final) !== totales.total && (
+                  <div className="mt-3 p-2 bg-yellow-50 border border-yellow-200 rounded text-sm text-yellow-800">
+                    <AlertCircle className="h-4 w-4 inline mr-1" />
+                    El valor final (${ventasService.formatearMonto(formData.valor_final)}) difiere del total calculado
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Observaciones */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Observaciones
+            </label>
+            <textarea
+              value={formData.observaciones}
+              onChange={(e) => handleInputChange('observaciones', e.target.value)}
+              rows={3}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              placeholder="Notas adicionales sobre la venta..."
+            />
+          </div>
+
+          {/* Botones de acción */}
+          <div className="flex items-center justify-end space-x-3 pt-6 border-t border-gray-200">
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={loading}
+              className="px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition-colors disabled:opacity-50"
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              disabled={loading}
+              className="inline-flex items-center px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors disabled:opacity-50"
+            >
+              {loading ? (
+                <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div>
+              ) : (
+                <Save className="h-4 w-4 mr-2" />
+              )}
+              {mode === 'edit' ? 'Actualizar Venta' : 'Crear Venta'}
+            </button>
+          </div>
+        </form>
+
+        {/* Notificaciones */}
+        <NotificationComponent />
+      </div>
+    </div>
+  );
+};
+
+export default VentaForm;

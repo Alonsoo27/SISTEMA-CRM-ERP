@@ -1,0 +1,1325 @@
+﻿const { createClient } = require('@supabase/supabase-js');
+const { v4: uuidv4 } = require('uuid');
+const ExcelJS = require('exceljs');
+const winston = require('winston');
+
+// CONSTANTES PARA OPTIMIZACIÓN
+const BATCH_SIZE = 50; // Reducir tamaño de lote para mejor performance
+const MAX_CONCURRENT_OPERATIONS = 3; // Limitar operaciones concurrentes
+const MAX_PRODUCTS_PER_UPLOAD = 5000; // Límite de seguridad
+
+// Configuración de Supabase usando variables de entorno
+const supabaseUrl = process.env.SUPABASE_URL;
+const supabaseKey = process.env.SUPABASE_ANON_KEY;
+const supabase = createClient(supabaseUrl, supabaseKey);
+
+// CONFIGURACIÓN DE LOGGING
+const logger = winston.createLogger({
+    level: 'info',
+    format: winston.format.combine(
+        winston.format.timestamp(),
+        winston.format.errors({ stack: true }),
+        winston.format.json()
+    ),
+    defaultMeta: { service: 'productos-upload' },
+    transports: [
+        new winston.transports.File({ filename: 'logs/error.log', level: 'error' }),
+        new winston.transports.File({ filename: 'logs/productos.log' }),
+        new winston.transports.Console({
+            format: winston.format.combine(
+                winston.format.colorize(),
+                winston.format.simple()
+            )
+        })
+    ]
+});
+
+// Validaciones actualizadas con unidad_medida
+const validarProducto = (producto) => {
+    const errores = [];
+
+    // Validar campos requeridos
+    if (!producto.codigo?.trim()) {
+        errores.push('El código es requerido');
+    } else if (producto.codigo.length > 50) {
+        errores.push('El código no puede exceder 50 caracteres');
+    }
+
+    if (!producto.descripcion?.trim()) {
+        errores.push('La descripción es requerida');
+    } else if (producto.descripcion.length > 500) {
+        errores.push('La descripción no puede exceder 500 caracteres');
+    }
+
+    if (producto.precio_sin_igv === undefined || producto.precio_sin_igv === null) {
+        errores.push('El precio sin IGV es requerido');
+    } else if (isNaN(Number(producto.precio_sin_igv)) || Number(producto.precio_sin_igv) < 0) {
+        errores.push('El precio sin IGV debe ser un número positivo');
+    }
+
+    if (!producto.marca?.trim()) {
+        errores.push('La marca es requerida');
+    } else if (producto.marca.length > 100) {
+        errores.push('La marca no puede exceder 100 caracteres');
+    }
+
+    if (!producto.categoria_id?.trim()) {
+        errores.push('La categoría es requerida');
+    }
+
+    // NUEVA VALIDACIÓN: Unidad de medida
+    if (!producto.unidad_medida?.trim()) {
+        errores.push('La unidad de medida es requerida');
+    } else if (!['UND', 'MLL'].includes(producto.unidad_medida)) {
+        errores.push('La unidad de medida debe ser UND (Unidades) o MLL (Millares)');
+    }
+
+    // Validar formato UUID de categoría
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    if (producto.categoria_id && !uuidRegex.test(producto.categoria_id)) {
+        errores.push('El formato de categoría no es válido');
+    }
+
+    return errores;
+};
+
+// Verificar si existe categoría
+const verificarCategoria = async (categoriaId) => {
+    try {
+        const { data, error } = await supabase
+            .from('categorias')
+            .select('id')
+            .eq('id', categoriaId)
+            .eq('activo', true)
+            .single();
+
+        if (error || !data) {
+            return false;
+        }
+        return true;
+    } catch (error) {
+        logger.error('Error al verificar categoría:', error);
+        return false;
+    }
+};
+
+// Verificar código único
+const verificarCodigoUnico = async (codigo, idExcluir = null) => {
+    try {
+        let query = supabase
+            .from('productos')
+            .select('id')
+            .eq('codigo', codigo);
+
+        if (idExcluir) {
+            query = query.neq('id', idExcluir);
+        }
+
+        const { data, error } = await query.single();
+
+        // Si no encuentra nada, el código es único
+        return error && error.code === 'PGRST116';
+    } catch (error) {
+        logger.error('Error al verificar código único:', error);
+        return false;
+    }
+};
+
+// ==================== FUNCIONES PRINCIPALES ACTUALIZADAS ====================
+
+const obtenerProductos = async (req, res) => {
+    try {
+        const {
+            page = 1,
+            limit = 10,
+            categoria,
+            busqueda,
+            orden = 'created_at',
+            direccion = 'desc'
+        } = req.query;
+
+        let query = supabase
+            .from('productos')
+            .select(`
+                id,
+                codigo,
+                descripcion,
+                precio_sin_igv,
+                marca,
+                unidad_medida,
+                activo,
+                created_at,
+                updated_at,
+                categorias:categoria_id (
+                    id,
+                    nombre,
+                    descripcion
+                )
+            `);
+
+        // Filtros
+        if (categoria) {
+            query = query.eq('categoria_id', categoria);
+        }
+
+        if (busqueda) {
+            query = query.or(
+                `codigo.ilike.%${busqueda}%,descripcion.ilike.%${busqueda}%,marca.ilike.%${busqueda}%`
+            );
+        }
+
+        // Solo productos activos por defecto
+        query = query.eq('activo', true);
+
+        // Ordenamiento
+        const ordenValido = ['created_at', 'codigo', 'descripcion', 'precio_sin_igv', 'marca', 'unidad_medida'];
+        const direccionValida = ['asc', 'desc'];
+
+        if (ordenValido.includes(orden) && direccionValida.includes(direccion)) {
+            query = query.order(orden, { ascending: direccion === 'asc' });
+        }
+
+        // Paginación
+        const offset = (Number(page) - 1) * Number(limit);
+        query = query.range(offset, offset + Number(limit) - 1);
+
+        const { data, error, count } = await query;
+
+        if (error) {
+            logger.error('Error al obtener productos:', error);
+            return res.status(500).json({
+                success: false,
+                error: 'Error interno del servidor',
+                details: error.message
+            });
+        }
+
+        // Obtener total de registros para paginación
+        const { count: totalRegistros } = await supabase
+            .from('productos')
+            .select('*', { count: 'exact', head: true })
+            .eq('activo', true);
+
+        res.json({
+            success: true,
+            data: data || [],
+            pagination: {
+                page: Number(page),
+                limit: Number(limit),
+                total: totalRegistros || 0,
+                totalPages: Math.ceil((totalRegistros || 0) / Number(limit))
+            }
+        });
+
+    } catch (error) {
+        logger.error('Error en obtenerProductos:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Error interno del servidor',
+            details: error.message
+        });
+    }
+};
+
+const obtenerProductoPorId = async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        // Validar formato UUID
+        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+        if (!uuidRegex.test(id)) {
+            return res.status(400).json({
+                success: false,
+                error: 'ID de producto no válido'
+            });
+        }
+
+        const { data, error } = await supabase
+            .from('productos')
+            .select(`
+                id,
+                codigo,
+                descripcion,
+                precio_sin_igv,
+                marca,
+                unidad_medida,
+                activo,
+                created_at,
+                updated_at,
+                created_by,
+                updated_by,
+                categorias:categoria_id (
+                    id,
+                    nombre,
+                    descripcion
+                )
+            `)
+            .eq('id', id)
+            .single();
+
+        if (error) {
+            if (error.code === 'PGRST116') {
+                return res.status(404).json({
+                    success: false,
+                    error: 'Producto no encontrado'
+                });
+            }
+            logger.error('Error al obtener producto:', error);
+            return res.status(500).json({
+                success: false,
+                error: 'Error interno del servidor',
+                details: error.message
+            });
+        }
+
+        res.json({
+            success: true,
+            data: data
+        });
+
+    } catch (error) {
+        logger.error('Error en obtenerProductoPorId:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Error interno del servidor',
+            details: error.message
+        });
+    }
+};
+
+const crearProducto = async (req, res) => {
+    try {
+        const productoData = {
+            codigo: req.body.codigo?.trim(),
+            descripcion: req.body.descripcion?.trim(),
+            precio_sin_igv: Number(req.body.precio_sin_igv),
+            marca: req.body.marca?.trim(),
+            categoria_id: req.body.categoria_id?.trim(),
+            unidad_medida: req.body.unidad_medida?.trim() || 'UND',
+            activo: req.body.activo !== undefined ? Boolean(req.body.activo) : true,
+            created_by: req.user?.id || 1,
+            updated_by: req.user?.id || 1
+        };
+
+        // Validar datos
+        const erroresValidacion = validarProducto(productoData);
+        if (erroresValidacion.length > 0) {
+            return res.status(400).json({
+                success: false,
+                error: 'Datos de producto no válidos',
+                details: erroresValidacion
+            });
+        }
+
+        // Verificar que la categoría existe
+        const categoriaExiste = await verificarCategoria(productoData.categoria_id);
+        if (!categoriaExiste) {
+            return res.status(400).json({
+                success: false,
+                error: 'La categoría especificada no existe o no está activa'
+            });
+        }
+
+        // Verificar código único
+        const codigoUnico = await verificarCodigoUnico(productoData.codigo);
+        if (!codigoUnico) {
+            return res.status(400).json({
+                success: false,
+                error: 'El código del producto ya existe'
+            });
+        }
+
+        // Generar ID único
+        const nuevoProducto = {
+            id: uuidv4(),
+            ...productoData,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+        };
+
+        const { data, error } = await supabase
+            .from('productos')
+            .insert([nuevoProducto])
+            .select(`
+                id,
+                codigo,
+                descripcion,
+                precio_sin_igv,
+                marca,
+                unidad_medida,
+                activo,
+                created_at,
+                categorias:categoria_id (
+                    id,
+                    nombre,
+                    descripcion
+                )
+            `)
+            .single();
+
+        if (error) {
+            logger.error('Error al crear producto:', error);
+            return res.status(500).json({
+                success: false,
+                error: 'Error interno del servidor',
+                details: error.message
+            });
+        }
+
+        logger.info('Producto creado exitosamente', { codigo: productoData.codigo });
+
+        res.status(201).json({
+            success: true,
+            message: 'Producto creado exitosamente',
+            data: data
+        });
+
+    } catch (error) {
+        logger.error('Error en crearProducto:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Error interno del servidor',
+            details: error.message
+        });
+    }
+};
+
+const actualizarProducto = async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        // Validar formato UUID
+        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+        if (!uuidRegex.test(id)) {
+            return res.status(400).json({
+                success: false,
+                error: 'ID de producto no válido'
+            });
+        }
+
+        // Verificar que el producto existe
+        const { data: productoExistente, error: errorExistente } = await supabase
+            .from('productos')
+            .select('id, codigo')
+            .eq('id', id)
+            .single();
+
+        if (errorExistente) {
+            if (errorExistente.code === 'PGRST116') {
+                return res.status(404).json({
+                    success: false,
+                    error: 'Producto no encontrado'
+                });
+            }
+            throw errorExistente;
+        }
+
+        const productoData = {
+            codigo: req.body.codigo?.trim(),
+            descripcion: req.body.descripcion?.trim(),
+            precio_sin_igv: Number(req.body.precio_sin_igv),
+            marca: req.body.marca?.trim(),
+            categoria_id: req.body.categoria_id?.trim(),
+            unidad_medida: req.body.unidad_medida?.trim() || 'UND',
+            activo: req.body.activo !== undefined ? Boolean(req.body.activo) : true,
+            updated_by: req.user?.id || 1
+        };
+
+        // Validar datos
+        const erroresValidacion = validarProducto(productoData);
+        if (erroresValidacion.length > 0) {
+            return res.status(400).json({
+                success: false,
+                error: 'Datos de producto no válidos',
+                details: erroresValidacion
+            });
+        }
+
+        // Verificar que la categoría existe
+        const categoriaExiste = await verificarCategoria(productoData.categoria_id);
+        if (!categoriaExiste) {
+            return res.status(400).json({
+                success: false,
+                error: 'La categoría especificada no existe o no está activa'
+            });
+        }
+
+        // Verificar código único (excluyendo el producto actual)
+        if (productoData.codigo !== productoExistente.codigo) {
+            const codigoUnico = await verificarCodigoUnico(productoData.codigo, id);
+            if (!codigoUnico) {
+                return res.status(400).json({
+                    success: false,
+                    error: 'El código del producto ya existe'
+                });
+            }
+        }
+
+        const datosActualizacion = {
+            ...productoData,
+            updated_at: new Date().toISOString()
+        };
+
+        const { data, error } = await supabase
+            .from('productos')
+            .update(datosActualizacion)
+            .eq('id', id)
+            .select(`
+                id,
+                codigo,
+                descripcion,
+                precio_sin_igv,
+                marca,
+                unidad_medida,
+                activo,
+                created_at,
+                updated_at,
+                categorias:categoria_id (
+                    id,
+                    nombre,
+                    descripcion
+                )
+            `)
+            .single();
+
+        if (error) {
+            logger.error('Error al actualizar producto:', error);
+            return res.status(500).json({
+                success: false,
+                error: 'Error interno del servidor',
+                details: error.message
+            });
+        }
+
+        logger.info('Producto actualizado exitosamente', { codigo: productoData.codigo });
+
+        res.json({
+            success: true,
+            message: 'Producto actualizado exitosamente',
+            data: data
+        });
+
+    } catch (error) {
+        logger.error('Error en actualizarProducto:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Error interno del servidor',
+            details: error.message
+        });
+    }
+};
+
+const eliminarProducto = async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        // Validar formato UUID
+        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+        if (!uuidRegex.test(id)) {
+            return res.status(400).json({
+                success: false,
+                error: 'ID de producto no válido'
+            });
+        }
+
+        // Verificar que el producto existe
+        const { data: productoExistente, error: errorExistente } = await supabase
+            .from('productos')
+            .select('id, codigo, activo')
+            .eq('id', id)
+            .single();
+
+        if (errorExistente) {
+            if (errorExistente.code === 'PGRST116') {
+                return res.status(404).json({
+                    success: false,
+                    error: 'Producto no encontrado'
+                });
+            }
+            throw errorExistente;
+        }
+
+        // Eliminación lógica (cambiar activo a false)
+        const { data, error } = await supabase
+            .from('productos')
+            .update({
+                activo: false,
+                updated_at: new Date().toISOString(),
+                updated_by: req.user?.id || 1
+            })
+            .eq('id', id)
+            .select('id, codigo, activo')
+            .single();
+
+        if (error) {
+            logger.error('Error al eliminar producto:', error);
+            return res.status(500).json({
+                success: false,
+                error: 'Error interno del servidor',
+                details: error.message
+            });
+        }
+
+        logger.info('Producto eliminado exitosamente', { codigo: productoExistente.codigo });
+
+        res.json({
+            success: true,
+            message: 'Producto eliminado exitosamente',
+            data: data
+        });
+
+    } catch (error) {
+        logger.error('Error en eliminarProducto:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Error interno del servidor',
+            details: error.message
+        });
+    }
+};
+
+const obtenerCategorias = async (req, res) => {
+    try {
+        const { data, error } = await supabase
+            .from('categorias')
+            .select('*')
+            .eq('activo', true)
+            .order('nombre', { ascending: true });
+
+        if (error) {
+            logger.error('Error al obtener categorías:', error);
+            return res.status(500).json({
+                success: false,
+                error: 'Error interno del servidor',
+                details: error.message
+            });
+        }
+
+        res.json({
+            success: true,
+            data: data || []
+        });
+
+    } catch (error) {
+        logger.error('Error en obtenerCategorias:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Error interno del servidor',
+            details: error.message
+        });
+    }
+};
+
+// ==================== UPLOAD MASIVO OPTIMIZADO ====================
+
+const validarProductoMasivo = (producto, fila) => {
+    const errores = [];
+    const prefijoError = `Fila ${fila}:`;
+
+    if (!producto.codigo?.toString().trim()) {
+        errores.push(`${prefijoError} El código es requerido`);
+    } else if (producto.codigo.toString().length > 50) {
+        errores.push(`${prefijoError} El código no puede exceder 50 caracteres`);
+    }
+
+    if (!producto.descripcion?.toString().trim()) {
+        errores.push(`${prefijoError} La descripción es requerida`);
+    } else if (producto.descripcion.toString().length > 500) {
+        errores.push(`${prefijoError} La descripción no puede exceder 500 caracteres`);
+    }
+
+    const precio = Number(producto.precio_sin_igv);
+    if (isNaN(precio) || precio < 0) {
+        errores.push(`${prefijoError} El precio sin IGV debe ser un número positivo`);
+    }
+
+    if (!producto.marca?.toString().trim()) {
+        errores.push(`${prefijoError} La marca es requerida`);
+    } else if (producto.marca.toString().length > 100) {
+        errores.push(`${prefijoError} La marca no puede exceder 100 caracteres`);
+    }
+
+    if (!producto.categoria?.toString().trim()) {
+        errores.push(`${prefijoError} La categoría es requerida`);
+    }
+
+    if (!producto.unidad_medida?.toString().trim()) {
+        errores.push(`${prefijoError} La unidad de medida es requerida`);
+    } else if (!['UND', 'MLL'].includes(producto.unidad_medida.toString().trim().toUpperCase())) {
+        errores.push(`${prefijoError} La unidad de medida debe ser UND o MLL`);
+    }
+
+    return errores;
+};
+
+const previewUploadMasivo = async (req, res) => {
+    try {
+        const { productos } = req.body;
+        logger.info('📋 RECIBIENDO UPLOAD PREVIEW:', {
+            cantidad: productos?.length,
+            ip: req.ip
+        });
+
+        if (!Array.isArray(productos) || productos.length === 0) {
+            return res.status(400).json({
+                success: false,
+                error: 'Se requiere un array de productos válido'
+            });
+        }
+
+        if (productos.length > MAX_PRODUCTS_PER_UPLOAD) {
+            return res.status(400).json({
+                success: false,
+                error: `No se pueden procesar más de ${MAX_PRODUCTS_PER_UPLOAD} productos a la vez. Divida el archivo en lotes más pequeños.`
+            });
+        }
+
+        // Obtener categorías para mapeo
+        const { data: categorias, error: errorCategorias } = await supabase
+            .from('categorias')
+            .select('id, nombre')
+            .eq('activo', true);
+
+        if (errorCategorias) {
+            throw errorCategorias;
+        }
+
+        const mapaCategorias = {};
+        categorias.forEach(cat => {
+            mapaCategorias[cat.nombre.toLowerCase()] = cat.id;
+        });
+
+        let productosValidos = [];
+        let errores = [];
+        let duplicados = [];
+        let codigosEncontrados = new Set();
+
+        // Obtener códigos existentes (TODOS, no solo activos)
+        const { data: productosExistentes } = await supabase
+            .from('productos')
+            .select('codigo');
+
+        const codigosExistentes = new Set(productosExistentes?.map(p => p.codigo) || []);
+
+        for (let i = 0; i < productos.length; i++) {
+            const producto = productos[i];
+            const fila = i + 2;
+
+            const erroresValidacion = validarProductoMasivo(producto, fila);
+
+            // Verificar categoría
+            const categoriaNombre = producto.categoria?.toString().toLowerCase().trim();
+            const categoriaId = mapaCategorias[categoriaNombre];
+
+            if (!categoriaId) {
+                erroresValidacion.push(
+                    `Fila ${fila}: Categoría "${producto.categoria}" no existe. ` +
+                    `Categorías disponibles: ${Object.keys(mapaCategorias).join(', ')}`
+                );
+            }
+
+            // Verificar duplicados
+            const codigo = producto.codigo?.toString().trim();
+            if (codigosEncontrados.has(codigo)) {
+                duplicados.push(`Fila ${fila}: Código "${codigo}" duplicado en el archivo`);
+            } else if (codigosExistentes.has(codigo)) {
+                duplicados.push(`Fila ${fila}: Código "${codigo}" ya existe en la base de datos`);
+            } else {
+                codigosEncontrados.add(codigo);
+            }
+
+            if (erroresValidacion.length > 0) {
+                errores.push(...erroresValidacion);
+            } else if (categoriaId) {
+                productosValidos.push({
+                    fila: fila,
+                    codigo: codigo,
+                    descripcion: producto.descripcion?.toString().trim(),
+                    precio_sin_igv: Number(producto.precio_sin_igv),
+                    marca: producto.marca?.toString().trim(),
+                    categoria_id: categoriaId,
+                    categoria_nombre: producto.categoria?.toString().trim(),
+                    unidad_medida: producto.unidad_medida?.toString().trim().toUpperCase(),
+                    activo: true
+                });
+            }
+        }
+
+        const resultado = {
+            success: true,
+            data: {
+                totalFilas: productos.length,
+                productosValidos: productosValidos.length,
+                errores: errores.length,
+                duplicados: duplicados.length,
+                resumen: {
+                    productosValidos,
+                    errores,
+                    duplicados
+                },
+                puedeImportar: errores.length === 0 && duplicados.length === 0 && productosValidos.length > 0
+            }
+        };
+
+        logger.info('Preview completado:', {
+            total: productos.length,
+            validos: productosValidos.length,
+            errores: errores.length,
+            duplicados: duplicados.length
+        });
+
+        res.json(resultado);
+
+    } catch (error) {
+        logger.error('Error en previewUploadMasivo:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Error interno del servidor',
+            details: error.message
+        });
+    }
+};
+
+const uploadMasivoOptimizado = async (req, res) => {
+    const startTime = Date.now();
+    
+    try {
+        const { productos, reemplazarDuplicados = false } = req.body;
+
+        if (!Array.isArray(productos) || productos.length === 0) {
+            return res.status(400).json({
+                success: false,
+                error: 'Se requiere un array de productos válido'
+            });
+        }
+
+        if (productos.length > MAX_PRODUCTS_PER_UPLOAD) {
+            return res.status(400).json({
+                success: false,
+                error: `No se pueden procesar más de ${MAX_PRODUCTS_PER_UPLOAD} productos a la vez.`
+            });
+        }
+
+        logger.info('🚀 Iniciando upload masivo optimizado:', {
+            cantidad: productos.length,
+            reemplazarDuplicados,
+            ip: req.ip
+        });
+
+        // Validación previa usando preview
+        const previewRequest = { body: { productos }, ip: req.ip };
+        const previewResponse = {
+            json: (data) => data,
+            status: (code) => ({ json: (data) => ({ ...data, statusCode: code }) })
+        };
+
+        const previewResult = await new Promise((resolve) => {
+            const originalRes = res;
+            res = previewResponse;
+            previewUploadMasivo(previewRequest, {
+                json: resolve,
+                status: () => ({ json: resolve })
+            });
+            res = originalRes;
+        });
+
+        if (!previewResult.success) {
+            return res.status(400).json({
+                success: false,
+                error: 'Los datos no pasaron la validación',
+                details: previewResult.data
+            });
+        }
+
+        const productosValidos = previewResult.data.resumen.productosValidos;
+        
+        // Obtener productos existentes una sola vez
+        const { data: productosExistentes } = await supabase
+            .from('productos')
+            .select('id, codigo');
+
+        const mapaExistentes = {};
+        productosExistentes?.forEach(p => {
+            mapaExistentes[p.codigo] = p.id;
+        });
+
+        let productosParaInsertar = [];
+        let productosParaActualizar = [];
+        let productosOmitidos = [];
+
+        // Clasificar productos
+        productosValidos.forEach(producto => {
+            const productoData = {
+                codigo: producto.codigo,
+                descripcion: producto.descripcion,
+                precio_sin_igv: producto.precio_sin_igv,
+                marca: producto.marca,
+                categoria_id: producto.categoria_id,
+                unidad_medida: producto.unidad_medida,
+                activo: true,
+                updated_by: req.user?.id || 1
+            };
+
+            if (mapaExistentes[producto.codigo]) {
+                if (reemplazarDuplicados) {
+                    productosParaActualizar.push({
+                        ...productoData,
+                        id: mapaExistentes[producto.codigo],
+                        updated_at: new Date().toISOString()
+                    });
+                } else {
+                    productosOmitidos.push(producto.codigo);
+                }
+            } else {
+                productosParaInsertar.push({
+                    id: uuidv4(),
+                    ...productoData,
+                    created_by: req.user?.id || 1,
+                    created_at: new Date().toISOString(),
+                    updated_at: new Date().toISOString()
+                });
+            }
+        });
+
+        let productosInsertados = 0;
+        let productosActualizados = 0;
+        let erroresInsercion = [];
+
+        // INSERCIÓN OPTIMIZADA con lotes pequeños
+        if (productosParaInsertar.length > 0) {
+            logger.info(`🔄 Insertando ${productosParaInsertar.length} productos en lotes de ${BATCH_SIZE}...`);
+            
+            for (let i = 0; i < productosParaInsertar.length; i += BATCH_SIZE) {
+                const lote = productosParaInsertar.slice(i, i + BATCH_SIZE);
+                const numeroLote = Math.floor(i/BATCH_SIZE) + 1;
+                
+                try {
+                    const { data, error } = await supabase
+                        .from('productos')
+                        .insert(lote)
+                        .select('id, codigo');
+
+                    if (error) {
+                        logger.error(`❌ Error en lote ${numeroLote}:`, error);
+                        erroresInsercion.push(`Lote ${numeroLote}: ${error.message}`);
+                    } else {
+                        productosInsertados += data.length;
+                        logger.info(`✅ Lote ${numeroLote} completado: ${data.length} productos`);
+                    }
+                    
+                    // Pausa entre lotes para no sobrecargar
+                    if (i + BATCH_SIZE < productosParaInsertar.length) {
+                        await new Promise(resolve => setTimeout(resolve, 100));
+                    }
+                } catch (err) {
+                    logger.error(`💥 Error crítico en lote ${numeroLote}:`, err);
+                    erroresInsercion.push(`Lote ${numeroLote}: Error crítico - ${err.message}`);
+                }
+            }
+        }
+
+        // ACTUALIZACIÓN OPTIMIZADA con control de concurrencia
+        if (productosParaActualizar.length > 0) {
+            logger.info(`🔄 Actualizando ${productosParaActualizar.length} productos...`);
+            
+            for (let i = 0; i < productosParaActualizar.length; i += MAX_CONCURRENT_OPERATIONS) {
+                const grupo = productosParaActualizar.slice(i, i + MAX_CONCURRENT_OPERATIONS);
+                
+                const promesas = grupo.map(async (producto) => {
+                    try {
+                        const { id, ...datosActualizacion } = producto;
+                        
+                        const { error } = await supabase
+                            .from('productos')
+                            .update(datosActualizacion)
+                            .eq('id', id);
+
+                        if (error) {
+                            logger.error(`❌ Error actualizando ${producto.codigo}:`, error);
+                            erroresInsercion.push(`Error actualizando ${producto.codigo}: ${error.message}`);
+                        } else {
+                            return producto.codigo;
+                        }
+                    } catch (err) {
+                        logger.error(`💥 Error crítico actualizando ${producto.codigo}:`, err);
+                        erroresInsercion.push(`Error crítico actualizando ${producto.codigo}: ${err.message}`);
+                    }
+                });
+
+                const resultados = await Promise.allSettled(promesas);
+                productosActualizados += resultados.filter(r => r.status === 'fulfilled' && r.value).length;
+                
+                if (i + MAX_CONCURRENT_OPERATIONS < productosParaActualizar.length) {
+                    await new Promise(resolve => setTimeout(resolve, 50));
+                }
+            }
+        }
+
+        const duracion = Date.now() - startTime;
+        
+        logger.info('🎉 Upload masivo completado:', {
+            insertados: productosInsertados,
+            actualizados: productosActualizados,
+            omitidos: productosOmitidos.length,
+            errores: erroresInsercion.length,
+            duracion: `${duracion}ms`
+        });
+
+        // Respuesta mejorada
+        if (erroresInsercion.length > 0) {
+            return res.status(206).json({
+                success: true,
+                message: `Importación completada con algunos errores: ${productosInsertados} nuevos, ${productosActualizados} actualizados`,
+                data: {
+                    productosInsertados,
+                    productosActualizados,
+                    productosOmitidos: productosOmitidos.length,
+                    codigosOmitidos: productosOmitidos,
+                    totalProcesados: productosInsertados + productosActualizados,
+                    errores: erroresInsercion,
+                    duracion: `${Math.round(duracion/1000)}s`,
+                    advertencia: 'Algunos productos no se pudieron procesar. Revise los errores.'
+                }
+            });
+        }
+
+        res.json({
+            success: true,
+            message: `Importación completada: ${productosInsertados} nuevos, ${productosActualizados} actualizados${productosOmitidos.length > 0 ? `, ${productosOmitidos.length} omitidos` : ''}`,
+            data: {
+                productosInsertados,
+                productosActualizados,
+                productosOmitidos: productosOmitidos.length,
+                codigosOmitidos: productosOmitidos,
+                totalProcesados: productosInsertados + productosActualizados,
+                duracion: `${Math.round(duracion/1000)}s`,
+                rendimiento: `${Math.round((productosInsertados + productosActualizados) / (duracion/1000))} productos/segundo`
+            }
+        });
+
+    } catch (error) {
+        logger.error('💥 Error crítico en uploadMasivo:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Error interno del servidor',
+            details: error.message,
+            sugerencia: 'Intente con un archivo más pequeño o contacte al administrador'
+        });
+    }
+};
+
+// ==================== PLANTILLA EXCEL MEJORADA ====================
+
+const generarPlantillaMejorada = async (req, res) => {
+    try {
+        const workbook = new ExcelJS.Workbook();
+        
+        // HOJA 1: PRODUCTOS
+        const worksheet = workbook.addWorksheet('Productos', {
+            pageSetup: { 
+                orientation: 'landscape',
+                fitToPage: true,
+                margins: { left: 0.7, right: 0.7, top: 0.75, bottom: 0.75 }
+            }
+        });
+
+        // Encabezado principal - AMPLIADO para que no se corte
+        worksheet.mergeCells('A1:G1'); // Cambiado de F1 a G1
+        const titleCell = worksheet.getCell('A1');
+        titleCell.value = '📋 PLANTILLA DE CARGA MASIVA DE PRODUCTOS - SISTEMA CRM/ERP';
+        titleCell.style = {
+            font: { size: 16, bold: true, color: { argb: 'FFFFFF' } },
+            fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: '2E7D32' } },
+            alignment: { horizontal: 'center', vertical: 'middle' }
+        };
+        worksheet.getRow(1).height = 35; // Aumentar altura
+
+        // Instrucciones - TAMBIÉN AMPLIADO
+        worksheet.mergeCells('A2:G2'); // Cambiado de F2 a G2
+        const instructionsCell = worksheet.getCell('A2');
+        instructionsCell.value = `⚠️ INSTRUCCIONES: Complete todas las columnas obligatorias. NO modifique los encabezados. Máximo ${MAX_PRODUCTS_PER_UPLOAD} productos por archivo.`;
+        instructionsCell.style = {
+            font: { size: 11, bold: true, color: { argb: 'D84315' } },
+            fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF3E0' } },
+            alignment: { horizontal: 'center', vertical: 'middle', wrapText: true }, // Agregado wrapText
+            border: {
+                top: { style: 'thin', color: { argb: 'FF8A65' } },
+                bottom: { style: 'thin', color: { argb: 'FF8A65' } }
+            }
+        };
+        worksheet.getRow(2).height = 30; // Aumentar altura
+
+        worksheet.getRow(3).height = 10;
+
+        // Encabezados de columnas - MEJORADOS
+        const headers = [
+            { key: 'codigo', header: '🔖 CÓDIGO*', width: 15 },
+            { key: 'descripcion', header: '📝 DESCRIPCIÓN*', width: 45 }, // Aumentado
+            { key: 'precio_sin_igv', header: '💰 PRECIO SIN IGV*', width: 18 },
+            { key: 'marca', header: '🏷️ MARCA*', width: 20 },
+            { key: 'categoria', header: '📂 CATEGORÍA*', width: 20 },
+            { key: 'unidad_medida', header: '📏 UNIDAD*', width: 15 } // Aumentado
+        ];
+
+        headers.forEach((header, index) => {
+            const col = String.fromCharCode(65 + index);
+            const cell = worksheet.getCell(`${col}4`);
+            cell.value = header.header;
+            cell.style = {
+                font: { size: 12, bold: true, color: { argb: 'FFFFFF' } },
+                fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: '1976D2' } },
+                alignment: { horizontal: 'center', vertical: 'middle', wrapText: true },
+                border: {
+                    top: { style: 'medium', color: { argb: '0D47A1' } },
+                    left: { style: 'thin', color: { argb: '0D47A1' } },
+                    bottom: { style: 'medium', color: { argb: '0D47A1' } },
+                    right: { style: 'thin', color: { argb: '0D47A1' } }
+                }
+            };
+            worksheet.getColumn(col).width = header.width;
+        });
+        worksheet.getRow(4).height = 35;
+
+        // Fila de ejemplo
+        const ejemploData = [
+            'PROD-001',
+            'Vaso plástico desechable 16oz transparente',
+            '25.50',
+            'MUNDIPACCI',
+            'Plásticos',
+            'UND'
+        ];
+
+        ejemploData.forEach((value, index) => {
+            const col = String.fromCharCode(65 + index);
+            const cell = worksheet.getCell(`${col}5`);
+            cell.value = value;
+            cell.style = {
+                font: { size: 11, italic: true, color: { argb: '424242' } },
+                fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: 'F5F5F5' } },
+                alignment: { horizontal: 'left', vertical: 'middle' },
+                border: {
+                    top: { style: 'thin', color: { argb: 'BDBDBD' } },
+                    left: { style: 'thin', color: { argb: 'BDBDBD' } },
+                    bottom: { style: 'thin', color: { argb: 'BDBDBD' } },
+                    right: { style: 'thin', color: { argb: 'BDBDBD' } }
+                }
+            };
+        });
+        worksheet.getRow(5).height = 25;
+
+        // HOJA 2: CATEGORÍAS
+        const categoriasWs = workbook.addWorksheet('📂 Categorías');
+        
+        categoriasWs.mergeCells('A1:C1'); // Ampliado
+        const catTitle = categoriasWs.getCell('A1');
+        catTitle.value = '📂 CATEGORÍAS DISPONIBLES EN EL SISTEMA';
+        catTitle.style = {
+            font: { size: 16, bold: true, color: { argb: 'FFFFFF' } },
+            fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: '388E3C' } },
+            alignment: { horizontal: 'center', vertical: 'middle' }
+        };
+        categoriasWs.getRow(1).height = 35;
+
+        // Obtener categorías reales
+        const { data: categorias } = await supabase
+            .from('categorias')
+            .select('nombre, descripcion')
+            .eq('activo', true)
+            .order('nombre');
+
+        categoriasWs.getCell('A3').value = 'CATEGORÍA (usar exactamente este texto)';
+        categoriasWs.getCell('B3').value = 'DESCRIPCIÓN';
+        categoriasWs.getCell('C3').value = 'ESTADO';
+        
+        ['A3', 'B3', 'C3'].forEach(cell => {
+            categoriasWs.getCell(cell).style = {
+                font: { bold: true, color: { argb: 'FFFFFF' } },
+                fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: '558B2F' } },
+                alignment: { horizontal: 'center', vertical: 'middle' }
+            };
+        });
+
+        categorias?.forEach((cat, index) => {
+            const row = index + 4;
+            categoriasWs.getCell(`A${row}`).value = cat.nombre;
+            categoriasWs.getCell(`B${row}`).value = cat.descripcion || '';
+            categoriasWs.getCell(`C${row}`).value = '✅ Activa';
+        });
+
+        categoriasWs.getColumn('A').width = 30;
+        categoriasWs.getColumn('B').width = 50;
+        categoriasWs.getColumn('C').width = 15;
+
+        // HOJA 3: INSTRUCCIONES
+        const instruccionesWs = workbook.addWorksheet('📋 Instrucciones');
+        
+        instruccionesWs.mergeCells('A1:D1');
+        const instrTitle = instruccionesWs.getCell('A1');
+        instrTitle.value = '📋 GUÍA COMPLETA DE USO - UPLOAD MASIVO';
+        instrTitle.style = {
+            font: { size: 18, bold: true, color: { argb: 'FFFFFF' } },
+            fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: '1565C0' } },
+            alignment: { horizontal: 'center', vertical: 'middle' }
+        };
+        instruccionesWs.getRow(1).height = 40;
+
+        // Agregar instrucciones detalladas
+        const instrucciones = [
+            '',
+            '🔧 PASOS PARA USAR ESTA PLANTILLA:',
+            '',
+            '1. Complete TODOS los campos marcados con asterisco (*)',
+            '2. NO modifique los nombres de las columnas',
+            '3. Use exactamente los nombres de categorías de la hoja "📂 Categorías"',
+            '4. Los códigos deben ser únicos (no duplicados)',
+            '5. Los precios deben ser números decimales (use punto, no coma)',
+            '',
+            '⚠️ IMPORTANTE:',
+            '• Máximo 5000 productos por archivo',
+            '• No deje filas vacías entre productos',
+            '• Guarde siempre como archivo Excel (.xlsx)',
+            '',
+            '🎯 EJEMPLOS DE DATOS VÁLIDOS:',
+            '• Código: PROD-001, ABC-123, REF001',
+            '• Precio: 25.50, 100.00, 15.75',
+            '• Unidad: UND, KG, LT, MT, PZA',
+            '',
+            '✅ Si todo está correcto, el sistema le mostrará un preview',
+            '✅ Revise el preview antes de confirmar la carga',
+            '',
+            '❌ ERRORES COMUNES:',
+            '• Usar comas en lugar de puntos en precios',
+            '• Códigos duplicados',
+            '• Categorías que no existen en el sistema',
+            '• Dejar campos obligatorios vacíos'
+        ];
+
+        instrucciones.forEach((instruccion, index) => {
+            const row = index + 3;
+            instruccionesWs.getCell(`A${row}`).value = instruccion;
+            
+            if (instruccion.includes('🔧') || instruccion.includes('⚠️') || instruccion.includes('🎯') || instruccion.includes('❌')) {
+                instruccionesWs.getCell(`A${row}`).style = {
+                    font: { size: 12, bold: true, color: { argb: '1976D2' } },
+                    fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: 'E3F2FD' } }
+                };
+            }
+        });
+
+        instruccionesWs.getColumn('A').width = 80;
+
+        // Generar archivo
+        res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        res.setHeader('Content-Disposition', 'attachment; filename=Plantilla_Productos_CRM_ERP_Premium.xlsx');
+        
+        await workbook.xlsx.write(res);
+        res.end();
+
+        logger.info('Plantilla Excel Premium generada exitosamente');
+
+    } catch (error) {
+        logger.error('Error generando plantilla:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Error generando plantilla',
+            details: error.message
+        });
+    }
+};
+// ==================== UTILIDADES Y MONITOREO ====================
+
+const healthCheck = async (req, res) => {
+    try {
+        const dbStart = Date.now();
+        const { error } = await supabase
+            .from('productos')
+            .select('id')
+            .limit(1)
+            .single();
+        const dbTime = Date.now() - dbStart;
+
+        const memory = process.memoryUsage();
+        const uptime = process.uptime();
+
+        res.json({
+            status: 'healthy',
+            timestamp: new Date().toISOString(),
+            database: {
+                connected: !error,
+                responseTime: `${dbTime}ms`,
+                status: dbTime < 1000 ? 'good' : dbTime < 3000 ? 'warning' : 'slow'
+            },
+            memory: {
+                rss: `${Math.round(memory.rss / 1024 / 1024)}MB`,
+                heapUsed: `${Math.round(memory.heapUsed / 1024 / 1024)}MB`,
+                heapTotal: `${Math.round(memory.heapTotal / 1024 / 1024)}MB`
+            },
+            uptime: `${Math.floor(uptime / 3600)}h ${Math.floor((uptime % 3600) / 60)}m`,
+            version: '2.0.0',
+            limits: {
+                maxProductsPerUpload: MAX_PRODUCTS_PER_UPLOAD,
+                batchSize: BATCH_SIZE,
+                maxConcurrentOps: MAX_CONCURRENT_OPERATIONS
+            }
+        });
+    } catch (error) {
+        logger.error('Error en healthcheck:', error);
+        res.status(500).json({
+            status: 'unhealthy',
+            error: error.message,
+            timestamp: new Date().toISOString()
+        });
+    }
+};
+
+const estadisticasUpload = async (req, res) => {
+    try {
+        const stats = await supabase
+            .from('productos')
+            .select('created_at, updated_at, created_by', { count: 'exact' });
+            
+        const ahora = new Date();
+        const hace24h = new Date(ahora.getTime() - 24 * 60 * 60 * 1000);
+        
+        const recientes = stats.data?.filter(p => 
+            new Date(p.created_at) > hace24h || new Date(p.updated_at) > hace24h
+        ).length || 0;
+
+        res.json({
+            success: true,
+            data: {
+                totalProductos: stats.count,
+                productosRecientes24h: recientes,
+                ultimaActividad: stats.data?.[0]?.updated_at || stats.data?.[0]?.created_at,
+                recomendacion: stats.count > 10000 ? 
+                    'Sistema con alto volumen. Considere usar lotes de máximo 1000 productos.' :
+                    'Sistema operando normalmente.',
+                limites: {
+                    maxPorUpload: MAX_PRODUCTS_PER_UPLOAD,
+                    batchSize: BATCH_SIZE
+                }
+            }
+        });
+    } catch (error) {
+        logger.error('Error obteniendo estadísticas:', error);
+        res.status(500).json({ 
+            success: false, 
+            error: error.message 
+        });
+    }
+};
+
+module.exports = {
+    obtenerProductos,
+    obtenerProductoPorId,
+    crearProducto,
+    actualizarProducto,
+    eliminarProducto,
+    obtenerCategorias,
+    previewUploadMasivo,
+    uploadMasivo: uploadMasivoOptimizado,
+    generarPlantillaMejorada,
+    healthCheck,
+    estadisticasUpload
+};

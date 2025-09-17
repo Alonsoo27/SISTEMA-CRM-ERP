@@ -1,0 +1,923 @@
+﻿const { createClient } = require('@supabase/supabase-js');
+const { v4: uuidv4 } = require('uuid');
+
+// Configuración de Supabase usando variables de entorno
+const supabaseUrl = process.env.SUPABASE_URL;
+const supabaseKey = process.env.SUPABASE_ANON_KEY;
+const supabase = createClient(supabaseUrl, supabaseKey);
+
+// Validaciones actualizadas con unidad_medida
+const validarProducto = (producto) => {
+    const errores = [];
+
+    // Validar campos requeridos
+    if (!producto.codigo?.trim()) {
+        errores.push('El código es requerido');
+    } else if (producto.codigo.length > 50) {
+        errores.push('El código no puede exceder 50 caracteres');
+    }
+
+    if (!producto.descripcion?.trim()) {
+        errores.push('La descripción es requerida');
+    } else if (producto.descripcion.length > 500) {
+        errores.push('La descripción no puede exceder 500 caracteres');
+    }
+
+    if (producto.precio_sin_igv === undefined || producto.precio_sin_igv === null) {
+        errores.push('El precio sin IGV es requerido');
+    } else if (isNaN(Number(producto.precio_sin_igv)) || Number(producto.precio_sin_igv) < 0) {
+        errores.push('El precio sin IGV debe ser un número positivo');
+    }
+
+    if (!producto.marca?.trim()) {
+        errores.push('La marca es requerida');
+    } else if (producto.marca.length > 100) {
+        errores.push('La marca no puede exceder 100 caracteres');
+    }
+
+    if (!producto.categoria_id?.trim()) {
+        errores.push('La categoría es requerida');
+    }
+
+    // NUEVA VALIDACIÓN: Unidad de medida
+    if (!producto.unidad_medida?.trim()) {
+        errores.push('La unidad de medida es requerida');
+    } else if (!['UND', 'MLL'].includes(producto.unidad_medida)) {
+        errores.push('La unidad de medida debe ser UND (Unidades) o MLL (Millares)');
+    }
+
+    // Validar formato UUID de categoría
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    if (producto.categoria_id && !uuidRegex.test(producto.categoria_id)) {
+        errores.push('El formato de categoría no es válido');
+    }
+
+    return errores;
+};
+
+// Verificar si existe categoría
+const verificarCategoria = async (categoriaId) => {
+    try {
+        const { data, error } = await supabase
+            .from('categorias')
+            .select('id')
+            .eq('id', categoriaId)
+            .eq('activo', true)
+            .single();
+
+        if (error || !data) {
+            return false;
+        }
+        return true;
+    } catch (error) {
+        console.error('Error al verificar categoría:', error);
+        return false;
+    }
+};
+
+// Verificar código único
+const verificarCodigoUnico = async (codigo, idExcluir = null) => {
+    try {
+        let query = supabase
+            .from('productos')
+            .select('id')
+            .eq('codigo', codigo);
+
+        if (idExcluir) {
+            query = query.neq('id', idExcluir);
+        }
+
+        const { data, error } = await query.single();
+
+        // Si no encuentra nada, el código es único
+        return error && error.code === 'PGRST116';
+    } catch (error) {
+        console.error('Error al verificar código único:', error);
+        return false;
+    }
+};
+
+// ==================== FUNCIONES PRINCIPALES ACTUALIZADAS ====================
+
+const obtenerProductos = async (req, res) => {
+    try {
+        const {
+            page = 1,
+            limit = 10,
+            categoria,
+            busqueda,
+            orden = 'created_at',
+            direccion = 'desc'
+        } = req.query;
+
+        let query = supabase
+            .from('productos')
+            .select(`
+                id,
+                codigo,
+                descripcion,
+                precio_sin_igv,
+                marca,
+                unidad_medida,
+                activo,
+                created_at,
+                updated_at,
+                categorias:categoria_id (
+                    id,
+                    nombre,
+                    descripcion
+                )
+            `);
+
+        // Filtros
+        if (categoria) {
+            query = query.eq('categoria_id', categoria);
+        }
+
+        if (busqueda) {
+            query = query.or(
+                `codigo.ilike.%${busqueda}%,descripcion.ilike.%${busqueda}%,marca.ilike.%${busqueda}%`
+            );
+        }
+
+        // Solo productos activos por defecto
+        query = query.eq('activo', true);
+
+        // Ordenamiento
+        const ordenValido = ['created_at', 'codigo', 'descripcion', 'precio_sin_igv', 'marca', 'unidad_medida'];
+        const direccionValida = ['asc', 'desc'];
+
+        if (ordenValido.includes(orden) && direccionValida.includes(direccion)) {
+            query = query.order(orden, { ascending: direccion === 'asc' });
+        }
+
+        // Paginación
+        const offset = (Number(page) - 1) * Number(limit);
+        query = query.range(offset, offset + Number(limit) - 1);
+
+        const { data, error, count } = await query;
+
+        if (error) {
+            console.error('Error al obtener productos:', error);
+            return res.status(500).json({
+                success: false,
+                error: 'Error interno del servidor',
+                details: error.message
+            });
+        }
+
+        // Obtener total de registros para paginación
+        const { count: totalRegistros } = await supabase
+            .from('productos')
+            .select('*', { count: 'exact', head: true })
+            .eq('activo', true);
+
+        res.json({
+            success: true,
+            data: data || [],
+            pagination: {
+                page: Number(page),
+                limit: Number(limit),
+                total: totalRegistros || 0,
+                totalPages: Math.ceil((totalRegistros || 0) / Number(limit))
+            }
+        });
+
+    } catch (error) {
+        console.error('Error en obtenerProductos:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Error interno del servidor',
+            details: error.message
+        });
+    }
+};
+
+const obtenerProductoPorId = async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        // Validar formato UUID
+        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+        if (!uuidRegex.test(id)) {
+            return res.status(400).json({
+                success: false,
+                error: 'ID de producto no válido'
+            });
+        }
+
+        const { data, error } = await supabase
+            .from('productos')
+            .select(`
+                id,
+                codigo,
+                descripcion,
+                precio_sin_igv,
+                marca,
+                unidad_medida,
+                activo,
+                created_at,
+                updated_at,
+                created_by,
+                updated_by,
+                categorias:categoria_id (
+                    id,
+                    nombre,
+                    descripcion
+                )
+            `)
+            .eq('id', id)
+            .single();
+
+        if (error) {
+            if (error.code === 'PGRST116') {
+                return res.status(404).json({
+                    success: false,
+                    error: 'Producto no encontrado'
+                });
+            }
+            console.error('Error al obtener producto:', error);
+            return res.status(500).json({
+                success: false,
+                error: 'Error interno del servidor',
+                details: error.message
+            });
+        }
+
+        res.json({
+            success: true,
+            data: data
+        });
+
+    } catch (error) {
+        console.error('Error en obtenerProductoPorId:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Error interno del servidor',
+            details: error.message
+        });
+    }
+};
+
+const crearProducto = async (req, res) => {
+    try {
+        const productoData = {
+            codigo: req.body.codigo?.trim(),
+            descripcion: req.body.descripcion?.trim(),
+            precio_sin_igv: Number(req.body.precio_sin_igv),
+            marca: req.body.marca?.trim(),
+            categoria_id: req.body.categoria_id?.trim(),
+            unidad_medida: req.body.unidad_medida?.trim() || 'UND', // NUEVO CAMPO
+            activo: req.body.activo !== undefined ? Boolean(req.body.activo) : true,
+            created_by: req.user?.id || 1,
+            updated_by: req.user?.id || 1
+        };
+
+        // Validar datos
+        const erroresValidacion = validarProducto(productoData);
+        if (erroresValidacion.length > 0) {
+            return res.status(400).json({
+                success: false,
+                error: 'Datos de producto no válidos',
+                details: erroresValidacion
+            });
+        }
+
+        // Verificar que la categoría existe
+        const categoriaExiste = await verificarCategoria(productoData.categoria_id);
+        if (!categoriaExiste) {
+            return res.status(400).json({
+                success: false,
+                error: 'La categoría especificada no existe o no está activa'
+            });
+        }
+
+        // Verificar código único
+        const codigoUnico = await verificarCodigoUnico(productoData.codigo);
+        if (!codigoUnico) {
+            return res.status(400).json({
+                success: false,
+                error: 'El código del producto ya existe'
+            });
+        }
+
+        // Generar ID único
+        const nuevoProducto = {
+            id: uuidv4(),
+            ...productoData,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+        };
+
+        const { data, error } = await supabase
+            .from('productos')
+            .insert([nuevoProducto])
+            .select(`
+                id,
+                codigo,
+                descripcion,
+                precio_sin_igv,
+                marca,
+                unidad_medida,
+                activo,
+                created_at,
+                categorias:categoria_id (
+                    id,
+                    nombre,
+                    descripcion
+                )
+            `)
+            .single();
+
+        if (error) {
+            console.error('Error al crear producto:', error);
+            return res.status(500).json({
+                success: false,
+                error: 'Error interno del servidor',
+                details: error.message
+            });
+        }
+
+        res.status(201).json({
+            success: true,
+            message: 'Producto creado exitosamente',
+            data: data
+        });
+
+    } catch (error) {
+        console.error('Error en crearProducto:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Error interno del servidor',
+            details: error.message
+        });
+    }
+};
+
+const actualizarProducto = async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        // Validar formato UUID
+        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+        if (!uuidRegex.test(id)) {
+            return res.status(400).json({
+                success: false,
+                error: 'ID de producto no válido'
+            });
+        }
+
+        // Verificar que el producto existe
+        const { data: productoExistente, error: errorExistente } = await supabase
+            .from('productos')
+            .select('id, codigo')
+            .eq('id', id)
+            .single();
+
+        if (errorExistente) {
+            if (errorExistente.code === 'PGRST116') {
+                return res.status(404).json({
+                    success: false,
+                    error: 'Producto no encontrado'
+                });
+            }
+            throw errorExistente;
+        }
+
+        const productoData = {
+            codigo: req.body.codigo?.trim(),
+            descripcion: req.body.descripcion?.trim(),
+            precio_sin_igv: Number(req.body.precio_sin_igv),
+            marca: req.body.marca?.trim(),
+            categoria_id: req.body.categoria_id?.trim(),
+            unidad_medida: req.body.unidad_medida?.trim() || 'UND', // NUEVO CAMPO
+            activo: req.body.activo !== undefined ? Boolean(req.body.activo) : true,
+            updated_by: req.user?.id || 1
+        };
+
+        // Validar datos
+        const erroresValidacion = validarProducto(productoData);
+        if (erroresValidacion.length > 0) {
+            return res.status(400).json({
+                success: false,
+                error: 'Datos de producto no válidos',
+                details: erroresValidacion
+            });
+        }
+
+        // Verificar que la categoría existe
+        const categoriaExiste = await verificarCategoria(productoData.categoria_id);
+        if (!categoriaExiste) {
+            return res.status(400).json({
+                success: false,
+                error: 'La categoría especificada no existe o no está activa'
+            });
+        }
+
+        // Verificar código único (excluyendo el producto actual)
+        if (productoData.codigo !== productoExistente.codigo) {
+            const codigoUnico = await verificarCodigoUnico(productoData.codigo, id);
+            if (!codigoUnico) {
+                return res.status(400).json({
+                    success: false,
+                    error: 'El código del producto ya existe'
+                });
+            }
+        }
+
+        const datosActualizacion = {
+            ...productoData,
+            updated_at: new Date().toISOString()
+        };
+
+        const { data, error } = await supabase
+            .from('productos')
+            .update(datosActualizacion)
+            .eq('id', id)
+            .select(`
+                id,
+                codigo,
+                descripcion,
+                precio_sin_igv,
+                marca,
+                unidad_medida,
+                activo,
+                created_at,
+                updated_at,
+                categorias:categoria_id (
+                    id,
+                    nombre,
+                    descripcion
+                )
+            `)
+            .single();
+
+        if (error) {
+            console.error('Error al actualizar producto:', error);
+            return res.status(500).json({
+                success: false,
+                error: 'Error interno del servidor',
+                details: error.message
+            });
+        }
+
+        res.json({
+            success: true,
+            message: 'Producto actualizado exitosamente',
+            data: data
+        });
+
+    } catch (error) {
+        console.error('Error en actualizarProducto:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Error interno del servidor',
+            details: error.message
+        });
+    }
+};
+
+const eliminarProducto = async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        // Validar formato UUID
+        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+        if (!uuidRegex.test(id)) {
+            return res.status(400).json({
+                success: false,
+                error: 'ID de producto no válido'
+            });
+        }
+
+        // Verificar que el producto existe
+        const { data: productoExistente, error: errorExistente } = await supabase
+            .from('productos')
+            .select('id, codigo, activo')
+            .eq('id', id)
+            .single();
+
+        if (errorExistente) {
+            if (errorExistente.code === 'PGRST116') {
+                return res.status(404).json({
+                    success: false,
+                    error: 'Producto no encontrado'
+                });
+            }
+            throw errorExistente;
+        }
+
+        // Eliminación lógica (cambiar activo a false)
+        const { data, error } = await supabase
+            .from('productos')
+            .update({
+                activo: false,
+                updated_at: new Date().toISOString(),
+                updated_by: req.user?.id || 1
+            })
+            .eq('id', id)
+            .select('id, codigo, activo')
+            .single();
+
+        if (error) {
+            console.error('Error al eliminar producto:', error);
+            return res.status(500).json({
+                success: false,
+                error: 'Error interno del servidor',
+                details: error.message
+            });
+        }
+
+        res.json({
+            success: true,
+            message: 'Producto eliminado exitosamente',
+            data: data
+        });
+
+    } catch (error) {
+        console.error('Error en eliminarProducto:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Error interno del servidor',
+            details: error.message
+        });
+    }
+};
+
+const obtenerCategorias = async (req, res) => {
+    try {
+        const { data, error } = await supabase
+            .from('categorias')
+            .select('*')
+            .eq('activo', true)
+            .order('nombre', { ascending: true });
+
+        if (error) {
+            console.error('Error al obtener categorías:', error);
+            return res.status(500).json({
+                success: false,
+                error: 'Error interno del servidor',
+                details: error.message
+            });
+        }
+
+        res.json({
+            success: true,
+            data: data || []
+        });
+
+    } catch (error) {
+        console.error('Error en obtenerCategorias:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Error interno del servidor',
+            details: error.message
+        });
+    }
+};
+
+// ==================== UPLOAD MASIVO ACTUALIZADO ====================
+
+const validarProductoMasivo = (producto, fila) => {
+    const errores = [];
+    const prefijoError = `Fila ${fila}:`;
+
+    if (!producto.codigo?.toString().trim()) {
+        errores.push(`${prefijoError} El código es requerido`);
+    } else if (producto.codigo.toString().length > 50) {
+        errores.push(`${prefijoError} El código no puede exceder 50 caracteres`);
+    }
+
+    if (!producto.descripcion?.toString().trim()) {
+        errores.push(`${prefijoError} La descripción es requerida`);
+    } else if (producto.descripcion.toString().length > 500) {
+        errores.push(`${prefijoError} La descripción no puede exceder 500 caracteres`);
+    }
+
+    const precio = Number(producto.precio_sin_igv);
+    if (isNaN(precio) || precio < 0) {
+        errores.push(`${prefijoError} El precio sin IGV debe ser un número positivo`);
+    }
+
+    if (!producto.marca?.toString().trim()) {
+        errores.push(`${prefijoError} La marca es requerida`);
+    } else if (producto.marca.toString().length > 100) {
+        errores.push(`${prefijoError} La marca no puede exceder 100 caracteres`);
+    }
+
+    if (!producto.categoria?.toString().trim()) {
+        errores.push(`${prefijoError} La categoría es requerida`);
+    }
+
+    // NUEVA VALIDACIÓN: Unidad de medida
+    if (!producto.unidad_medida?.toString().trim()) {
+        errores.push(`${prefijoError} La unidad de medida es requerida`);
+    } else if (!['UND', 'MLL'].includes(producto.unidad_medida.toString().trim().toUpperCase())) {
+        errores.push(`${prefijoError} La unidad de medida debe ser UND o MLL`);
+    }
+
+    return errores;
+};
+
+const previewUploadMasivo = async (req, res) => {
+    try {
+        const { productos } = req.body;
+        console.log('📋 RECIBIENDO UPLOAD PREVIEW:');
+        console.log('- Cantidad productos:', productos?.length);
+        console.log('- Primer producto:', productos?.[0]);
+
+        if (!Array.isArray(productos) || productos.length === 0) {
+            return res.status(400).json({
+                success: false,
+                error: 'Se requiere un array de productos válido'
+            });
+        }
+
+        if (productos.length > 1000) {
+            return res.status(400).json({
+                success: false,
+                error: 'No se pueden procesar más de 1000 productos a la vez'
+            });
+        }
+
+        // Obtener categorías para mapeo
+        const { data: categorias, error: errorCategorias } = await supabase
+            .from('categorias')
+            .select('id, nombre')
+            .eq('activo', true);
+
+        if (errorCategorias) {
+            throw errorCategorias;
+        }
+
+        const mapaCategorias = {};
+        categorias.forEach(cat => {
+            mapaCategorias[cat.nombre.toLowerCase()] = cat.id;
+        });
+
+        let productosValidos = [];
+        let errores = [];
+        let duplicados = [];
+        let codigosEncontrados = new Set();
+
+        // ✅ CORRECCIÓN: Obtener códigos existentes (TODOS, no solo activos)
+        const { data: productosExistentes } = await supabase
+            .from('productos')
+            .select('codigo');
+            // ✅ Eliminada línea .eq('activo', true) para validar constraint único real
+
+        const codigosExistentes = new Set(productosExistentes?.map(p => p.codigo) || []);
+
+        for (let i = 0; i < productos.length; i++) {
+            const producto = productos[i];
+            const fila = i + 2; // +2 porque empezamos en fila 2 del Excel
+
+            // Validar estructura
+            const erroresValidacion = validarProductoMasivo(producto, fila);
+            if (erroresValidacion.length > 0) {
+                console.log(`❌ ERRORES FILA ${fila}:`, erroresValidacion);
+            }
+
+            // Verificar categoría
+            const categoriaNombre = producto.categoria?.toString().toLowerCase().trim();
+            const categoriaId = mapaCategorias[categoriaNombre];
+
+            if (!categoriaId) {
+                erroresValidacion.push(
+                    `Fila ${fila}: Categoría "${producto.categoria}" no existe. ` +
+                    `Categorías disponibles: ${Object.keys(mapaCategorias).join(', ')}`
+                );
+            }
+
+            // Verificar duplicados en el archivo
+            const codigo = producto.codigo?.toString().trim();
+            if (codigosEncontrados.has(codigo)) {
+                duplicados.push(`Fila ${fila}: Código "${codigo}" duplicado en el archivo`);
+            } else if (codigosExistentes.has(codigo)) {
+                duplicados.push(`Fila ${fila}: Código "${codigo}" ya existe en la base de datos`);
+            } else {
+                codigosEncontrados.add(codigo);
+            }
+
+            if (erroresValidacion.length > 0) {
+                errores.push(...erroresValidacion);
+            } else if (categoriaId) {
+                productosValidos.push({
+                    fila: fila,
+                    codigo: codigo,
+                    descripcion: producto.descripcion?.toString().trim(),
+                    precio_sin_igv: Number(producto.precio_sin_igv),
+                    marca: producto.marca?.toString().trim(),
+                    categoria_id: categoriaId,
+                    categoria_nombre: producto.categoria?.toString().trim(),
+                    unidad_medida: producto.unidad_medida?.toString().trim().toUpperCase(), // NUEVO CAMPO
+                    activo: true
+                });
+            }
+        }
+
+        res.json({
+            success: true,
+            data: {
+                totalFilas: productos.length,
+                productosValidos: productosValidos.length,
+                errores: errores.length,
+                duplicados: duplicados.length,
+                resumen: {
+                    productosValidos,
+                    errores,
+                    duplicados
+                },
+                puedeImportar: errores.length === 0 && duplicados.length === 0 && productosValidos.length > 0
+            }
+        });
+
+    } catch (error) {
+        console.error('Error en previewUploadMasivo:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Error interno del servidor',
+            details: error.message
+        });
+    }
+};
+
+const uploadMasivo = async (req, res) => {
+    try {
+        const { productos, reemplazarDuplicados = false } = req.body; // NUEVO PARÁMETRO
+
+        if (!Array.isArray(productos) || productos.length === 0) {
+            return res.status(400).json({
+                success: false,
+                error: 'Se requiere un array de productos válido'
+            });
+        }
+
+        // Usar el mismo preview para validar
+        const previewRequest = { body: { productos } };
+        const previewResponse = {
+            json: (data) => data,
+            status: (code) => ({ json: (data) => ({ ...data, statusCode: code }) })
+        };
+
+        const previewResult = await new Promise((resolve) => {
+            const originalRes = res;
+            res = previewResponse;
+            previewUploadMasivo(previewRequest, {
+                json: resolve,
+                status: () => ({ json: resolve })
+            });
+            res = originalRes;
+        });
+
+        if (!previewResult.success) {
+            return res.status(400).json({
+                success: false,
+                error: 'Los datos no pasaron la validación',
+                details: previewResult.data
+            });
+        }
+
+        // NUEVA LÓGICA: Separar productos nuevos y duplicados
+        const productosValidos = previewResult.data.resumen.productosValidos;
+        const duplicados = previewResult.data.resumen.duplicados;
+        
+        let productosParaInsertar = [];
+        let productosParaActualizar = [];
+        let productosOmitidos = [];
+
+        // ✅ CORRECCIÓN: Obtener códigos existentes (TODOS, no solo activos)
+        const { data: productosExistentes } = await supabase
+            .from('productos')
+            .select('id, codigo');
+            // ✅ Eliminada línea .eq('activo', true) para detectar duplicados reales
+
+        const mapaExistentes = {};
+        productosExistentes?.forEach(p => {
+            mapaExistentes[p.codigo] = p.id;
+        });
+
+        // Clasificar productos según si existen y la decisión del usuario
+        productosValidos.forEach(producto => {
+            const productoData = {
+                codigo: producto.codigo,
+                descripcion: producto.descripcion,
+                precio_sin_igv: producto.precio_sin_igv,
+                marca: producto.marca,
+                categoria_id: producto.categoria_id,
+                unidad_medida: producto.unidad_medida,
+                activo: true,
+                updated_by: req.user?.id || 1
+            };
+
+            if (mapaExistentes[producto.codigo]) {
+                // Producto duplicado
+                if (reemplazarDuplicados) {
+                    productosParaActualizar.push({
+                        ...productoData,
+                        id: mapaExistentes[producto.codigo],
+                        updated_at: new Date().toISOString()
+                    });
+                } else {
+                    productosOmitidos.push(producto.codigo);
+                }
+            } else {
+                // Producto nuevo
+                productosParaInsertar.push({
+                    id: uuidv4(),
+                    ...productoData,
+                    created_by: req.user?.id || 1,
+                    created_at: new Date().toISOString(),
+                    updated_at: new Date().toISOString()
+                });
+            }
+        });
+
+        let productosInsertados = 0;
+        let productosActualizados = 0;
+        let erroresInsercion = [];
+
+        // INSERTAR productos nuevos
+        if (productosParaInsertar.length > 0) {
+            const tamanoLote = 100;
+            for (let i = 0; i < productosParaInsertar.length; i += tamanoLote) {
+                const lote = productosParaInsertar.slice(i, i + tamanoLote);
+
+                const { data, error } = await supabase
+                    .from('productos')
+                    .insert(lote)
+                    .select('id, codigo');
+
+                if (error) {
+                    console.error(`Error al insertar lote ${Math.floor(i/tamanoLote) + 1}:`, error);
+                    erroresInsercion.push(`Lote inserción ${Math.floor(i/tamanoLote) + 1}: ${error.message}`);
+                } else {
+                    productosInsertados += data.length;
+                }
+            }
+        }
+
+        // ACTUALIZAR productos duplicados
+        if (productosParaActualizar.length > 0) {
+            for (const producto of productosParaActualizar) {
+                const { id, ...datosActualizacion } = producto;
+                
+                const { error } = await supabase
+                    .from('productos')
+                    .update(datosActualizacion)
+                    .eq('id', id);
+
+                if (error) {
+                    console.error(`Error al actualizar producto ${producto.codigo}:`, error);
+                    erroresInsercion.push(`Error actualizando ${producto.codigo}: ${error.message}`);
+                } else {
+                    productosActualizados++;
+                }
+            }
+        }
+
+        if (erroresInsercion.length > 0) {
+            return res.status(500).json({
+                success: false,
+                error: 'Error durante la importación masiva',
+                details: {
+                    productosInsertados,
+                    productosActualizados,
+                    productosOmitidos: productosOmitidos.length,
+                    errores: erroresInsercion
+                }
+            });
+        }
+
+        res.json({
+            success: true,
+            message: `Importación completada: ${productosInsertados} nuevos, ${productosActualizados} actualizados${productosOmitidos.length > 0 ? `, ${productosOmitidos.length} omitidos` : ''}`,
+            data: {
+                productosInsertados,
+                productosActualizados,
+                productosOmitidos: productosOmitidos.length,
+                codigosOmitidos: productosOmitidos,
+                totalProcesados: productosInsertados + productosActualizados
+            }
+        });
+
+    } catch (error) {
+        console.error('Error en uploadMasivo:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Error interno del servidor',
+            details: error.message
+        });
+    }
+};
+
+module.exports = {
+    obtenerProductos,
+    obtenerProductoPorId,
+    crearProducto,
+    actualizarProducto,
+    eliminarProducto,
+    obtenerCategorias,
+    previewUploadMasivo,
+    uploadMasivo
+};

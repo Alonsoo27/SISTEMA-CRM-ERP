@@ -1,0 +1,293 @@
+const express = require('express');
+const rateLimit = require('express-rate-limit');
+const router = express.Router();
+const ProspectosController = require('../controllers/prospectosController');
+
+// CONFIGURACIÓN DE RATE LIMITING
+const createProspectoRateLimit = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 20,
+    message: {
+        success: false,
+        error: 'Demasiados intentos de creación. Espere 15 minutos antes de intentar nuevamente.',
+        reintentarEn: '15 minutos'
+    },
+    standardHeaders: true,
+    legacyHeaders: false,
+});
+
+const updateRateLimit = rateLimit({
+    windowMs: 5 * 60 * 1000,
+    max: 50,
+    message: {
+        success: false,
+        error: 'Demasiadas actualizaciones. Espere 5 minutos antes de continuar.',
+        reintentarEn: '5 minutos'
+    },
+    standardHeaders: true,
+    legacyHeaders: false,
+});
+
+// MIDDLEWARE DE VALIDACIÓN DE DATOS
+const validarDatosProspecto = (req, res, next) => {
+    try {
+        const { nombre_cliente, telefono, canal_contacto } = req.body;
+
+        if (req.method === 'POST') {
+            if (!nombre_cliente?.trim()) {
+                return res.status(400).json({
+                    success: false,
+                    error: 'El nombre del cliente es requerido'
+                });
+            }
+
+            if (!telefono?.trim()) {
+                return res.status(400).json({
+                    success: false,
+                    error: 'El teléfono es requerido'
+                });
+            }
+
+            if (!canal_contacto?.trim()) {
+                return res.status(400).json({
+                    success: false,
+                    error: 'El canal de contacto es requerido'
+                });
+            }
+        }
+
+        if (req.body.telefono) {
+            req.body.telefono = req.body.telefono.replace(/[^\d+]/g, '');
+        }
+
+        ['nombre_cliente', 'apellido_cliente', 'empresa', 'observaciones'].forEach(field => {
+            if (req.body[field]) {
+                req.body[field] = req.body[field].trim();
+            }
+        });
+
+        next();
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            error: 'Error en validación de datos: ' + error.message
+        });
+    }
+};
+
+// MIDDLEWARE TEMPORAL PARA SIMULAR USUARIO AUTENTICADO
+const mockUser = (req, res, next) => {
+    req.user = {
+        id: 1,
+        nombre: 'Admin',
+        apellido: 'Test',
+        email: 'admin@test.com',
+        rol: 'admin',
+        nombre_completo: 'Admin Test'
+    };
+    next();
+};
+
+// RUTAS DE INFORMACIÓN DEL SISTEMA
+router.get('/health', mockUser, ProspectosController.healthCheck);
+
+router.get('/info/estados', (req, res) => {
+    res.json({
+        success: true,
+        data: {
+            estados: [
+                { codigo: 'Prospecto', nombre: 'Prospecto', descripcion: 'Contacto inicial registrado' },
+                { codigo: 'Cotizado', nombre: 'Cotizado', descripcion: 'Cotización enviada al cliente' },
+                { codigo: 'Negociacion', nombre: 'Negociación', descripcion: 'En proceso de negociación' },
+                { codigo: 'Cerrado', nombre: 'Cerrado', descripcion: 'Venta exitosa' },
+                { codigo: 'Perdido', nombre: 'Perdido', descripcion: 'No se concretó la venta' }
+            ],
+            flujo_normal: 'Prospecto → Cotizado → Negociación → Cerrado',
+            notas: 'Cualquier estado puede ir directamente a Perdido con justificación'
+        }
+    });
+});
+
+router.get('/info/canales', (req, res) => {
+    res.json({
+        success: true,
+        data: {
+            canales: [
+                { codigo: 'WhatsApp', nombre: 'WhatsApp', icono: '📱' },
+                { codigo: 'Messenger', nombre: 'Facebook Messenger', icono: '💬' },
+                { codigo: 'Facebook', nombre: 'Facebook', icono: '📘' },
+                { codigo: 'TikTok', nombre: 'TikTok', icono: '🎵' },
+                { codigo: 'Llamada', nombre: 'Llamada Telefónica', icono: '📞' },
+                { codigo: 'Presencial', nombre: 'Visita Presencial', icono: '🏢' },
+                { codigo: 'Email', nombre: 'Correo Electrónico', icono: '📧' }
+            ],
+            recomendacion: 'WhatsApp es el canal más efectivo según las métricas'
+        }
+    });
+});
+
+// RUTAS DE LECTURA
+router.get('/', mockUser, ProspectosController.obtenerTodos);
+router.get('/kanban/:asesorId', mockUser, ProspectosController.obtenerKanban);
+router.get('/kanban', mockUser, ProspectosController.obtenerKanban);
+router.get('/metricas/:asesorId', mockUser, ProspectosController.obtenerMetricas);
+router.get('/metricas', mockUser, ProspectosController.obtenerMetricas);
+router.get('/verificar-duplicado/:telefono', ProspectosController.verificarDuplicado);
+
+// RUTAS DE ESCRITURA
+router.post('/', mockUser, createProspectoRateLimit, validarDatosProspecto, ProspectosController.crearProspecto);
+router.put('/:id', mockUser, updateRateLimit, validarDatosProspecto, ProspectosController.actualizarProspecto);
+router.patch('/:id/estado', mockUser, updateRateLimit, ProspectosController.cambiarEstado);
+router.post('/:id/cerrar-venta', mockUser, ProspectosController.cerrarVenta);
+
+// RUTA DELETE SIMPLIFICADA
+router.delete('/:id', mockUser, updateRateLimit, async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        if (!id || isNaN(id)) {
+            return res.status(400).json({
+                success: false,
+                error: 'ID de prospecto inválido'
+            });
+        }
+
+        const { createClient } = require('@supabase/supabase-js');
+        const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY);
+
+        const { data, error } = await supabase
+            .from('prospectos')
+            .update({ 
+                activo: false,
+                fecha_eliminacion: new Date().toISOString(),
+                eliminado_por: req.user?.nombre || 'Sistema'
+            })
+            .eq('id', id)
+            .select()
+            .single();
+
+        if (error) {
+            console.error('Error al eliminar prospecto:', error);
+            throw error;
+        }
+
+        if (!data) {
+            return res.status(404).json({
+                success: false,
+                error: 'Prospecto no encontrado'
+            });
+        }
+
+        console.log(`Prospecto eliminado: ${data.codigo} por ${req.user?.nombre}`);
+
+        res.json({
+            success: true,
+            message: 'Prospecto eliminado exitosamente',
+            data: data
+        });
+
+    } catch (error) {
+        console.error('Error en eliminar prospecto:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Error al eliminar prospecto: ' + error.message
+        });
+    }
+});
+
+// SEGUIMIENTOS INTEGRADOS TEMPORAL - RUTAS ESPECÍFICAS DEL FRONTEND
+router.get('/dashboard/seguimientos', mockUser, (req, res) => {
+    res.json({
+        success: true,
+        data: {
+            pendientes: 0,
+            vencidos: 0,
+            completados: 0,
+            total: 0,
+            seguimientos: []
+        },
+        message: 'Dashboard de seguimientos en modo básico'
+    });
+});
+
+router.get('/seguimientos', mockUser, (req, res) => {
+    res.json({
+        success: true,
+        data: [],
+        message: 'Seguimientos en modo básico integrado',
+        total: 0
+    });
+});
+
+router.get('/seguimientos/pendientes', mockUser, (req, res) => {
+    res.json({
+        success: true,
+        data: [],
+        message: 'No hay seguimientos pendientes',
+        total: 0
+    });
+});
+// RUTA DINÁMICA AL FINAL
+router.get('/:id', mockUser, async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        if (!id || isNaN(id)) {
+            return res.status(400).json({
+                success: false,
+                error: 'ID de prospecto inválido'
+            });
+        }
+
+        const { createClient } = require('@supabase/supabase-js');
+        const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY);
+
+        const { data, error } = await supabase
+            .from('prospectos')
+            .select(`
+                *,
+                usuarios!asesor_id(nombre, apellido)
+            `)
+            .eq('id', id)
+            .eq('activo', true)
+            .single();
+
+        if (error) {
+            console.error('Error al obtener prospecto:', error);
+            throw error;
+        }
+
+        if (!data) {
+            return res.status(404).json({
+                success: false,
+                error: 'Prospecto no encontrado'
+            });
+        }
+
+        res.json({
+            success: true,
+            data: data
+        });
+
+    } catch (error) {
+        console.error('Error en obtener prospecto por ID:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Error al obtener prospecto: ' + error.message
+        });
+    }
+});
+
+// MIDDLEWARE DE MANEJO DE ERRORES
+router.use((error, req, res, next) => {
+    console.error('Error en rutas de prospectos:', error);
+    
+    res.status(500).json({
+        success: false,
+        error: 'Error interno del servidor en módulo de prospectos',
+        timestamp: new Date().toISOString(),
+        mode: 'TESTING - SIN JWT'
+    });
+});
+
+module.exports = router;

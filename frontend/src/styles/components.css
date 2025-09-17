@@ -1,0 +1,92 @@
+/* ============================================================================
+   COMPONENTES ESPECÍFICOS DEL SISTEMA
+   Estilos adicionales para componentes específicos
+   ============================================================================ */
+
+/* Mejoras para cards del dashboard de seguimientos */
+.seguimiento-card {
+  transition: all 0.2s ease-in-out;
+}
+
+.seguimiento-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1);
+}
+
+/* Estilos para badges de urgencia */
+.badge-critico {
+  animation: pulse-red 2s infinite;
+}
+
+.badge-urgente {
+  background: linear-gradient(45deg, #fef2f2, #fee2e2);
+  border: 1px solid #fca5a5;
+}
+
+/* Efectos de hover para botones de acción */
+.action-button {
+  transition: all 0.15s ease-in-out;
+}
+
+.action-button:hover {
+  transform: scale(1.1);
+}
+
+.action-button:active {
+  transform: scale(0.95);
+}
+
+/* Estilos para notificaciones toast */
+.toast-notification {
+  backdrop-filter: blur(8px);
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
+}
+
+/* Animación para secciones expandibles */
+.expandable-section {
+  transition: max-height 0.3s ease-in-out;
+  overflow: hidden;
+}
+
+/* Estilos para indicadores de estado */
+.status-indicator {
+  position: relative;
+}
+
+.status-indicator::before {
+  content: '';
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  animation: pulse 2s infinite;
+}
+
+.status-vencido::before {
+  background-color: #ef4444;
+}
+
+.status-urgente::before {
+  background-color: #f59e0b;
+}
+
+.status-normal::before {
+  background-color: #10b981;
+}
+
+/* Mejoras para el loader */
+.custom-loader {
+  border-top-color: transparent;
+  animation: spin 1s linear infinite;
+}
+
+/* Efectos de micro-interacciones */
+.micro-bounce {
+  transition: transform 0.1s ease-in-out;
+}
+
+.micro-bounce:active {
+  transform: scale(0.98);
+}
