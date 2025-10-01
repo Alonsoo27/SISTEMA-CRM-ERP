@@ -10,9 +10,8 @@ const { query } = require('../../../config/database');
 // Controllers
 const PostVentaController = require('../controllers/PostVentaController');
 
-// Middleware
-const authMiddleware = require('../../../middleware/authMiddleware');
-const { requireRole, requireAdmin } = require('../../../middleware/roleMiddleware');
+// Middleware empresarial unificado
+const { authenticateToken, requireRole } = require('../../../middleware/auth');
 
 // ============================================
 // PROGRAMACIÓN DE SEGUIMIENTOS
@@ -24,7 +23,7 @@ const { requireRole, requireAdmin } = require('../../../middleware/roleMiddlewar
  * @access  Private (Asesores, Managers, Admins)
  */
 router.post('/seguimientos/:venta_id/programar', 
-    authMiddleware,
+    authenticateToken,
     PostVentaController.programarSeguimientosAutomaticos
 );
 
@@ -38,7 +37,7 @@ router.post('/seguimientos/:venta_id/programar',
  * @access  Private (Todos los usuarios autenticados)
  */
 router.get('/seguimientos', 
-    authMiddleware,
+    authenticateToken,
     PostVentaController.listarSeguimientos
 );
 
@@ -48,7 +47,7 @@ router.get('/seguimientos',
  * @access  Private (Asesor asignado, Manager, Admin)
  */
 router.put('/seguimientos/:id/ejecutar', 
-    authMiddleware,
+    authenticateToken,
     PostVentaController.ejecutarSeguimiento
 );
 
@@ -58,7 +57,7 @@ router.put('/seguimientos/:id/ejecutar',
  * @access  Private (Asesor asignado, Manager, Admin)
  */
 router.get('/seguimientos/:id', 
-    authMiddleware,
+    authenticateToken,
     async (req, res) => {
         try {
             const { id } = req.params;
@@ -98,7 +97,7 @@ router.get('/seguimientos/:id',
  * @access  Private (Managers, Admins)
  */
 router.get('/dashboard', 
-    authMiddleware,
+    authenticateToken,
     PostVentaController.getDashboardPostVenta
 );
 
@@ -108,7 +107,7 @@ router.get('/dashboard',
  * @access  Private (Asesor propio, Manager, Admin)
  */
 router.get('/dashboard/asesor/:asesor_id', 
-    authMiddleware,
+    authenticateToken,
     async (req, res) => {
         try {
             const { asesor_id } = req.params;
@@ -147,7 +146,7 @@ router.get('/dashboard/asesor/:asesor_id',
  * @access  Private (Asesores, Managers, Admins)
  */
 router.post('/encuesta', 
-    authMiddleware,
+    authenticateToken,
     async (req, res) => {
         try {
             const {
@@ -189,7 +188,7 @@ router.post('/encuesta',
  * @access  Private (Todos los usuarios autenticados)
  */
 router.get('/configuracion/tipos-seguimiento', 
-    authMiddleware,
+    authenticateToken,
     async (req, res) => {
         try {
             const tipos = [
@@ -241,7 +240,7 @@ router.get('/configuracion/tipos-seguimiento',
  * @access  Private (Todos los usuarios autenticados)
  */
 router.get('/test', 
-    authMiddleware,
+    authenticateToken,
     async (req, res) => {
         res.json({
             success: true,
@@ -262,7 +261,7 @@ router.get('/test',
  * @access  Private (Todos los usuarios autenticados)
  */
 router.get('/', 
-    authMiddleware,
+    authenticateToken,
     async (req, res) => {
         res.json({
             success: true,

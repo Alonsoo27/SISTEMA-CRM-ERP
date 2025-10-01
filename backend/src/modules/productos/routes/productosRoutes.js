@@ -127,7 +127,9 @@ const requireProductsAuth = (req, res, next) => {
 // ==================== RUTAS BÁSICAS ====================
 // ✅ CAMBIO CRÍTICO: Aplicar authenticateToken INDIVIDUALMENTE
 router.get('/', authenticateToken, requireProductsAuth, productosController.obtenerProductos);
+router.get('/dashboard', authenticateToken, requireProductsAuth, productosController.dashboardProductos);
 router.get('/categorias', authenticateToken, requireProductsAuth, productosController.obtenerCategorias);
+router.get('/lineas', authenticateToken, productosController.obtenerLineasProductos);
 router.get('/:id', authenticateToken, requireProductsAuth, productosController.obtenerProductoPorId);
 router.post('/', authenticateToken, requireProductsAuth, productosController.crearProducto);
 router.put('/:id', authenticateToken, requireProductsAuth, productosController.actualizarProducto);
@@ -153,6 +155,9 @@ router.post('/upload/masivo',
 );
 
 // ==================== NUEVAS RUTAS DE UTILIDADES ====================
+// Búsqueda de producto por código
+router.post('/buscar-codigo', authenticateToken, requireProductsAuth, productosController.buscarPorCodigo);
+
 // Plantilla Excel mejorada
 router.get('/plantilla/premium', authenticateToken, requireProductsAuth, productosController.generarPlantillaMejorada);
 

@@ -18,6 +18,10 @@ const ActividadPage = () => {
   const [showHistorial, setShowHistorial] = useState(false);
   const [notification, setNotification] = useState(null);
 
+  // 🕐 NUEVOS ESTADOS PARA CONTADOR EN TIEMPO REAL
+  const [tiempoTranscurrido, setTiempoTranscurrido] = useState('00:00:00');
+  const [horasDecimales, setHorasDecimales] = useState(0);
+
   const obtenerEstado = async () => {
     try {
       setLoading(true);
@@ -54,11 +58,59 @@ const ActividadPage = () => {
     setTimeout(() => setNotification(null), 3000);
   };
 
+  // 🕐 FUNCIONES PARA CONTADOR DE TIEMPO REAL
+  const calcularTiempoTranscurrido = (checkInTime) => {
+    if (!checkInTime) return { formato: '00:00:00', decimales: 0 };
+
+    const ahora = new Date();
+    const inicio = new Date(checkInTime);
+    const diferencia = ahora - inicio;
+
+    const segundos = Math.floor(diferencia / 1000);
+    const minutos = Math.floor(segundos / 60);
+    const horas = Math.floor(minutos / 60);
+
+    const formatoHMS = `${String(horas).padStart(2, '0')}:${String(minutos % 60).padStart(2, '0')}:${String(segundos % 60).padStart(2, '0')}`;
+    const decimales = diferencia / (1000 * 60 * 60); // Convertir a horas decimales
+
+    return {
+      formato: formatoHMS,
+      decimales: Math.round(decimales * 100) / 100 // 2 decimales
+    };
+  };
+
   useEffect(() => {
     obtenerEstado();
     const interval = setInterval(obtenerEstado, 5 * 60 * 1000);
     return () => clearInterval(interval);
   }, []);
+
+  // 🕐 USEEFFECT PARA CONTADOR DE TIEMPO REAL
+  useEffect(() => {
+    let interval = null;
+
+    if (estado?.jornada?.check_in_realizado && !estado?.jornada?.check_out_realizado && estado?.jornada?.hora_check_in) {
+      // Actualizar contador cada segundo
+      interval = setInterval(() => {
+        const tiempo = calcularTiempoTranscurrido(estado.jornada.hora_check_in);
+        setTiempoTranscurrido(tiempo.formato);
+        setHorasDecimales(tiempo.decimales);
+      }, 1000);
+
+      // Calcular inmediatamente
+      const tiempo = calcularTiempoTranscurrido(estado.jornada.hora_check_in);
+      setTiempoTranscurrido(tiempo.formato);
+      setHorasDecimales(tiempo.decimales);
+    } else {
+      // Reset cuando no hay jornada activa
+      setTiempoTranscurrido('00:00:00');
+      setHorasDecimales(0);
+    }
+
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [estado?.jornada?.check_in_realizado, estado?.jornada?.check_out_realizado, estado?.jornada?.hora_check_in]);
 
   // Componente de notificación
   const NotificationComponent = () => {
@@ -91,9 +143,13 @@ const ActividadPage = () => {
         try {
           setHistorialLoading(true);
           const response = await actividadService.getHistorial();
-          
+
+          console.log('🔍 Respuesta del historial (ActividadPage):', response);
+
           if (response.success) {
-            setHistorial(response.data.registros || []);
+            // El backend devuelve { success: true, data: { registros: [...] } }
+            const data = response.data?.data || response.data;
+            setHistorial(data.registros || data || []);
           } else {
             setHistorialError('Error cargando historial');
           }
@@ -169,10 +225,11 @@ const ActividadPage = () => {
                   <Clock className="h-4 w-4 mx-auto text-green-600 mb-1" />
                   <p className="text-xs text-gray-600">Check-in</p>
                   <p className="text-sm font-medium">
-                    {registro.check_in_time ? 
+                    {registro.check_in_time ?
                       new Date(registro.check_in_time).toLocaleTimeString('es-PE', {
                         hour: '2-digit',
-                        minute: '2-digit'
+                        minute: '2-digit',
+                        timeZone: 'America/Lima'
                       }) : '--:--'
                     }
                   </p>
@@ -182,10 +239,11 @@ const ActividadPage = () => {
                   <Clock className="h-4 w-4 mx-auto text-blue-600 mb-1" />
                   <p className="text-xs text-gray-600">Check-out</p>
                   <p className="text-sm font-medium">
-                    {registro.check_out_time ? 
+                    {registro.check_out_time ?
                       new Date(registro.check_out_time).toLocaleTimeString('es-PE', {
                         hour: '2-digit',
-                        minute: '2-digit'
+                        minute: '2-digit',
+                        timeZone: 'America/Lima'
                       }) : '--:--'
                     }
                   </p>
@@ -451,16 +509,19 @@ const ActividadPage = () => {
 
                   <div className="text-center p-3 bg-gradient-to-br from-purple-50 to-purple-100 rounded-lg">
                     <Timer className="h-6 w-6 text-purple-600 mx-auto mb-2" />
-                    <p className="text-xl font-bold text-purple-600">
-                      {estado.jornada?.horas_jornada?.toFixed(1) || '0.0'}
+                    <p className="text-xl font-bold text-purple-600 font-mono">
+                      {horasDecimales.toFixed(2)}
                     </p>
                     <p className="text-xs text-gray-600">Horas</p>
+                    <p className="text-xs text-purple-500 font-mono mt-1">
+                      {tiempoTranscurrido}
+                    </p>
                   </div>
 
                   <div className="text-center p-3 bg-gradient-to-br from-orange-50 to-orange-100 rounded-lg">
                     <BarChart3 className="h-6 w-6 text-orange-600 mx-auto mb-2" />
                     <p className="text-xl font-bold text-orange-600">
-                      {Math.round((estado.actividad?.total_mensajes || 0) / Math.max(estado.jornada?.horas_jornada || 1, 1))}
+                      {Math.round((estado.actividad?.total_mensajes || 0) / Math.max(horasDecimales || 0.01, 0.01))}
                     </p>
                     <p className="text-xs text-gray-600">Msg/Hr</p>
                   </div>
@@ -488,11 +549,24 @@ const ActividadPage = () => {
                 </div>
                 <div className="flex justify-between items-center py-2">
                   <span className="text-sm text-gray-600">Tiempo Trabajado</span>
-                  <span className="text-sm font-medium text-gray-900">
-                    {estado.jornada?.horas_jornada ? 
-                      `${estado.jornada.horas_jornada.toFixed(1)}h` : '0.0h'
-                    }
-                  </span>
+                  <div className="text-right">
+                    {estadoActual === 'en_progreso' ? (
+                      <>
+                        <div className="text-lg font-bold text-blue-600 font-mono">
+                          {tiempoTranscurrido}
+                        </div>
+                        <div className="text-xs text-gray-500">
+                          {horasDecimales}h
+                        </div>
+                      </>
+                    ) : (
+                      <span className="text-sm font-medium text-gray-900">
+                        {estado.jornada?.horas_jornada ?
+                          `${estado.jornada.horas_jornada.toFixed(1)}h` : '0.0h'
+                        }
+                      </span>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>

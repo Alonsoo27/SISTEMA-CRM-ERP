@@ -102,7 +102,7 @@ class VentasService {
         const fechaFormateada = this.formatearFechaParaAPI(filtros.fecha_hasta);
         if (fechaFormateada) params.append('fecha_hasta', fechaFormateada);
       }
-      if (filtros.busqueda) params.append('busqueda', filtros.busqueda);
+      if (filtros.busqueda) params.append('search', filtros.busqueda);
       if (filtros.rango_monto?.min) params.append('monto_min', filtros.rango_monto.min);
       if (filtros.rango_monto?.max) params.append('monto_max', filtros.rango_monto.max);
       if (filtros.tipo_venta) params.append('tipo_venta', filtros.tipo_venta);
@@ -644,7 +644,7 @@ class VentasService {
     try {
       const params = new URLSearchParams();
       
-      if (filtros.busqueda) params.append('busqueda', filtros.busqueda);
+      if (filtros.busqueda) params.append('search', filtros.busqueda);
       if (filtros.tipo) params.append('tipo', filtros.tipo);
       if (filtros.activo !== undefined) params.append('activo', filtros.activo);
 
@@ -702,7 +702,7 @@ class VentasService {
     try {
       const params = new URLSearchParams();
       
-      if (filtros.busqueda) params.append('busqueda', filtros.busqueda);
+      if (filtros.busqueda) params.append('search', filtros.busqueda);
       if (filtros.categoria) params.append('categoria', filtros.categoria);
       if (filtros.activo !== undefined) params.append('activo', filtros.activo);
 
@@ -768,6 +768,28 @@ class VentasService {
       return {
         success: false,
         error: error.response?.data?.error || 'Error exportando ventas',
+        details: error.response?.data
+      };
+    }
+  }
+
+  // ===============================
+  // OBTENER ASESORES PARA FILTROS
+  // ===============================
+
+  async obtenerAsesores() {
+    try {
+      const response = await this.apiClient.get('/ventas/asesores');
+
+      return {
+        success: true,
+        data: response.data.data || [],
+        total: response.data.total || 0
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: error.response?.data?.error || 'Error obteniendo lista de asesores',
         details: error.response?.data
       };
     }
@@ -906,6 +928,38 @@ class VentasService {
     };
 
     return transicionesValidas[estadoActual] || [];
+  }
+
+  // ✅ NUEVO: Obtener datos ABC Productos
+  async obtenerDashboardABCProductos(periodo = 'mes_actual') {
+    try {
+      console.log(`[ABC Productos] Obteniendo datos para período: ${periodo}`);
+
+      const response = await this.apiClient.get(`/dashboard-ejecutivo/abc-productos?periodo=${periodo}`);
+
+      if (response.data?.success) {
+        console.log('✅ [ABC Productos] Datos obtenidos:', {
+          productos_totales: response.data.data.todos_productos?.length || 0,
+          productos_clase_a: response.data.data.productos_clase_a?.length || 0,
+          productos_clase_b: response.data.data.productos_clase_b?.length || 0,
+          productos_clase_c: response.data.data.productos_clase_c?.length || 0
+        });
+
+        return {
+          success: true,
+          data: response.data.data
+        };
+      } else {
+        throw new Error(response.data?.error || 'Respuesta inválida del servidor');
+      }
+    } catch (error) {
+      console.error('❌ [ABC Productos] Error:', error);
+      return {
+        success: false,
+        error: error.response?.data?.error || error.message || 'Error obteniendo ABC Productos',
+        details: error.response?.data
+      };
+    }
   }
 
   async testConexion() {

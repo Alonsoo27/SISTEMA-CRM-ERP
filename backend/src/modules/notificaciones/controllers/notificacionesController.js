@@ -1,10 +1,5 @@
-const { createClient } = require('@supabase/supabase-js');
+const { query } = require('../../../config/database');
 const winston = require('winston');
-
-// Configuración de Supabase
-const supabaseUrl = process.env.SUPABASE_URL;
-const supabaseKey = process.env.SUPABASE_ANON_KEY;
-const supabase = createClient(supabaseUrl, supabaseKey);
 
 // Función para obtener fecha Peru
 const obtenerFechaPeruISO = () => {
@@ -140,13 +135,28 @@ class NotificacionesController {
                     };
 
                     // INSERTAR EN BASE DE DATOS
-                    const { data: notifCreada, error } = await supabase
-                        .from('notificaciones')
-                        .insert(notificacion)
-                        .select()
-                        .single();
+                    const insertQuery = `
+                        INSERT INTO notificaciones (
+                            usuario_id, tipo, titulo, mensaje, prioridad, prospecto_id,
+                            accion_url, accion_texto, created_at, expira_en, datos_adicionales
+                        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+                        RETURNING *
+                    `;
 
-                    if (error) throw error;
+                    const insertValues = [
+                        notificacion.usuario_id, notificacion.tipo, notificacion.titulo,
+                        notificacion.mensaje, notificacion.prioridad, notificacion.prospecto_id,
+                        notificacion.accion_url, notificacion.accion_texto, notificacion.created_at,
+                        notificacion.expira_en, notificacion.datos_adicionales
+                    ];
+
+                    const result = await query(insertQuery, insertValues);
+                    
+                    if (!result.rows || result.rows.length === 0) {
+                        throw new Error('Notificación no creada');
+                    }
+
+                    const notifCreada = result.rows[0];
 
                     resultados.push({
                         id: notifCreada.id,
@@ -237,9 +247,9 @@ class NotificacionesController {
         puntos += puntosPorTipo[tipo] || 25;
 
         // Puntos por valor estimado
-        if (valor_estimado >= 50000) puntos += 30;
-        else if (valor_estimado >= 25000) puntos += 20;
-        else if (valor_estimado >= 10000) puntos += 10;
+        if (valor_estimado >= 2000) puntos += 30;
+        else if (valor_estimado >= 1000) puntos += 20;
+        else if (valor_estimado >= 100) puntos += 10;
 
         // Puntos por tiempo vencido
         if (horas_vencidas >= 72) puntos += 25; // 3+ días
@@ -359,19 +369,21 @@ class NotificacionesController {
         const hoyInicio = new Date(fechaActual);
         hoyInicio.setHours(0, 0, 0, 0);
 
-        let query = supabase
-            .from('notificaciones')
-            .select('id')
-            .eq('usuario_id', userId)
-            .eq('tipo', tipo)
-            .gte('created_at', hoyInicio.toISOString());
+        let sqlQuery = `
+            SELECT id FROM notificaciones 
+            WHERE usuario_id = $1 AND tipo = $2 AND created_at >= $3
+        `;
+        let params = [userId, tipo, hoyInicio.toISOString()];
 
         if (prospectoId) {
-            query = query.eq('prospecto_id', prospectoId);
+            sqlQuery += ` AND prospecto_id = $4`;
+            params.push(prospectoId);
         }
 
-        const { data } = await query.single();
-        return !!data;
+        sqlQuery += ` LIMIT 1`;
+
+        const result = await query(sqlQuery, params);
+        return result.rows.length > 0;
     }
 
     /**
@@ -430,35 +442,56 @@ class NotificacionesController {
             
             logger.info(`🔔 Obteniendo notificaciones para usuario ${usuarioId}`);
 
-            let query = supabase
-                .from('notificaciones')
-                .select(`
-                    id, tipo, titulo, mensaje, prioridad, leida, 
-                    prospecto_id, accion_url, accion_texto, datos_adicionales,
-                    created_at, leida_en, expira_en,
-                    prospectos:prospecto_id(codigo, nombre_cliente, telefono, valor_estimado, estado)
-                `)
-                .eq('usuario_id', usuarioId)
-                .or('expira_en.is.null,expira_en.gt.' + new Date().toISOString()) // No expiradas
-                .order('prioridad', { ascending: false })
-                .order('created_at', { ascending: false })
-                .range(offset, offset + limit - 1);
+            // Construir query base
+            let sqlQuery = `
+                SELECT 
+                    n.id, n.tipo, n.titulo, n.mensaje, n.prioridad, n.leida, 
+                    n.prospecto_id, n.accion_url, n.accion_texto, n.datos_adicionales,
+                    n.created_at, n.leida_en, n.expira_en,
+                    p.codigo, p.nombre_cliente, p.telefono, p.valor_estimado, p.estado
+                FROM notificaciones n
+                LEFT JOIN prospectos p ON n.prospecto_id = p.id
+                WHERE n.usuario_id = $1
+                AND (n.expira_en IS NULL OR n.expira_en > $2)
+            `;
             
+            let params = [usuarioId, new Date().toISOString()];
+            let paramIndex = 3;
+
             if (solo_no_leidas === 'true') {
-                query = query.eq('leida', false);
+                sqlQuery += ` AND n.leida = $${paramIndex}`;
+                params.push(false);
+                paramIndex++;
             }
 
             if (tipo) {
-                query = query.eq('tipo', tipo);
+                sqlQuery += ` AND n.tipo = $${paramIndex}`;
+                params.push(tipo);
+                paramIndex++;
             }
 
             if (prioridad) {
-                query = query.eq('prioridad', prioridad);
+                sqlQuery += ` AND n.prioridad = $${paramIndex}`;
+                params.push(prioridad);
+                paramIndex++;
             }
+
+            sqlQuery += ` 
+                ORDER BY 
+                    CASE n.prioridad 
+                        WHEN 'critica' THEN 4
+                        WHEN 'alta' THEN 3
+                        WHEN 'media' THEN 2
+                        ELSE 1 
+                    END DESC,
+                    n.created_at DESC
+                LIMIT $${paramIndex} OFFSET $${paramIndex + 1}
+            `;
             
-            const { data, error } = await query;
+            params.push(parseInt(limit), parseInt(offset));
             
-            if (error) throw error;
+            const result = await query(sqlQuery, params);
+            const data = result.rows;
 
             // Formatear datos
             const notificacionesFormateadas = (data || []).map(notif => ({
@@ -473,13 +506,13 @@ class NotificacionesController {
                 accion_url: notif.accion_url,
                 accion_texto: notif.accion_texto,
                 urgente: ['critica', 'alta'].includes(notif.prioridad),
-                prospecto: notif.prospectos ? {
+                prospecto: notif.codigo ? {
                     id: notif.prospecto_id,
-                    codigo: notif.prospectos.codigo,
-                    nombre_cliente: notif.prospectos.nombre_cliente,
-                    telefono: notif.prospectos.telefono,
-                    valor_estimado: notif.prospectos.valor_estimado,
-                    estado: notif.prospectos.estado
+                    codigo: notif.codigo,
+                    nombre_cliente: notif.nombre_cliente,
+                    telefono: notif.telefono,
+                    valor_estimado: notif.valor_estimado,
+                    estado: notif.estado
                 } : null,
                 metadatos: notif.datos_adicionales ? JSON.parse(notif.datos_adicionales) : null
             }));
@@ -520,15 +553,13 @@ class NotificacionesController {
             const { usuarioId } = req.params;
             const { incluir_desglose = false } = req.query;
             
-            const { data, error } = await supabase
-                .from('notificaciones')
-                .select('prioridad, tipo')
-                .eq('usuario_id', usuarioId)
-                .eq('leida', false)
-                .or('expira_en.is.null,expira_en.gt.' + new Date().toISOString());
+            const result = await query(`
+                SELECT prioridad, tipo FROM notificaciones 
+                WHERE usuario_id = $1 AND leida = $2 
+                AND (expira_en IS NULL OR expira_en > $3)
+            `, [usuarioId, false, new Date().toISOString()]);
             
-            if (error) throw error;
-
+            const data = result.rows;
             const total = data?.length || 0;
             let desglose = null;
 
@@ -576,18 +607,18 @@ class NotificacionesController {
             const { id } = req.params;
             const usuarioId = req.user?.user_id || req.body.usuario_id;
             
-            const { data, error } = await supabase
-                .from('notificaciones')
-                .update({ 
-                    leida: true, 
-                    leida_en: obtenerFechaPeruISO()
-                })
-                .eq('id', id)
-                .eq('usuario_id', usuarioId)
-                .select()
-                .single();
+            const result = await query(`
+                UPDATE notificaciones 
+                SET leida = $1, leida_en = $2 
+                WHERE id = $3 AND usuario_id = $4
+                RETURNING *
+            `, [true, obtenerFechaPeruISO(), id, usuarioId]);
             
-            if (error) throw error;
+            if (result.rows.length === 0) {
+                throw new Error('Notificación no encontrada o no autorizada');
+            }
+
+            const data = result.rows[0];
             
             logger.info(`✅ Notificación ${id} marcada como leída`);
 
@@ -613,17 +644,14 @@ class NotificacionesController {
         try {
             const { usuarioId } = req.params;
             
-            const { data, error } = await supabase
-                .from('notificaciones')
-                .update({ 
-                    leida: true, 
-                    leida_en: obtenerFechaPeruISO()
-                })
-                .eq('usuario_id', usuarioId)
-                .eq('leida', false)
-                .select();
+            const result = await query(`
+                UPDATE notificaciones 
+                SET leida = $1, leida_en = $2 
+                WHERE usuario_id = $3 AND leida = $4
+                RETURNING *
+            `, [true, obtenerFechaPeruISO(), usuarioId, false]);
             
-            if (error) throw error;
+            const data = result.rows;
             
             logger.info(`✅ ${data?.length || 0} notificaciones marcadas como leídas para usuario ${usuarioId}`);
 
@@ -671,11 +699,13 @@ class NotificacionesController {
      * Método auxiliar para estadísticas
      */
     static async calcularEstadisticasUsuario(usuarioId) {
-        const { data } = await supabase
-            .from('notificaciones')
-            .select('prioridad, tipo, leida, created_at')
-            .eq('usuario_id', usuarioId);
+        const result = await query(`
+            SELECT prioridad, tipo, leida, created_at 
+            FROM notificaciones 
+            WHERE usuario_id = $1
+        `, [usuarioId]);
 
+        const data = result.rows;
         if (!data) return null;
 
         return {
@@ -702,21 +732,18 @@ class NotificacionesController {
      */
     static async healthCheck(req, res) {
         try {
-            const { count, error } = await supabase
-                .from('notificaciones')
-                .select('*', { count: 'exact', head: true });
-
-            if (error) throw error;
+            const result = await query(`SELECT COUNT(*) as total FROM notificaciones`);
+            const count = result.rows[0]?.total || 0;
 
             res.json({
                 success: true,
                 module: 'Notificaciones',
                 status: 'Operativo',
-                version: '2.0 - Superior Unificado',
+                version: '2.0 - Superior Unificado (PostgreSQL)',
                 timestamp: obtenerFechaPeruISO(),
                 timezone: 'America/Lima (UTC-5)',
                 data: {
-                    total_notificaciones: count || 0,
+                    total_notificaciones: parseInt(count),
                     funcionalidades: [
                         'Método unificado con opciones',
                         'Prioridades inteligentes automáticas',

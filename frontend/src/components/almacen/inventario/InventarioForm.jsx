@@ -1,29 +1,45 @@
-import React, { useState, useEffect } from 'react';
-import { 
-    X, 
-    Save, 
-    AlertTriangle, 
-    Package, 
-    DollarSign, 
-    TrendingUp, 
+import React, { useState, useEffect, useMemo } from 'react';
+import {
+    X,
+    Save,
+    AlertTriangle,
+    Package,
+    DollarSign,
+    TrendingUp,
     TrendingDown,
     Info,
-    Calculator
+    Calculator,
+    ArrowRightLeft,
+    Settings,
+    Repeat,
+    Plus
 } from 'lucide-react';
-import almacenService from '../../services/almacenService';
+import almacenService from '../../../services/almacenService';
 
-const InventarioForm = ({ 
-    isOpen, 
-    onClose, 
-    inventarioItem = null, 
-    onSuccess 
+const InventarioForm = ({
+    isOpen,
+    onClose,
+    inventarioItem = null,
+    onSuccess
 }) => {
+    const [tipoOperacion, setTipoOperacion] = useState('ajuste'); // 'ajuste', 'transferencia', 'transformacion'
+    const [almacenesDisponibles, setAlmacenesDisponibles] = useState([]);
     const [formData, setFormData] = useState({
         stock_actual: '',
         stock_minimo: '',
         stock_maximo: '',
         costo_promedio: '',
-        motivo: ''
+        motivo: '',
+        // Campos para transferencia
+        almacen_origen_id: '',
+        almacen_destino_id: '',
+        cantidad_transferir: '',
+        // Campos para transformación
+        cantidad_transformar: '',
+        producto_resultado_id: '',
+        almacen_transformacion_id: '',
+        // Campo para nuevo inventario
+        almacen_seleccionado: ''
     });
 
     const [errors, setErrors] = useState({});
@@ -33,17 +49,60 @@ const InventarioForm = ({
 
     useEffect(() => {
         if (isOpen && inventarioItem) {
-            setFormData({
-                stock_actual: inventarioItem.stock_actual?.toString() || '0',
-                stock_minimo: inventarioItem.stock_minimo?.toString() || '0',
-                stock_maximo: inventarioItem.stock_maximo?.toString() || '',
-                costo_promedio: inventarioItem.costo_promedio?.toString() || '',
-                motivo: ''
-            });
+            // Si es un nuevo inventario, establecer tipo de operación como ajuste y requerir selección de almacén
+            if (inventarioItem.esNuevoInventario) {
+                setTipoOperacion('ajuste');
+                setFormData({
+                    stock_actual: '',
+                    stock_minimo: '0',
+                    stock_maximo: '',
+                    costo_promedio: '',
+                    motivo: 'Agregando producto inicial al inventario',
+                    // Inicializar campos de transferencia
+                    almacen_origen_id: '',
+                    almacen_destino_id: '',
+                    cantidad_transferir: '',
+                    // Inicializar campos de transformación
+                    cantidad_transformar: '',
+                    producto_resultado_id: '',
+                    almacen_transformacion_id: '',
+                    // Campo especial para nuevo inventario
+                    almacen_seleccionado: ''
+                });
+            } else {
+                setFormData({
+                    stock_actual: inventarioItem.stock_actual?.toString() || '0',
+                    stock_minimo: inventarioItem.stock_minimo?.toString() || '0',
+                    stock_maximo: inventarioItem.stock_maximo?.toString() || '',
+                    costo_promedio: inventarioItem.costo_promedio?.toString() || '',
+                    motivo: '',
+                    // Inicializar campos de transferencia
+                    almacen_origen_id: inventarioItem.almacen_id || '',
+                    almacen_destino_id: '',
+                    cantidad_transferir: '',
+                    // Inicializar campos de transformación
+                    cantidad_transformar: '',
+                    producto_resultado_id: '',
+                    almacen_transformacion_id: inventarioItem.almacen_id || '',
+                    almacen_seleccionado: inventarioItem.almacen_id || ''
+                });
+            }
             setStockOriginal(Number(inventarioItem.stock_actual) || 0);
             setErrors({});
+            cargarAlmacenesDisponibles();
         }
     }, [isOpen, inventarioItem]);
+
+    const cargarAlmacenesDisponibles = async () => {
+        try {
+            const response = await almacenService.obtenerAlmacenes();
+            if (response.success) {
+                setAlmacenesDisponibles(response.data);
+            }
+        } catch (error) {
+            console.error('Error cargando almacenes:', error);
+        }
+    };
 
     const handleInputChange = (campo, valor) => {
         setFormData(prev => ({
@@ -63,35 +122,68 @@ const InventarioForm = ({
     const validarFormulario = () => {
         const nuevosErrores = {};
 
-        // Validar stock actual
-        if (!formData.stock_actual || isNaN(Number(formData.stock_actual))) {
-            nuevosErrores.stock_actual = 'Stock actual es requerido y debe ser un número';
-        } else if (Number(formData.stock_actual) < 0) {
-            nuevosErrores.stock_actual = 'Stock actual no puede ser negativo';
+        if (tipoOperacion === 'ajuste') {
+            // Para nuevos inventarios, validar almacén seleccionado
+            if (inventarioItem?.esNuevoInventario && !formData.almacen_seleccionado) {
+                nuevosErrores.almacen_seleccionado = 'Debe seleccionar un almacén';
+            }
+
+            // Validar stock actual
+            if (!formData.stock_actual || isNaN(Number(formData.stock_actual))) {
+                nuevosErrores.stock_actual = 'Stock actual es requerido y debe ser un número';
+            } else if (Number(formData.stock_actual) < 0) {
+                nuevosErrores.stock_actual = 'Stock actual no puede ser negativo';
+            }
+
+            // Validar stock mínimo
+            if (!formData.stock_minimo || isNaN(Number(formData.stock_minimo))) {
+                nuevosErrores.stock_minimo = 'Stock mínimo es requerido y debe ser un número';
+            } else if (Number(formData.stock_minimo) < 0) {
+                nuevosErrores.stock_minimo = 'Stock mínimo no puede ser negativo';
+            }
+
+            // Validar stock máximo (opcional)
+            if (formData.stock_maximo && (isNaN(Number(formData.stock_maximo)) || Number(formData.stock_maximo) < 0)) {
+                nuevosErrores.stock_maximo = 'Stock máximo debe ser un número positivo';
+            }
+
+            if (formData.stock_maximo && Number(formData.stock_maximo) < Number(formData.stock_minimo)) {
+                nuevosErrores.stock_maximo = 'Stock máximo no puede ser menor al stock mínimo';
+            }
+
+            // Validar costo promedio (opcional)
+            if (formData.costo_promedio && (isNaN(Number(formData.costo_promedio)) || Number(formData.costo_promedio) < 0)) {
+                nuevosErrores.costo_promedio = 'Costo promedio debe ser un número positivo';
+            }
+        } else if (tipoOperacion === 'transferencia') {
+            // Validar transferencia
+            if (!formData.almacen_origen_id) {
+                nuevosErrores.almacen_origen_id = 'Debe seleccionar el almacén origen';
+            }
+            if (!formData.almacen_destino_id) {
+                nuevosErrores.almacen_destino_id = 'Debe seleccionar el almacén destino';
+            }
+            if (formData.almacen_origen_id === formData.almacen_destino_id) {
+                nuevosErrores.almacen_destino_id = 'El almacén destino debe ser diferente al origen';
+            }
+            if (!formData.cantidad_transferir || isNaN(Number(formData.cantidad_transferir)) || Number(formData.cantidad_transferir) <= 0) {
+                nuevosErrores.cantidad_transferir = 'Cantidad a transferir debe ser mayor a 0';
+            } else if (Number(formData.cantidad_transferir) > stockOriginal) {
+                nuevosErrores.cantidad_transferir = `No hay suficiente stock. Disponible: ${stockOriginal}`;
+            }
+        } else if (tipoOperacion === 'transformacion') {
+            // Validar transformación
+            if (!formData.almacen_transformacion_id) {
+                nuevosErrores.almacen_transformacion_id = 'Debe seleccionar el almacén donde ocurre la transformación';
+            }
+            if (!formData.cantidad_transformar || isNaN(Number(formData.cantidad_transformar)) || Number(formData.cantidad_transformar) <= 0) {
+                nuevosErrores.cantidad_transformar = 'Cantidad a transformar debe ser mayor a 0';
+            } else if (Number(formData.cantidad_transformar) > stockOriginal) {
+                nuevosErrores.cantidad_transformar = `No hay suficiente stock. Disponible: ${stockOriginal}`;
+            }
         }
 
-        // Validar stock mínimo
-        if (!formData.stock_minimo || isNaN(Number(formData.stock_minimo))) {
-            nuevosErrores.stock_minimo = 'Stock mínimo es requerido y debe ser un número';
-        } else if (Number(formData.stock_minimo) < 0) {
-            nuevosErrores.stock_minimo = 'Stock mínimo no puede ser negativo';
-        }
-
-        // Validar stock máximo (opcional)
-        if (formData.stock_maximo && (isNaN(Number(formData.stock_maximo)) || Number(formData.stock_maximo) < 0)) {
-            nuevosErrores.stock_maximo = 'Stock máximo debe ser un número positivo';
-        }
-
-        if (formData.stock_maximo && Number(formData.stock_maximo) < Number(formData.stock_minimo)) {
-            nuevosErrores.stock_maximo = 'Stock máximo no puede ser menor al stock mínimo';
-        }
-
-        // Validar costo promedio (opcional)
-        if (formData.costo_promedio && (isNaN(Number(formData.costo_promedio)) || Number(formData.costo_promedio) < 0)) {
-            nuevosErrores.costo_promedio = 'Costo promedio debe ser un número positivo';
-        }
-
-        // Validar motivo
+        // Validar motivo (común para todas las operaciones)
         if (!formData.motivo.trim()) {
             nuevosErrores.motivo = 'El motivo es requerido';
         } else if (formData.motivo.length < 5) {
@@ -106,51 +198,93 @@ const InventarioForm = ({
 
     const handleSubmit = async (e) => {
         e.preventDefault();
-        
+
         if (!validarFormulario()) {
             return;
         }
 
         try {
             setLoading(true);
+            let resultado;
 
-            const datosActualizacion = {
-                stock_actual: Number(formData.stock_actual),
-                stock_minimo: Number(formData.stock_minimo),
-                stock_maximo: formData.stock_maximo ? Number(formData.stock_maximo) : null,
-                costo_promedio: formData.costo_promedio ? Number(formData.costo_promedio) : null,
-                motivo: formData.motivo.trim()
-            };
+            if (tipoOperacion === 'ajuste') {
+                const datosActualizacion = {
+                    stock_actual: Number(formData.stock_actual),
+                    stock_minimo: Number(formData.stock_minimo),
+                    stock_maximo: formData.stock_maximo ? Number(formData.stock_maximo) : null,
+                    costo_promedio: formData.costo_promedio ? Number(formData.costo_promedio) : null,
+                    motivo: formData.motivo.trim()
+                };
 
-            const resultado = await almacenService.actualizarStockProducto(
-                inventarioItem.producto_id,
-                inventarioItem.almacen_id,
-                datosActualizacion
-            );
+                // Si es un nuevo inventario, usar el almacén seleccionado
+                const almacenId = inventarioItem.esNuevoInventario ?
+                    formData.almacen_seleccionado :
+                    inventarioItem.almacen_id;
+
+                resultado = await almacenService.actualizarStockProducto(
+                    inventarioItem.producto_id,
+                    almacenId,
+                    datosActualizacion
+                );
+            } else if (tipoOperacion === 'transferencia') {
+                const datosTransferencia = {
+                    producto_id: inventarioItem.producto_id,
+                    almacen_origen_id: formData.almacen_origen_id,
+                    almacen_destino_id: formData.almacen_destino_id,
+                    cantidad: Number(formData.cantidad_transferir),
+                    motivo: formData.motivo.trim()
+                };
+
+                resultado = await almacenService.transferirStock(datosTransferencia);
+            } else if (tipoOperacion === 'transformacion') {
+                // Para transformación, por ahora usamos ajuste negativo
+                // En el futuro se puede implementar un endpoint específico
+                const datosTransformacion = {
+                    stock_actual: stockOriginal - Number(formData.cantidad_transformar),
+                    stock_minimo: Number(formData.stock_minimo || 0),
+                    motivo: `TRANSFORMACIÓN: ${formData.motivo.trim()}`
+                };
+
+                resultado = await almacenService.actualizarStockProducto(
+                    inventarioItem.producto_id,
+                    formData.almacen_transformacion_id,
+                    datosTransformacion
+                );
+            }
 
             if (resultado.success) {
                 onSuccess?.(resultado.data);
                 onClose();
-                // Reset form
-                setFormData({
-                    stock_actual: '',
-                    stock_minimo: '',
-                    stock_maximo: '',
-                    costo_promedio: '',
-                    motivo: ''
-                });
-                setErrors({});
+                resetForm();
             } else {
-                setErrors({ submit: resultado.error || 'Error al actualizar el inventario' });
+                setErrors({ submit: resultado.error || 'Error al procesar la operación' });
             }
         } catch (error) {
             console.error('Error en handleSubmit:', error);
-            setErrors({ 
-                submit: error.response?.data?.error || error.message || 'Error al actualizar el inventario' 
+            setErrors({
+                submit: error.response?.data?.error || error.message || 'Error al procesar la operación'
             });
         } finally {
             setLoading(false);
         }
+    };
+
+    const resetForm = () => {
+        setFormData({
+            stock_actual: '',
+            stock_minimo: '',
+            stock_maximo: '',
+            costo_promedio: '',
+            motivo: '',
+            almacen_origen_id: '',
+            almacen_destino_id: '',
+            cantidad_transferir: '',
+            cantidad_transformar: '',
+            producto_resultado_id: '',
+            almacen_transformacion_id: ''
+        });
+        setErrors({});
+        setTipoOperacion('ajuste');
     };
 
     const calcularDiferencia = () => {
@@ -273,7 +407,7 @@ const InventarioForm = ({
                             <div className="flex items-center">
                                 <Package className="h-6 w-6 text-blue-600 mr-2" />
                                 <h3 className="text-lg leading-6 font-medium text-gray-900">
-                                    Editar Inventario
+                                    Gestionar Inventario
                                 </h3>
                             </div>
                             <button
@@ -296,9 +430,36 @@ const InventarioForm = ({
                                         <p className="text-sm text-gray-600 mt-1 break-words">
                                             {inventarioItem.producto_descripcion}
                                         </p>
-                                        <p className="text-sm text-gray-500 mt-1">
-                                            <span className="font-medium">Almacén:</span> {inventarioItem.almacen_nombre}
-                                        </p>
+                                        {inventarioItem.esNuevoInventario ? (
+                                            <div className="mt-2">
+                                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                                    Seleccionar Almacén *
+                                                </label>
+                                                <select
+                                                    value={formData.almacen_seleccionado}
+                                                    onChange={(e) => handleInputChange('almacen_seleccionado', e.target.value)}
+                                                    className={`w-full border rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors ${
+                                                        errors.almacen_seleccionado ? 'border-red-300 bg-red-50' : 'border-gray-300'
+                                                    }`}
+                                                >
+                                                    <option value="">Seleccionar almacén...</option>
+                                                    {almacenesDisponibles.map((almacen) => (
+                                                        <option key={almacen.id} value={almacen.id}>
+                                                            {almacen.nombre} ({almacen.codigo})
+                                                        </option>
+                                                    ))}
+                                                </select>
+                                                {errors.almacen_seleccionado && (
+                                                    <p className="mt-1 text-xs text-red-600">
+                                                        {errors.almacen_seleccionado}
+                                                    </p>
+                                                )}
+                                            </div>
+                                        ) : (
+                                            <p className="text-sm text-gray-500 mt-1">
+                                                <span className="font-medium">Almacén:</span> {inventarioItem.almacen_nombre}
+                                            </p>
+                                        )}
                                         {inventarioItem.marca && (
                                             <p className="text-sm text-gray-500">
                                                 <span className="font-medium">Marca:</span> {inventarioItem.marca}
@@ -318,9 +479,69 @@ const InventarioForm = ({
                             </div>
                         )}
 
+                        {/* Pestañas para tipo de operación */}
+                        {!inventarioItem?.esNuevoInventario && (
+                            <div className="border-b border-gray-200 mb-6">
+                                <nav className="-mb-px flex space-x-8">
+                                    <button
+                                        type="button"
+                                        onClick={() => setTipoOperacion('ajuste')}
+                                        className={`py-2 px-1 border-b-2 font-medium text-sm whitespace-nowrap ${
+                                            tipoOperacion === 'ajuste'
+                                                ? 'border-blue-500 text-blue-600'
+                                                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                                        }`}
+                                    >
+                                        <Settings className="h-4 w-4 inline mr-1" />
+                                        Ajuste de Stock
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setTipoOperacion('transferencia')}
+                                        className={`py-2 px-1 border-b-2 font-medium text-sm whitespace-nowrap ${
+                                            tipoOperacion === 'transferencia'
+                                                ? 'border-blue-500 text-blue-600'
+                                                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                                        }`}
+                                    >
+                                        <ArrowRightLeft className="h-4 w-4 inline mr-1" />
+                                        Transferencia
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setTipoOperacion('transformacion')}
+                                        className={`py-2 px-1 border-b-2 font-medium text-sm whitespace-nowrap ${
+                                            tipoOperacion === 'transformacion'
+                                                ? 'border-blue-500 text-blue-600'
+                                                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                                        }`}
+                                    >
+                                        <Repeat className="h-4 w-4 inline mr-1" />
+                                        Transformación
+                                    </button>
+                                </nav>
+                            </div>
+                        )}
+
+                        {/* Título para nuevo inventario */}
+                        {inventarioItem?.esNuevoInventario && (
+                            <div className="mb-6">
+                                <h4 className="text-lg font-medium text-gray-900 flex items-center">
+                                    <Plus className="h-5 w-5 text-green-600 mr-2" />
+                                    Agregar Producto al Inventario
+                                </h4>
+                                <p className="text-sm text-gray-600 mt-1">
+                                    Este producto no tiene stock en ningún almacén. Ingresa los valores iniciales para agregarlo al inventario.
+                                </p>
+                            </div>
+                        )}
+
                         {/* Formulario */}
                         <form onSubmit={handleSubmit} className="space-y-4">
-                            {/* Stock Actual */}
+                            {/* AJUSTE DE STOCK */}
+                            {tipoOperacion === 'ajuste' && (
+                                <>
+                                    {/* Stock Actual */}
                             <div>
                                 <div className="flex items-center justify-between">
                                     <label className="block text-sm font-medium text-gray-700">
@@ -434,10 +655,148 @@ const InventarioForm = ({
                                 )}
                             </div>
 
-                            {/* Motivo */}
+                                </>
+                            )}
+
+                            {/* TRANSFERENCIA ENTRE ALMACENES */}
+                            {tipoOperacion === 'transferencia' && (
+                                <>
+                                    {/* Almacén Origen */}
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700">
+                                            Almacén Origen *
+                                        </label>
+                                        <select
+                                            value={formData.almacen_origen_id}
+                                            onChange={(e) => handleInputChange('almacen_origen_id', e.target.value)}
+                                            className={`mt-1 block w-full border rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors ${
+                                                errors.almacen_origen_id ? 'border-red-300' : 'border-gray-300'
+                                            }`}
+                                        >
+                                            <option value="">Seleccionar almacén origen</option>
+                                            {almacenesDisponibles.map(almacen => (
+                                                <option key={almacen.id} value={almacen.id}>
+                                                    {almacen.codigo} - {almacen.nombre} ({almacen.tipo})
+                                                </option>
+                                            ))}
+                                        </select>
+                                        {errors.almacen_origen_id && (
+                                            <p className="mt-1 text-sm text-red-600">{errors.almacen_origen_id}</p>
+                                        )}
+                                    </div>
+
+                                    {/* Almacén Destino */}
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700">
+                                            Almacén Destino *
+                                        </label>
+                                        <select
+                                            value={formData.almacen_destino_id}
+                                            onChange={(e) => handleInputChange('almacen_destino_id', e.target.value)}
+                                            className={`mt-1 block w-full border rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors ${
+                                                errors.almacen_destino_id ? 'border-red-300' : 'border-gray-300'
+                                            }`}
+                                        >
+                                            <option value="">Seleccionar almacén destino</option>
+                                            {almacenesDisponibles
+                                                .filter(almacen => almacen.id !== formData.almacen_origen_id)
+                                                .map(almacen => (
+                                                    <option key={almacen.id} value={almacen.id}>
+                                                        {almacen.codigo} - {almacen.nombre} ({almacen.tipo})
+                                                    </option>
+                                                ))
+                                            }
+                                        </select>
+                                        {errors.almacen_destino_id && (
+                                            <p className="mt-1 text-sm text-red-600">{errors.almacen_destino_id}</p>
+                                        )}
+                                    </div>
+
+                                    {/* Cantidad a Transferir */}
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700">
+                                            Cantidad a Transferir *
+                                        </label>
+                                        <input
+                                            type="number"
+                                            value={formData.cantidad_transferir}
+                                            onChange={(e) => handleInputChange('cantidad_transferir', e.target.value)}
+                                            className={`mt-1 block w-full border rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors ${
+                                                errors.cantidad_transferir ? 'border-red-300' : 'border-gray-300'
+                                            }`}
+                                            min="0"
+                                            max={stockOriginal}
+                                            step="0.001"
+                                            placeholder="0"
+                                        />
+                                        {errors.cantidad_transferir && (
+                                            <p className="mt-1 text-sm text-red-600">{errors.cantidad_transferir}</p>
+                                        )}
+                                        <p className="mt-1 text-xs text-gray-500">
+                                            Stock disponible en origen: {formatearNumero(stockOriginal, 0)}
+                                        </p>
+                                    </div>
+                                </>
+                            )}
+
+                            {/* TRANSFORMACIÓN */}
+                            {tipoOperacion === 'transformacion' && (
+                                <>
+                                    {/* Almacén donde ocurre la transformación */}
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700">
+                                            Almacén de Transformación *
+                                        </label>
+                                        <select
+                                            value={formData.almacen_transformacion_id}
+                                            onChange={(e) => handleInputChange('almacen_transformacion_id', e.target.value)}
+                                            className={`mt-1 block w-full border rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors ${
+                                                errors.almacen_transformacion_id ? 'border-red-300' : 'border-gray-300'
+                                            }`}
+                                        >
+                                            <option value="">Seleccionar almacén</option>
+                                            {almacenesDisponibles.map(almacen => (
+                                                <option key={almacen.id} value={almacen.id}>
+                                                    {almacen.codigo} - {almacen.nombre} ({almacen.tipo})
+                                                </option>
+                                            ))}
+                                        </select>
+                                        {errors.almacen_transformacion_id && (
+                                            <p className="mt-1 text-sm text-red-600">{errors.almacen_transformacion_id}</p>
+                                        )}
+                                    </div>
+
+                                    {/* Cantidad a Transformar */}
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700">
+                                            Cantidad a Transformar *
+                                        </label>
+                                        <input
+                                            type="number"
+                                            value={formData.cantidad_transformar}
+                                            onChange={(e) => handleInputChange('cantidad_transformar', e.target.value)}
+                                            className={`mt-1 block w-full border rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors ${
+                                                errors.cantidad_transformar ? 'border-red-300' : 'border-gray-300'
+                                            }`}
+                                            min="0"
+                                            max={stockOriginal}
+                                            step="0.001"
+                                            placeholder="0"
+                                        />
+                                        {errors.cantidad_transformar && (
+                                            <p className="mt-1 text-sm text-red-600">{errors.cantidad_transformar}</p>
+                                        )}
+                                        <p className="mt-1 text-xs text-gray-500">
+                                            Stock disponible: {formatearNumero(stockOriginal, 0)}
+                                        </p>
+                                    </div>
+                                </>
+                            )}
+
+                            {/* Motivo (común para todas las operaciones) */}
                             <div>
                                 <label className="block text-sm font-medium text-gray-700">
-                                    Motivo del Ajuste *
+                                    Motivo {tipoOperacion === 'ajuste' ? 'del Ajuste' : tipoOperacion === 'transferencia' ? 'de la Transferencia' : 'de la Transformación'} *
                                 </label>
                                 <textarea
                                     value={formData.motivo}
@@ -446,7 +805,13 @@ const InventarioForm = ({
                                     className={`mt-1 block w-full border rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors resize-none ${
                                         errors.motivo ? 'border-red-300' : 'border-gray-300'
                                     }`}
-                                    placeholder="Ej: Inventario físico, ajuste por merma, corrección de sistema..."
+                                    placeholder={
+                                        tipoOperacion === 'ajuste'
+                                            ? "Ej: Inventario físico, ajuste por merma, corrección de sistema..."
+                                            : tipoOperacion === 'transferencia'
+                                            ? "Ej: Redistribución de inventario, abastecimiento de sucursal..."
+                                            : "Ej: Procesamiento de materia prima, ensamblaje de producto..."
+                                    }
                                     maxLength="500"
                                 />
                                 {errors.motivo && (
@@ -511,7 +876,9 @@ const InventarioForm = ({
                             ) : (
                                 <>
                                     <Save className="h-4 w-4 mr-2" />
-                                    Guardar Cambios
+                                    {tipoOperacion === 'ajuste' ? 'Guardar Ajuste' :
+                                     tipoOperacion === 'transferencia' ? 'Ejecutar Transferencia' :
+                                     'Procesar Transformación'}
                                 </>
                             )}
                         </button>

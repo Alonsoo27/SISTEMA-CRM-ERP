@@ -14,7 +14,8 @@ const ProductoForm = ({
         precio_sin_igv: '',
         marca: '',
         categoria_id: '',
-        unidad_medida: 'UND' // NUEVO CAMPO CON VALOR POR DEFECTO
+        unidad_medida: 'UND', // NUEVO CAMPO CON VALOR POR DEFECTO
+        linea_producto: ''     // CAMPO LÍNEA DE PRODUCTO
     });
 
     const [categorias, setCategorias] = useState([]);
@@ -52,7 +53,8 @@ const ProductoForm = ({
                     precio_sin_igv: '',
                     marca: '',
                     categoria_id: '',
-                    unidad_medida: 'UND' // DEFAULT
+                    unidad_medida: 'UND', // DEFAULT
+                    linea_producto: ''     // DEFAULT
                 });
             } else if (modo === 'editar' && producto) {
                 // Modo editar - cargar datos del producto
@@ -62,7 +64,8 @@ const ProductoForm = ({
                     precio_sin_igv: producto.precio_sin_igv?.toString() || '',
                     marca: producto.marca || '',
                     categoria_id: producto.categorias?.id || producto.categoria_id || '',
-                    unidad_medida: producto.unidad_medida || 'UND' // NUEVO CAMPO
+                    unidad_medida: producto.unidad_medida || 'UND', // NUEVO CAMPO
+                    linea_producto: producto.linea_producto || ''    // CAMPO LÍNEA DE PRODUCTO
                 });
             } else if (modo === 'duplicar' && producto) {
                 // Modo duplicar - copiar datos con nuevo código
@@ -72,7 +75,8 @@ const ProductoForm = ({
                     precio_sin_igv: producto.precio_sin_igv?.toString() || '',
                     marca: producto.marca || '',
                     categoria_id: producto.categorias?.id || producto.categoria_id || '',
-                    unidad_medida: producto.unidad_medida || 'UND' // NUEVO CAMPO
+                    unidad_medida: producto.unidad_medida || 'UND', // NUEVO CAMPO
+                    linea_producto: producto.linea_producto || ''    // CAMPO LÍNEA DE PRODUCTO
                 });
             }
 
@@ -138,6 +142,13 @@ const ProductoForm = ({
             newErrors.unidad_medida = 'Debe seleccionar una unidad de medida';
         } else if (!['UND', 'MLL'].includes(formData.unidad_medida)) {
             newErrors.unidad_medida = 'La unidad de medida no es válida';
+        }
+
+        // NUEVA VALIDACIÓN: Línea de producto
+        if (!formData.linea_producto.trim()) {
+            newErrors.linea_producto = 'La línea de producto es requerida';
+        } else if (formData.linea_producto.length > 100) {
+            newErrors.linea_producto = 'La línea de producto no puede exceder 100 caracteres';
         }
 
         setErrors(newErrors);
@@ -418,26 +429,51 @@ const ProductoForm = ({
                             </ul>
                         </div>
 
-                        {/* Marca */}
-                        <div className="mb-4">
-                            <label htmlFor="marca" className="block text-sm font-medium text-gray-700 mb-1">
-                                Marca *
-                            </label>
-                            <input
-                                type="text"
-                                id="marca"
-                                name="marca"
-                                value={formData.marca}
-                                onChange={handleInputChange}
-                                className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                                    errors.marca ? 'border-red-500' : 'border-gray-300'
-                                }`}
-                                placeholder="Ej: Sony, Samsung, etc."
-                                disabled={loading}
-                            />
-                            {errors.marca && (
-                                <p className="text-red-500 text-xs mt-1">{errors.marca}</p>
-                            )}
+                        {/* Marca y Línea de Producto - En dos columnas */}
+                        <div className="mb-4 grid grid-cols-2 gap-3">
+                            {/* Marca */}
+                            <div>
+                                <label htmlFor="marca" className="block text-sm font-medium text-gray-700 mb-1">
+                                    Marca *
+                                </label>
+                                <input
+                                    type="text"
+                                    id="marca"
+                                    name="marca"
+                                    value={formData.marca}
+                                    onChange={handleInputChange}
+                                    className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                                        errors.marca ? 'border-red-500' : 'border-gray-300'
+                                    }`}
+                                    placeholder="Ej: Sony, Samsung"
+                                    disabled={loading}
+                                />
+                                {errors.marca && (
+                                    <p className="text-red-500 text-xs mt-1">{errors.marca}</p>
+                                )}
+                            </div>
+
+                            {/* Línea de Producto */}
+                            <div>
+                                <label htmlFor="linea_producto" className="block text-sm font-medium text-gray-700 mb-1">
+                                    Línea de Producto *
+                                </label>
+                                <input
+                                    type="text"
+                                    id="linea_producto"
+                                    name="linea_producto"
+                                    value={formData.linea_producto}
+                                    onChange={handleInputChange}
+                                    className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                                        errors.linea_producto ? 'border-red-500' : 'border-gray-300'
+                                    }`}
+                                    placeholder="Ej: Electrónicos, Hogar"
+                                    disabled={loading}
+                                />
+                                {errors.linea_producto && (
+                                    <p className="text-red-500 text-xs mt-1">{errors.linea_producto}</p>
+                                )}
+                            </div>
                         </div>
 
                         {/* Categoría */}

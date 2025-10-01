@@ -51,20 +51,42 @@ const UploadMasivo = ({ isOpen, onClose, onUploadComplete, categorias = [] }) =>
         }
     }, [isOpen, uploading]);
 
-const generarPlantilla = () => {
+const generarPlantilla = async () => {
     try {
-        // Crear enlace de descarga que apunta al backend
+        // Obtener token de autenticación
+        const token = localStorage.getItem('authToken') || localStorage.getItem('fake-jwt-token-for-testing') || 'fake-jwt-token-for-testing';
+
+        // Realizar fetch con headers de autenticación
+        const response = await fetch('http://localhost:3001/api/productos/plantilla/premium', {
+            method: 'GET',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+            }
+        });
+
+        if (!response.ok) {
+            throw new Error(`Error ${response.status}: ${response.statusText}`);
+        }
+
+        // Convertir respuesta a blob
+        const blob = await response.blob();
+
+        // Crear enlace de descarga con el blob
+        const url = window.URL.createObjectURL(blob);
         const link = document.createElement('a');
-        link.href = 'http://localhost:3001/api/productos/plantilla/premium';
+        link.href = url;
         link.download = 'Plantilla_Productos_CRM_ERP_Premium.xlsx';
-        link.target = '_blank'; // Abrir en nueva pestaña como fallback
-        
+
         // Agregar al DOM, hacer clic, y remover
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
-        
-        console.log('Descarga de plantilla iniciada desde el backend');
+
+        // Limpiar el URL del blob
+        window.URL.revokeObjectURL(url);
+
+        console.log('Descarga de plantilla completada exitosamente');
     } catch (error) {
         console.error('Error al descargar plantilla:', error);
         setError('Error al generar la plantilla. Intente nuevamente.');

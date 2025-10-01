@@ -1,10 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  Package, TrendingUp, DollarSign, BarChart3, Award, 
+import {
+  Package, TrendingUp, DollarSign, BarChart3, Award,
   Download, Calendar, RefreshCw, AlertCircle, Star,
-  ShoppingCart, Target, Users, Activity, Box
+  ShoppingCart, Target, Users, Activity, Box, Bell,
+  Lightbulb, TrendingDown, Zap, Eye, CheckCircle
 } from 'lucide-react';
 import ventasService from '../services/ventasService';
+import { formatearMoneda, formatearCantidad } from '../utils/currency';
+import PeriodSelectorAdvanced from './ventas/PeriodSelector/PeriodSelectorAdvanced';
 
 const ABCProductos = ({ usuarioActual }) => {
   const [datos, setDatos] = useState(null);
@@ -36,10 +39,7 @@ const ABCProductos = ({ usuarioActual }) => {
     }
   };
 
-  const formatearMoneda = (valor) => {
-    if (!valor || valor === 0) return 'S/ 0.00';
-    return `S/ ${parseFloat(valor).toLocaleString('es-PE', { minimumFractionDigits: 2 })}`;
-  };
+  // Función de formateo movida a utils/currency.js
 
   const obtenerTextoSegunPeriodo = () => {
     switch(periodo) {
@@ -61,13 +61,240 @@ const ABCProductos = ({ usuarioActual }) => {
 
   const obtenerProductosParaVista = () => {
     if (!datos) return [];
-    
+
     switch(vistaActiva) {
       case 'clase-a': return datos.productos_clase_a || [];
       case 'clase-b': return datos.productos_clase_b || [];
       case 'clase-c': return datos.productos_clase_c || [];
       default: return datos.todos_productos || [];
     }
+  };
+
+  // 📊 ANÁLISIS INTELIGENTE ABC
+  const generarAnalisisInteligente = () => {
+    if (!datos || !datos.todos_productos) return null;
+
+    const productos = datos.todos_productos;
+    const productosA = datos.productos_clase_a || [];
+    const productosB = datos.productos_clase_b || [];
+    const productosC = datos.productos_clase_c || [];
+
+    const analisis = {
+      alertas: [],
+      recomendaciones: [],
+      insights: []
+    };
+
+    // 🚨 ALERTAS DE PRODUCTOS DE BAJA ROTACIÓN
+    const productosBajaRotacion = productosC.filter(p =>
+      parseInt(p.veces_vendido) <= 2 && parseFloat(p.ingresos_totales) < 500
+    );
+
+    if (productosBajaRotacion.length > 0) {
+      analisis.alertas.push({
+        tipo: 'baja_rotacion',
+        nivel: 'warning',
+        titulo: `${productosBajaRotacion.length} producto(s) con baja rotación`,
+        descripcion: 'Productos Clase C con pocas ventas y bajos ingresos',
+        productos: productosBajaRotacion.length,
+        accion: 'Revisar estrategia de pricing o descontinuar'
+      });
+    }
+
+    // 💎 PRODUCTOS ESTRELLA (Clase A con alta frecuencia)
+    const productosEstrella = productosA.filter(p =>
+      parseInt(p.veces_vendido) >= 5 && parseFloat(p.porcentaje_ingresos) >= 20
+    );
+
+    if (productosEstrella.length > 0) {
+      analisis.insights.push({
+        tipo: 'productos_estrella',
+        titulo: `${productosEstrella.length} producto(s) estrella identificado(s)`,
+        descripcion: 'Productos Clase A con alta frecuencia de venta',
+        valor: productosEstrella.reduce((sum, p) => sum + parseFloat(p.ingresos_totales), 0),
+        accion: 'Potenciar marketing y asegurar stock'
+      });
+    }
+
+    // 📈 OPORTUNIDADES CLASE B
+    const oportunidadesB = productosB.filter(p =>
+      parseFloat(p.precio_promedio) > 200 && parseInt(p.veces_vendido) >= 3
+    );
+
+    if (oportunidadesB.length > 0) {
+      analisis.recomendaciones.push({
+        tipo: 'potencial_clase_a',
+        titulo: `${oportunidadesB.length} producto(s) con potencial Clase A`,
+        descripcion: 'Productos Clase B con buen precio y rotación',
+        accion: 'Aumentar esfuerzos de venta para promover a Clase A'
+      });
+    }
+
+    // 🎯 CONCENTRACIÓN DE VENTAS
+    const totalIngresos = productos.reduce((sum, p) => sum + parseFloat(p.ingresos_totales), 0);
+    const ingresosA = productosA.reduce((sum, p) => sum + parseFloat(p.ingresos_totales), 0);
+    const concentracion = (ingresosA / totalIngresos) * 100;
+
+    if (concentracion > 85) {
+      analisis.alertas.push({
+        tipo: 'alta_concentracion',
+        nivel: 'info',
+        titulo: 'Alta concentración en productos Clase A',
+        descripcion: `${concentracion.toFixed(1)}% de ingresos en ${productosA.length} producto(s)`,
+        accion: 'Evaluar diversificación de cartera'
+      });
+    }
+
+    return analisis;
+  };
+
+  // 🎨 MATRIZ ABC VISUAL
+  const MatrizABCVisual = () => {
+    if (!datos || !datos.todos_productos) return null;
+
+    const productos = datos.todos_productos;
+    const maxIngresos = Math.max(...productos.map(p => parseFloat(p.ingresos_totales)));
+    const maxCantidad = Math.max(...productos.map(p => parseFloat(p.cantidad_total)));
+
+    return (
+      <div className="bg-white rounded-lg shadow p-6">
+        <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+          <BarChart3 className="h-5 w-5 mr-2 text-blue-500" />
+          Matriz ABC Visual
+        </h3>
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Clase A */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <h4 className="font-medium text-green-700 flex items-center">
+                <div className="w-3 h-3 bg-green-500 rounded-full mr-2"></div>
+                Clase A - Alto Valor
+              </h4>
+              <span className="text-sm text-gray-500">{datos.productos_clase_a?.length || 0} productos</span>
+            </div>
+
+            <div className="space-y-2 max-h-64 overflow-y-auto">
+              {(datos.productos_clase_a || []).map((producto, index) => (
+                <div key={producto.producto_id} className="bg-green-50 border border-green-200 rounded-lg p-3">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm font-medium text-green-800 truncate">
+                      {producto.codigo}
+                    </span>
+                    <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full">
+                      {producto.porcentaje_ingresos}%
+                    </span>
+                  </div>
+                  <div className="text-xs text-green-700 mb-2 truncate" title={producto.descripcion}>
+                    {producto.descripcion}
+                  </div>
+                  <div className="text-xs text-green-600 space-y-1">
+                    <div className="flex justify-between">
+                      <span>Ingresos:</span>
+                      <span className="font-medium">{formatearMoneda(producto.ingresos_totales)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Cantidad:</span>
+                      <span>{formatearCantidad(producto.cantidad_total, producto.unidad_medida)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Ventas:</span>
+                      <span>{producto.veces_vendido}</span>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Clase B */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <h4 className="font-medium text-yellow-700 flex items-center">
+                <div className="w-3 h-3 bg-yellow-500 rounded-full mr-2"></div>
+                Clase B - Valor Medio
+              </h4>
+              <span className="text-sm text-gray-500">{datos.productos_clase_b?.length || 0} productos</span>
+            </div>
+
+            <div className="space-y-2 max-h-64 overflow-y-auto">
+              {(datos.productos_clase_b || []).map((producto, index) => (
+                <div key={producto.producto_id} className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm font-medium text-yellow-800 truncate">
+                      {producto.codigo}
+                    </span>
+                    <span className="text-xs bg-yellow-100 text-yellow-700 px-2 py-1 rounded-full">
+                      {producto.porcentaje_ingresos}%
+                    </span>
+                  </div>
+                  <div className="text-xs text-yellow-700 mb-2 truncate" title={producto.descripcion}>
+                    {producto.descripcion}
+                  </div>
+                  <div className="text-xs text-yellow-600 space-y-1">
+                    <div className="flex justify-between">
+                      <span>Ingresos:</span>
+                      <span className="font-medium">{formatearMoneda(producto.ingresos_totales)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Cantidad:</span>
+                      <span>{formatearCantidad(producto.cantidad_total, producto.unidad_medida)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Ventas:</span>
+                      <span>{producto.veces_vendido}</span>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Clase C */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <h4 className="font-medium text-red-700 flex items-center">
+                <div className="w-3 h-3 bg-red-500 rounded-full mr-2"></div>
+                Clase C - Bajo Valor
+              </h4>
+              <span className="text-sm text-gray-500">{datos.productos_clase_c?.length || 0} productos</span>
+            </div>
+
+            <div className="space-y-2 max-h-64 overflow-y-auto">
+              {(datos.productos_clase_c || []).map((producto, index) => (
+                <div key={producto.producto_id} className="bg-red-50 border border-red-200 rounded-lg p-3">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm font-medium text-red-800 truncate">
+                      {producto.codigo}
+                    </span>
+                    <span className="text-xs bg-red-100 text-red-700 px-2 py-1 rounded-full">
+                      {producto.porcentaje_ingresos}%
+                    </span>
+                  </div>
+                  <div className="text-xs text-red-700 mb-2 truncate" title={producto.descripcion}>
+                    {producto.descripcion}
+                  </div>
+                  <div className="text-xs text-red-600 space-y-1">
+                    <div className="flex justify-between">
+                      <span>Ingresos:</span>
+                      <span className="font-medium">{formatearMoneda(producto.ingresos_totales)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Cantidad:</span>
+                      <span>{formatearCantidad(producto.cantidad_total, producto.unidad_medida)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Ventas:</span>
+                      <span>{producto.veces_vendido}</span>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
   };
 
   if (loading) {
@@ -118,35 +345,32 @@ const ABCProductos = ({ usuarioActual }) => {
           <div>
             <h1 className="text-2xl font-bold">ABC Análisis de Productos</h1>
             <p className="text-orange-100 mt-1">
-              Clasificación y rentabilidad de productos - {obtenerTextoSegunPeriodo()}
+              Clasificación y rentabilidad de productos
             </p>
-            <p className="text-sm text-orange-200 mt-1">
-              Período: {datos?.fechas?.fechaInicio} al {datos?.fechas?.fechaFin}
-            </p>
+            {datos?.fechas && (
+              <p className="text-sm text-orange-200 mt-1">
+                Período: {datos.fechas.fechaInicio} al {datos.fechas.fechaFin}
+              </p>
+            )}
           </div>
-          
-          <div className="flex items-center space-x-3">
-            <select
-              value={periodo}
-              onChange={(e) => setPeriodo(e.target.value)}
-              className="bg-white/10 text-white rounded-lg px-3 py-2 text-sm border border-white/20"
-            >
-              <option value="mes_actual">Este mes</option>
-              <option value="semana_actual">Esta semana</option>
-              <option value="hoy">Hoy</option>
-              <option value="trimestre_actual">Trimestre</option>
-            </select>
-            
-            <button
-              onClick={cargarDatos}
-              className="bg-white/10 hover:bg-white/20 px-4 py-2 rounded-lg transition-colors flex items-center"
-            >
-              <Download className="h-4 w-4 mr-2" />
-              Exportar
-            </button>
-          </div>
+
+          <button
+            onClick={cargarDatos}
+            className="bg-white/10 hover:bg-white/20 px-4 py-2 rounded-lg transition-colors flex items-center"
+          >
+            <Download className="h-4 w-4 mr-2" />
+            Exportar
+          </button>
         </div>
       </div>
+
+      {/* Selector de Período */}
+      <PeriodSelectorAdvanced
+        asesorId={usuarioActual?.id}
+        onPeriodChange={setPeriodo}
+        initialPeriod={periodo}
+        loading={loading}
+      />
 
       {/* Métricas Generales */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
@@ -346,10 +570,10 @@ const ABCProductos = ({ usuarioActual }) => {
                       </div>
                       <div>
                         <div className="text-sm font-medium text-gray-900">
-                          Producto #{producto.producto_id}
+                          {producto.descripcion || `Producto ${producto.codigo}`}
                         </div>
                         <div className="text-sm text-gray-500">
-                          {producto.asesores_que_vendieron} asesores vendieron
+                          {producto.codigo} • {producto.marca} • {producto.asesores_que_vendieron} asesores
                         </div>
                       </div>
                     </div>
@@ -363,7 +587,7 @@ const ABCProductos = ({ usuarioActual }) => {
                     {formatearMoneda(producto.ingresos_totales)}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    {producto.cantidad_total} unidades
+                    {formatearCantidad(producto.cantidad_total, producto.unidad_medida)}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                     {producto.veces_vendido} ventas
@@ -377,6 +601,127 @@ const ABCProductos = ({ usuarioActual }) => {
           </table>
         </div>
       </div>
+
+      {/* Matriz ABC Visual */}
+      <MatrizABCVisual />
+
+      {/* Análisis Inteligente y Alertas */}
+      {(() => {
+        const analisis = generarAnalisisInteligente();
+        if (!analisis) return null;
+
+        return (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Panel de Alertas */}
+            <div className="bg-white rounded-lg shadow">
+              <div className="p-6 border-b border-gray-200">
+                <h3 className="text-lg font-semibold text-gray-900 flex items-center">
+                  <Bell className="h-5 w-5 mr-2 text-red-500" />
+                  Alertas Automáticas
+                </h3>
+              </div>
+              <div className="p-6 space-y-4">
+                {analisis.alertas.length > 0 ? (
+                  analisis.alertas.map((alerta, index) => (
+                    <div key={index} className={`border-l-4 p-4 rounded-r-lg ${
+                      alerta.nivel === 'warning' ? 'border-yellow-400 bg-yellow-50' : 'border-blue-400 bg-blue-50'
+                    }`}>
+                      <div className="flex items-start">
+                        <AlertCircle className={`h-5 w-5 mt-0.5 mr-3 ${
+                          alerta.nivel === 'warning' ? 'text-yellow-500' : 'text-blue-500'
+                        }`} />
+                        <div className="flex-1">
+                          <h4 className={`font-medium ${
+                            alerta.nivel === 'warning' ? 'text-yellow-800' : 'text-blue-800'
+                          }`}>
+                            {alerta.titulo}
+                          </h4>
+                          <p className={`text-sm mt-1 ${
+                            alerta.nivel === 'warning' ? 'text-yellow-700' : 'text-blue-700'
+                          }`}>
+                            {alerta.descripcion}
+                          </p>
+                          <p className={`text-xs mt-2 font-medium ${
+                            alerta.nivel === 'warning' ? 'text-yellow-800' : 'text-blue-800'
+                          }`}>
+                            💡 {alerta.accion}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="text-center py-8 text-gray-500">
+                    <CheckCircle className="h-12 w-12 mx-auto mb-3 text-green-400" />
+                    <p>No hay alertas en este momento</p>
+                    <p className="text-sm">Todos los productos están funcionando bien</p>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Panel de Recomendaciones */}
+            <div className="bg-white rounded-lg shadow">
+              <div className="p-6 border-b border-gray-200">
+                <h3 className="text-lg font-semibold text-gray-900 flex items-center">
+                  <Lightbulb className="h-5 w-5 mr-2 text-yellow-500" />
+                  Recomendaciones Estratégicas
+                </h3>
+              </div>
+              <div className="p-6 space-y-4">
+                {analisis.recomendaciones.length > 0 ? (
+                  analisis.recomendaciones.map((rec, index) => (
+                    <div key={index} className="border-l-4 border-green-400 bg-green-50 p-4 rounded-r-lg">
+                      <div className="flex items-start">
+                        <Target className="h-5 w-5 text-green-500 mt-0.5 mr-3" />
+                        <div className="flex-1">
+                          <h4 className="font-medium text-green-800">{rec.titulo}</h4>
+                          <p className="text-sm text-green-700 mt-1">{rec.descripcion}</p>
+                          <p className="text-xs text-green-800 font-medium mt-2">
+                            🎯 {rec.accion}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="text-center py-8 text-gray-500">
+                    <Zap className="h-12 w-12 mx-auto mb-3 text-gray-400" />
+                    <p>No hay recomendaciones disponibles</p>
+                    <p className="text-sm">Tu cartera está optimizada</p>
+                  </div>
+                )}
+
+                {/* Insights Adicionales */}
+                {analisis.insights.length > 0 && (
+                  <div className="mt-6 pt-6 border-t border-gray-200">
+                    <h4 className="font-medium text-gray-900 mb-3 flex items-center">
+                      <Eye className="h-4 w-4 mr-2" />
+                      Insights de Rendimiento
+                    </h4>
+                    <div className="space-y-3">
+                      {analisis.insights.map((insight, index) => (
+                        <div key={index} className="border-l-4 border-purple-400 bg-purple-50 p-3 rounded-r-lg">
+                          <h5 className="font-medium text-purple-800 text-sm">{insight.titulo}</h5>
+                          <p className="text-xs text-purple-700 mt-1">{insight.descripcion}</p>
+                          {insight.valor && (
+                            <p className="text-xs text-purple-800 font-medium mt-1">
+                              💰 Valor: {formatearMoneda(insight.valor)}
+                            </p>
+                          )}
+                          <p className="text-xs text-purple-800 font-medium mt-1">
+                            📈 {insight.accion}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Performance de Asesores por Productos */}
       <div className="bg-white rounded-lg shadow">
@@ -394,7 +739,9 @@ const ABCProductos = ({ usuarioActual }) => {
                   <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-3">
                     <Users className="h-6 w-6 text-blue-600" />
                   </div>
-                  <h4 className="font-semibold text-gray-900">Asesor #{asesor.asesor_id}</h4>
+                  <h4 className="font-semibold text-gray-900">
+                    {asesor.nombre_completo || `Asesor #${asesor.asesor_id}`}
+                  </h4>
                   <div className="mt-3 space-y-2">
                     <div className="flex justify-between text-sm">
                       <span className="text-gray-600">Productos:</span>

@@ -63,31 +63,85 @@ const AnalisisInventario = ({ refreshTrigger, almacenesDisponibles }) => {
             setLoading(true);
             setError(null);
 
-            await Promise.all([
-                cargarRotacionInventario(),
-                cargarEficienciaOperativa(),
-                cargarAnalisisStockSeguridad(),
-                cargarMapaCalorAlmacenes(),
-                cargarTendenciasInventario()
-            ]);
+            // ✅ OPTIMIZACIÓN: Usar endpoint consolidado en lugar de 5 llamadas separadas
+            const respuesta = await almacenService.obtenerAnalisisConsolidado(selectedPeriod);
+
+            if (respuesta.success && respuesta.data) {
+                // Asignar datos consolidados a cada estado
+                setRotacionData(Array.isArray(respuesta.data.rotacion) ? respuesta.data.rotacion : []);
+                setEficienciaData(respuesta.data.eficiencia || {
+                    movimientos_por_dia: [],
+                    metricas_generales: {
+                        promedio_movimientos_dia: 0,
+                        promedio_usuarios_activos: 0,
+                        eficiencia_promedio: 0,
+                        tiempo_pico: '10:00-12:00',
+                        dia_mas_activo: 'Lunes'
+                    }
+                });
+                setStockSeguridad(respuesta.data.stock_seguridad || {
+                    distribucion: [],
+                    productos_criticos: [],
+                    recomendaciones: {
+                        ajustar_minimos: 0,
+                        incrementar_stock: 0,
+                        revisar_demanda: 0,
+                        productos_obsoletos: 0
+                    }
+                });
+                setMapaCalor(Array.isArray(respuesta.data.mapa_calor) ? respuesta.data.mapa_calor : []);
+                setTendenciasInventario(Array.isArray(respuesta.data.tendencias) ? respuesta.data.tendencias : []);
+
+                // Mostrar información de performance si está disponible
+                if (respuesta.performance?.optimizado) {
+                    console.log('✅ Análisis optimizado:', respuesta.performance);
+                } else if (respuesta.fallback) {
+                    console.log('⚠️ Usando fallback:', respuesta.performance);
+                }
+            } else {
+                console.error('Error en análisis consolidado, usando fallback:', respuesta.error);
+                // Solo usar fallback si realmente falla el endpoint
+                await Promise.all([
+                    cargarRotacionInventario(),
+                    cargarEficienciaOperativa(),
+                    cargarAnalisisStockSeguridad(),
+                    cargarMapaCalorAlmacenes(),
+                    cargarTendenciasInventario()
+                ]);
+            }
 
         } catch (err) {
             setError('Error cargando análisis: ' + err.message);
             console.error('Error:', err);
+
+            // Fallback a métodos individuales en caso de error total
+            try {
+                await Promise.all([
+                    cargarRotacionInventario(),
+                    cargarEficienciaOperativa(),
+                    cargarAnalisisStockSeguridad(),
+                    cargarMapaCalorAlmacenes(),
+                    cargarTendenciasInventario()
+                ]);
+            } catch (fallbackErr) {
+                console.error('Error en fallback:', fallbackErr);
+            }
         } finally {
             setLoading(false);
         }
     };
 
-    // ✅ 1. ROTACIÓN DE INVENTARIO - REFACTORIZADA
+    // ✅ 1. ROTACIÓN DE INVENTARIO - REFACTORIZADA CON VALIDACIÓN DEFENSIVA
     const cargarRotacionInventario = async () => {
         setLoadingStates(prev => ({ ...prev, rotacion: true }));
-        
+
         try {
             const respuesta = await almacenService.obtenerRotacionInventario(selectedPeriod);
-            
-            if (respuesta.success) {
-                setRotacionData(respuesta.data);
+
+            if (respuesta.success && respuesta.data) {
+                // VALIDACIÓN DEFENSIVA: Asegurar que data es array
+                const data = Array.isArray(respuesta.data) ? respuesta.data : [];
+                setRotacionData(data);
             } else {
                 console.error('Error rotación:', respuesta.error);
                 setRotacionData([]);
@@ -100,15 +154,26 @@ const AnalisisInventario = ({ refreshTrigger, almacenesDisponibles }) => {
         }
     };
 
-    // ✅ 2. EFICIENCIA OPERATIVA - REFACTORIZADA
+    // ✅ 2. EFICIENCIA OPERATIVA - REFACTORIZADA CON VALIDACIÓN DEFENSIVA
     const cargarEficienciaOperativa = async () => {
         setLoadingStates(prev => ({ ...prev, eficiencia: true }));
-        
+
         try {
             const respuesta = await almacenService.obtenerEficienciaOperativa(selectedPeriod);
-            
-            if (respuesta.success) {
-                setEficienciaData(respuesta.data);
+
+            if (respuesta.success && respuesta.data) {
+                // VALIDACIÓN DEFENSIVA: Asegurar estructura correcta
+                const data = {
+                    movimientos_por_dia: Array.isArray(respuesta.data.movimientos_por_dia) ? respuesta.data.movimientos_por_dia : [],
+                    metricas_generales: respuesta.data.metricas_generales || {
+                        promedio_movimientos_dia: 0,
+                        promedio_usuarios_activos: 0,
+                        eficiencia_promedio: 0,
+                        tiempo_pico: '10:00-12:00',
+                        dia_mas_activo: 'Lunes'
+                    }
+                };
+                setEficienciaData(data);
             } else {
                 console.error('Error eficiencia:', respuesta.error);
                 setEficienciaData({
@@ -199,15 +264,17 @@ const AnalisisInventario = ({ refreshTrigger, almacenesDisponibles }) => {
         }
     };
 
-    // ✅ 5. TENDENCIAS - REFACTORIZADA
+    // ✅ 5. TENDENCIAS - REFACTORIZADA CON VALIDACIÓN DEFENSIVA
     const cargarTendenciasInventario = async () => {
         setLoadingStates(prev => ({ ...prev, tendencias: true }));
-        
+
         try {
             const respuesta = await almacenService.obtenerTendenciasInventario(selectedPeriod);
-            
-            if (respuesta.success) {
-                setTendenciasInventario(respuesta.data);
+
+            if (respuesta.success && respuesta.data) {
+                // VALIDACIÓN DEFENSIVA: Asegurar que data es array
+                const data = Array.isArray(respuesta.data) ? respuesta.data : [];
+                setTendenciasInventario(data);
             } else {
                 console.error('Error tendencias:', respuesta.error);
                 setTendenciasInventario([]);
@@ -352,7 +419,11 @@ const AnalisisInventario = ({ refreshTrigger, almacenesDisponibles }) => {
                         <div className="ml-4">
                             <p className="text-sm font-medium text-gray-500">Valor Total</p>
                             <p className="text-2xl font-bold text-gray-900">
-                                {formatearMoneda(tendenciasInventario?.[tendenciasInventario.length - 1]?.valor_inventario || 0)}
+                                {formatearMoneda(
+                                    Array.isArray(tendenciasInventario) && tendenciasInventario.length > 0
+                                        ? tendenciasInventario[tendenciasInventario.length - 1]?.valor_inventario || 0
+                                        : 0
+                                )}
                             </p>
                         </div>
                     </div>
@@ -373,7 +444,7 @@ const AnalisisInventario = ({ refreshTrigger, almacenesDisponibles }) => {
                         </div>
                     ) : (
                         <ResponsiveContainer width="100%" height={300}>
-                            <BarChart data={rotacionData}>
+                            <BarChart data={Array.isArray(rotacionData) ? rotacionData : []}>
                                 <CartesianGrid strokeDasharray="3 3" />
                                 <XAxis 
                                     dataKey="almacen" 
@@ -442,7 +513,7 @@ const AnalisisInventario = ({ refreshTrigger, almacenesDisponibles }) => {
                         </div>
                     ) : (
                         <ResponsiveContainer width="100%" height={300}>
-                            <LineChart data={eficienciaData?.movimientos_por_dia}>
+                            <LineChart data={Array.isArray(eficienciaData?.movimientos_por_dia) ? eficienciaData.movimientos_por_dia : []}>
                                 <CartesianGrid strokeDasharray="3 3" />
                                 <XAxis 
                                     dataKey="fecha" 
@@ -489,7 +560,7 @@ const AnalisisInventario = ({ refreshTrigger, almacenesDisponibles }) => {
                         </div>
                     ) : (
                         <ResponsiveContainer width="100%" height={300}>
-                            <AreaChart data={tendenciasInventario}>
+                            <AreaChart data={Array.isArray(tendenciasInventario) ? tendenciasInventario : []}>
                                 <CartesianGrid strokeDasharray="3 3" />
                                 <XAxis dataKey="semana" />
                                 <YAxis tickFormatter={(value) => formatearMoneda(value)} />

@@ -1,12 +1,9 @@
 // ============================================
-// CONVERSION SERVICE UNIFICADO 
+// CONVERSION SERVICE UNIFICADO - MIGRADO A POSTGRESQL
 // Funciona para: ProspectosController + SeguimientosController
 // ============================================
 
-const { createClient } = require('@supabase/supabase-js');
-const supabaseUrl = process.env.SUPABASE_URL;
-const supabaseKey = process.env.SUPABASE_ANON_KEY;
-const supabase = createClient(supabaseUrl, supabaseKey);
+const { query } = require('../../../config/database');
 
 // Función para fechas Peru
 const obtenerFechaPeruISO = () => {
@@ -31,6 +28,7 @@ function parseHistorialSeguro(historial) {
     
     return [];
 }
+
 // ============================================
 // CONVERSIÓN UNIFICADA
 // ============================================
@@ -50,22 +48,21 @@ const convertirProspectoAVenta = async (config) => {
             throw new Error('prospecto_id y asesor_id son obligatorios');
         }
 
-        // Iniciar transacción
-        const { error: beginError } = await supabase.rpc('begin_transaction');
-        if (beginError) console.log('Warning: Manual transaction control not available');
+        // Iniciar transacción PostgreSQL
+        await query('BEGIN');
 
         try {
             // 1. Obtener datos completos del prospecto
-            const { data: prospecto, error: errorProspecto } = await supabase
-                .from('prospectos')
-                .select('*')
-                .eq('id', prospecto_id)
-                .eq('activo', true)
-                .single();
+            const prospectoResult = await query(
+                'SELECT * FROM prospectos WHERE id = $1 AND activo = $2',
+                [prospecto_id, true]
+            );
 
-            if (errorProspecto || !prospecto) {
+            if (!prospectoResult.rows || prospectoResult.rows.length === 0) {
                 throw new Error('Prospecto no encontrado o inactivo');
             }
+
+            const prospecto = prospectoResult.rows[0];
 
             // 2. Verificar que no esté ya convertido
             if (prospecto.convertido_venta === true) {
@@ -73,19 +70,18 @@ const convertirProspectoAVenta = async (config) => {
                 
                 // Solo buscar venta si venta_id no es null
                 if (prospecto.venta_id && prospecto.venta_id !== null) {
-                    const result = await supabase
-                        .from('ventas')
-                        .select('id, codigo')
-                        .eq('id', prospecto.venta_id)
-                        .single();
+                    const ventaResult = await query(
+                        'SELECT id, codigo FROM ventas WHERE id = $1',
+                        [prospecto.venta_id]
+                    );
                     
-                    ventaExistente = result.data;
+                    ventaExistente = ventaResult.rows[0] || null;
                 } else {
                     // Prospecto marcado como convertido pero sin venta - resetear y continuar
-                    await supabase
-                        .from('prospectos')
-                        .update({ convertido_venta: false })
-                        .eq('id', prospecto_id);
+                    await query(
+                        'UPDATE prospectos SET convertido_venta = $1 WHERE id = $2',
+                        [false, prospecto_id]
+                    );
                         
                     // Actualizar el objeto prospecto en memoria
                     prospecto.convertido_venta = false;
@@ -93,6 +89,7 @@ const convertirProspectoAVenta = async (config) => {
                 }
 
                 if (ventaExistente) {
+                    await query('ROLLBACK');
                     return {
                         success: false,
                         error: `Prospecto ya convertido`,
@@ -178,36 +175,54 @@ const convertirProspectoAVenta = async (config) => {
                 activo: true
             };
 
-            const { data: nuevaVenta, error: errorVenta } = await supabase
-                .from('ventas')
-                .insert([ventaData])
-                .select()
-                .single();
+            const insertVentaQuery = `
+                INSERT INTO ventas (
+                    codigo, prospecto_id, asesor_id, nombre_cliente, apellido_cliente, 
+                    cliente_empresa, cliente_email, cliente_telefono, valor_total, valor_final,
+                    descuento_porcentaje, descuento_monto, moneda, canal_origen, canal_contacto,
+                    fuente_conversion, seguimiento_id, estado_detallado, probabilidad_cierre,
+                    fecha_creacion, fecha_venta, created_at, updated_at, created_by, updated_by,
+                    ciudad, departamento, distrito, notas_internas, tipo_venta, es_venta_presencial, activo
+                ) VALUES (
+                    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
+                    $11, $12, $13, $14, $15, $16, $17, $18, $19, $20,
+                    $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32
+                ) RETURNING *
+            `;
 
-            if (errorVenta) {
-                throw errorVenta;
+            const ventaValues = [
+                ventaData.codigo, ventaData.prospecto_id, ventaData.asesor_id, 
+                ventaData.nombre_cliente, ventaData.apellido_cliente, ventaData.cliente_empresa,
+                ventaData.cliente_email, ventaData.cliente_telefono, ventaData.valor_total,
+                ventaData.valor_final, ventaData.descuento_porcentaje, ventaData.descuento_monto,
+                ventaData.moneda, ventaData.canal_origen, ventaData.canal_contacto,
+                ventaData.fuente_conversion, ventaData.seguimiento_id, ventaData.estado_detallado,
+                ventaData.probabilidad_cierre, ventaData.fecha_creacion, ventaData.fecha_venta,
+                ventaData.created_at, ventaData.updated_at, ventaData.created_by, 
+                ventaData.updated_by, ventaData.ciudad, ventaData.departamento, 
+                ventaData.distrito, ventaData.notas_internas, ventaData.tipo_venta, 
+                ventaData.es_venta_presencial, ventaData.activo
+            ];
+
+            const nuevaVentaResult = await query(insertVentaQuery, ventaValues);
+            
+            if (!nuevaVentaResult.rows || nuevaVentaResult.rows.length === 0) {
+                throw new Error('Venta creada pero sin datos devueltos');
             }
+
+            const nuevaVenta = nuevaVentaResult.rows[0];
 
             if (!nuevaVenta || !nuevaVenta.id) {
                 throw new Error('Venta creada pero sin ID válido');
             }
 
             // 7. Actualizar prospecto
-            const { error: errorUpdateProspecto } = await supabase
-                .from('prospectos')
-                .update({
-                    convertido_venta: true,
-                    venta_id: nuevaVenta.id,
-                    fecha_cierre: fechaActual,
-                    estado: 'Cerrado',
-                    fecha_ultima_actualizacion: fechaActual,
-                    updated_at: fechaActual
-                })
-                .eq('id', prospecto_id);
-
-            if (errorUpdateProspecto) {
-                throw errorUpdateProspecto;
-            }
+            await query(`
+                UPDATE prospectos 
+                SET convertido_venta = $1, venta_id = $2, fecha_cierre = $3, 
+                    estado = $4, fecha_ultima_actualizacion = $5, updated_at = $6
+                WHERE id = $7
+            `, [true, nuevaVenta.id, fechaActual, 'Cerrado', fechaActual, fechaActual, prospecto_id]);
 
             // 8. Crear registro de historial
             const historialActual = parseHistorialSeguro(prospecto.historial_interacciones);
@@ -219,16 +234,14 @@ const convertirProspectoAVenta = async (config) => {
                 venta_id: nuevaVenta.id
             };
 
-            await supabase
-                .from('prospectos')
-                .update({
-                    historial_interacciones: [...historialActual, nuevaInteraccion]
-                })
-                .eq('id', prospecto_id);
+            await query(`
+                UPDATE prospectos 
+                SET historial_interacciones = $1
+                WHERE id = $2
+            `, [JSON.stringify([...historialActual, nuevaInteraccion]), prospecto_id]);
 
-            // Commit
-            const { error: commitError } = await supabase.rpc('commit_transaction');
-            if (commitError) console.log('Warning: Manual commit not available');
+            // Commit de la transacción
+            await query('COMMIT');
 
             // Respuesta
             return {
@@ -255,9 +268,8 @@ const convertirProspectoAVenta = async (config) => {
             };
 
         } catch (error) {
-            // Rollback
-            const { error: rollbackError } = await supabase.rpc('rollback_transaction');
-            if (rollbackError) console.log('Warning: Manual rollback not available');
+            // Rollback en caso de error
+            await query('ROLLBACK');
             throw error;
         }
 
@@ -279,16 +291,17 @@ const generarCodigoVenta = async () => {
         const año = fecha.getFullYear().toString().slice(-2);
         const mes = (fecha.getMonth() + 1).toString().padStart(2, '0');
         
-        const { data, error } = await supabase
-            .from('ventas')
-            .select('codigo')
-            .like('codigo', `VT${año}${mes}%`)
-            .order('created_at', { ascending: false })
-            .limit(1);
+        const result = await query(`
+            SELECT codigo 
+            FROM ventas 
+            WHERE codigo LIKE $1 
+            ORDER BY created_at DESC 
+            LIMIT 1
+        `, [`VT${año}${mes}%`]);
 
         let siguienteNumero = 1;
-        if (data && data.length > 0) {
-            const ultimoCodigo = data[0].codigo;
+        if (result.rows && result.rows.length > 0) {
+            const ultimoCodigo = result.rows[0].codigo;
             const ultimoNumero = parseInt(ultimoCodigo.slice(-4));
             if (!isNaN(ultimoNumero)) {
                 siguienteNumero = ultimoNumero + 1;
@@ -344,4 +357,4 @@ module.exports = {
     generarCodigoVenta
 };
 
-console.log('✅ ConversionService unificado cargado');
+console.log('✅ ConversionService unificado cargado (PostgreSQL)');

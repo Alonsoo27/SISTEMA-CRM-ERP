@@ -10,10 +10,8 @@ const router = express.Router();
 const VentasController = require('../controllers/VentasController');
 const ReportesVentasService = require('../services/ReportesVentasService');
 
-// Middleware
-const authMiddleware = require('../../../middleware/authMiddleware');
-// ✅ CORRECCIÓN: Importar funciones específicas en lugar de roleMiddleware directo
-const { requireRole, requireAdmin } = require('../../../middleware/roleMiddleware');
+// Middleware empresarial unificado
+const { authenticateToken, requireRole } = require('../../../middleware/auth');
 
 // ============================================
 // DASHBOARDS EJECUTIVOS
@@ -24,9 +22,9 @@ const { requireRole, requireAdmin } = require('../../../middleware/roleMiddlewar
  * @desc    Dashboard ejecutivo principal
  * @access  Private (Solo Gerentes y Administradores)
  */
-router.get('/dashboard/ejecutivo', 
-    authMiddleware,
-    requireRole(['gerente', 'administrador']),
+router.get('/dashboard/ejecutivo',
+    authenticateToken,
+    requireRole(['GERENTE', 'ADMIN', 'SUPER_ADMIN']),
     async (req, res) => {
         try {
             const reporte = await ReportesVentasService.generarDashboardEjecutivo(req.query);
@@ -43,7 +41,7 @@ router.get('/dashboard/ejecutivo',
  * @access  Private (Solo el asesor o sus supervisores)
  */
 router.get('/dashboard/asesor/:asesor_id', 
-    authMiddleware, 
+    authenticateToken, 
     VentasController.dashboard
 );
 
@@ -53,8 +51,8 @@ router.get('/dashboard/asesor/:asesor_id',
  * @access  Private (Solo Gerentes)
  */
 router.get('/dashboard/equipo/:gerente_id', 
-    authMiddleware,
-    requireRole(['gerente', 'administrador']),
+    authenticateToken,
+    requireRole(['GERENTE', 'ADMIN', 'SUPER_ADMIN']),
     async (req, res) => {
         try {
             const reporte = await ReportesVentasService.dashboardEquipo(req.params.gerente_id, req.query);
@@ -76,7 +74,7 @@ router.get('/dashboard/equipo/:gerente_id',
  * @params  ?periodo, ?fecha_desde, ?fecha_hasta, ?asesor_id
  */
 router.get('/ventas/resumen', 
-    authMiddleware,
+    authenticateToken,
     async (req, res) => {
         try {
             const reporte = await ReportesVentasService.resumenVentas(req.query);
@@ -93,8 +91,8 @@ router.get('/ventas/resumen',
  * @access  Private (Gerentes y Administradores)
  */
 router.get('/ventas/pipeline', 
-    authMiddleware,
-    requireRole(['gerente', 'administrador']),
+    authenticateToken,
+    requireRole(['GERENTE', 'ADMIN', 'SUPER_ADMIN']),
     async (req, res) => {
         try {
             const reporte = await ReportesVentasService.reportePipeline(req.query);
@@ -111,8 +109,8 @@ router.get('/ventas/pipeline',
  * @access  Private (Gerentes y Administradores)
  */
 router.get('/ventas/conversion', 
-    authMiddleware,
-    requireRole(['gerente', 'administrador']),
+    authenticateToken,
+    requireRole(['GERENTE', 'ADMIN', 'SUPER_ADMIN']),
     async (req, res) => {
         try {
             const reporte = await ReportesVentasService.reporteConversion(req.query);
@@ -129,8 +127,8 @@ router.get('/ventas/conversion',
  * @access  Private (Gerentes y Administradores)
  */
 router.get('/ventas/tendencias', 
-    authMiddleware,
-    requireRole(['gerente', 'administrador']),
+    authenticateToken,
+    requireRole(['GERENTE', 'ADMIN', 'SUPER_ADMIN']),
     async (req, res) => {
         try {
             const reporte = await ReportesVentasService.reporteTendencias(req.query);
@@ -151,8 +149,8 @@ router.get('/ventas/tendencias',
  * @access  Private (Gerentes y Administradores)
  */
 router.get('/performance/asesores', 
-    authMiddleware,
-    requireRole(['gerente', 'administrador']),
+    authenticateToken,
+    requireRole(['GERENTE', 'ADMIN', 'SUPER_ADMIN']),
     async (req, res) => {
         try {
             const reporte = await ReportesVentasService.rankingAsesores(req.query);
@@ -169,8 +167,8 @@ router.get('/performance/asesores',
  * @access  Private (Gerentes y Administradores)
  */
 router.get('/performance/productos', 
-    authMiddleware,
-    requireRole(['gerente', 'administrador']),
+    authenticateToken,
+    requireRole(['GERENTE', 'ADMIN', 'SUPER_ADMIN']),
     async (req, res) => {
         try {
             const reporte = await ReportesVentasService.performanceProductos(req.query);
@@ -187,8 +185,8 @@ router.get('/performance/productos',
  * @access  Private (Gerentes y Administradores)
  */
 router.get('/performance/regiones', 
-    authMiddleware,
-    requireRole(['gerente', 'administrador']),
+    authenticateToken,
+    requireRole(['GERENTE', 'ADMIN', 'SUPER_ADMIN']),
     async (req, res) => {
         try {
             const reporte = await ReportesVentasService.performanceRegiones(req.query);
@@ -209,8 +207,8 @@ router.get('/performance/regiones',
  * @access  Private (Gerentes y Administradores)
  */
 router.get('/predictivos/proyecciones', 
-    authMiddleware,
-    requireRole(['gerente', 'administrador']),
+    authenticateToken,
+    requireRole(['GERENTE', 'ADMIN', 'SUPER_ADMIN']),
     async (req, res) => {
         try {
             const reporte = await ReportesVentasService.proyeccionesVentas(req.query);
@@ -227,8 +225,8 @@ router.get('/predictivos/proyecciones',
  * @access  Private (Gerentes y Administradores)
  */
 router.get('/predictivos/metas', 
-    authMiddleware,
-    requireRole(['gerente', 'administrador']),
+    authenticateToken,
+    requireRole(['GERENTE', 'ADMIN', 'SUPER_ADMIN']),
     async (req, res) => {
         try {
             const reporte = await ReportesVentasService.prediccionMetas(req.query);
@@ -245,8 +243,8 @@ router.get('/predictivos/metas',
  * @access  Private (Gerentes y Administradores)
  */
 router.get('/predictivos/demanda', 
-    authMiddleware,
-    requireRole(['gerente', 'administrador']),
+    authenticateToken,
+    requireRole(['GERENTE', 'ADMIN', 'SUPER_ADMIN']),
     async (req, res) => {
         try {
             const reporte = await ReportesVentasService.prediccionDemanda(req.query);
@@ -267,8 +265,8 @@ router.get('/predictivos/demanda',
  * @access  Private (Gerentes, Administradores, Finanzas)
  */
 router.get('/financieros/ingresos', 
-    authMiddleware,
-    requireRole(['gerente', 'administrador', 'finanzas']),
+    authenticateToken,
+    requireRole(['GERENTE', 'ADMIN', 'SUPER_ADMIN']),
     async (req, res) => {
         try {
             const reporte = await ReportesVentasService.reporteIngresos(req.query);
@@ -285,8 +283,8 @@ router.get('/financieros/ingresos',
  * @access  Private (Gerentes, Administradores, Finanzas)
  */
 router.get('/financieros/comisiones', 
-    authMiddleware,
-    requireRole(['gerente', 'administrador', 'finanzas']),
+    authenticateToken,
+    requireRole(['GERENTE', 'ADMIN', 'SUPER_ADMIN']),
     async (req, res) => {
         try {
             const reporte = await ReportesVentasService.reporteComisiones(req.query);
@@ -303,8 +301,8 @@ router.get('/financieros/comisiones',
  * @access  Private (Gerentes y Administradores)
  */
 router.get('/financieros/roi', 
-    authMiddleware,
-    requireRole(['gerente', 'administrador']),
+    authenticateToken,
+    requireRole(['GERENTE', 'ADMIN', 'SUPER_ADMIN']),
     async (req, res) => {
         try {
             const reporte = await ReportesVentasService.analisisROI(req.query);
@@ -325,8 +323,8 @@ router.get('/financieros/roi',
  * @access  Private (Gerentes y Administradores)
  */
 router.get('/customer-journey/funnel', 
-    authMiddleware,
-    requireRole(['gerente', 'administrador']),
+    authenticateToken,
+    requireRole(['GERENTE', 'ADMIN', 'SUPER_ADMIN']),
     async (req, res) => {
         try {
             const reporte = await ReportesVentasService.analisisFunnel(req.query);
@@ -343,8 +341,8 @@ router.get('/customer-journey/funnel',
  * @access  Private (Gerentes y Administradores)
  */
 router.get('/customer-journey/touchpoints', 
-    authMiddleware,
-    requireRole(['gerente', 'administrador']),
+    authenticateToken,
+    requireRole(['GERENTE', 'ADMIN', 'SUPER_ADMIN']),
     async (req, res) => {
         try {
             const reporte = await ReportesVentasService.analisisTouchpoints(req.query);
@@ -365,7 +363,7 @@ router.get('/customer-journey/touchpoints',
  * @access  Private (Según reporte solicitado)
  */
 router.post('/exportar/excel', 
-    authMiddleware,
+    authenticateToken,
     async (req, res) => {
         try {
             const { tipoReporte, parametros } = req.body;
@@ -386,7 +384,7 @@ router.post('/exportar/excel',
  * @access  Private (Según reporte solicitado)
  */
 router.post('/exportar/pdf', 
-    authMiddleware,
+    authenticateToken,
     async (req, res) => {
         try {
             const { tipoReporte, parametros } = req.body;
@@ -407,7 +405,7 @@ router.post('/exportar/pdf',
  * @access  Private (Según reporte solicitado)
  */
 router.post('/exportar/csv', 
-    authMiddleware,
+    authenticateToken,
     async (req, res) => {
         try {
             const { tipoReporte, parametros } = req.body;
@@ -432,8 +430,8 @@ router.post('/exportar/csv',
  * @access  Private (Gerentes y Administradores)
  */
 router.get('/programados', 
-    authMiddleware,
-    requireRole(['gerente', 'administrador']),
+    authenticateToken,
+    requireRole(['GERENTE', 'ADMIN', 'SUPER_ADMIN']),
     async (req, res) => {
         try {
             const reportes = await ReportesVentasService.listarReportesProgramados(req.user.id);
@@ -450,8 +448,8 @@ router.get('/programados',
  * @access  Private (Gerentes y Administradores)
  */
 router.post('/programados', 
-    authMiddleware,
-    requireRole(['gerente', 'administrador']),
+    authenticateToken,
+    requireRole(['GERENTE', 'ADMIN', 'SUPER_ADMIN']),
     async (req, res) => {
         try {
             const reporte = await ReportesVentasService.crearReporteProgramado(req.body, req.user.id);
@@ -468,7 +466,7 @@ router.post('/programados',
  * @access  Private (Solo creador o Administradores)
  */
 router.put('/programados/:id', 
-    authMiddleware,
+    authenticateToken,
     async (req, res) => {
         try {
             const reporte = await ReportesVentasService.actualizarReporteProgramado(req.params.id, req.body, req.user);
@@ -485,7 +483,7 @@ router.put('/programados/:id',
  * @access  Private (Solo creador o Administradores)
  */
 router.delete('/programados/:id', 
-    authMiddleware,
+    authenticateToken,
     async (req, res) => {
         try {
             await ReportesVentasService.eliminarReporteProgramado(req.params.id, req.user);
@@ -506,8 +504,8 @@ router.delete('/programados/:id',
  * @access  Private (Gerentes y Administradores)
  */
 router.post('/personalizado', 
-    authMiddleware,
-    requireRole(['gerente', 'administrador']),
+    authenticateToken,
+    requireRole(['GERENTE', 'ADMIN', 'SUPER_ADMIN']),
     async (req, res) => {
         try {
             const reporte = await ReportesVentasService.generarReportePersonalizado(req.body);
@@ -524,7 +522,7 @@ router.post('/personalizado',
  * @access  Private (Todos los usuarios autenticados)
  */
 router.get('/plantillas', 
-    authMiddleware,
+    authenticateToken,
     async (req, res) => {
         try {
             const plantillas = await ReportesVentasService.obtenerPlantillasReportes();
@@ -545,8 +543,8 @@ router.get('/plantillas',
  * @access  Private (Gerentes y Administradores)
  */
 router.get('/comparativos/periodos', 
-    authMiddleware,
-    requireRole(['gerente', 'administrador']),
+    authenticateToken,
+    requireRole(['GERENTE', 'ADMIN', 'SUPER_ADMIN']),
     async (req, res) => {
         try {
             const reporte = await ReportesVentasService.comparisonPeriodos(req.query);
@@ -563,8 +561,8 @@ router.get('/comparativos/periodos',
  * @access  Private (Gerentes y Administradores)
  */
 router.get('/comparativos/asesores', 
-    authMiddleware,
-    requireRole(['gerente', 'administrador']),
+    authenticateToken,
+    requireRole(['GERENTE', 'ADMIN', 'SUPER_ADMIN']),
     async (req, res) => {
         try {
             const reporte = await ReportesVentasService.comparisonAsesores(req.query);
@@ -581,8 +579,8 @@ router.get('/comparativos/asesores',
  * @access  Private (Solo Administradores)
  */
 router.get('/comparativos/equipos', 
-    authMiddleware,
-    requireRole(['administrador']),
+    authenticateToken,
+    requireRole(['ADMIN', 'SUPER_ADMIN']),
     async (req, res) => {
         try {
             const reporte = await ReportesVentasService.comparisonEquipos(req.query);

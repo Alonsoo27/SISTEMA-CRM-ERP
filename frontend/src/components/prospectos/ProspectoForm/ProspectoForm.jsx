@@ -1,7 +1,7 @@
 // src/components/prospectos/ProspectoForm/ProspectoForm.jsx
 import React, { useState, useEffect } from 'react';
-import { 
-  X, Save, Phone, Mail, Building, MapPin, DollarSign, 
+import {
+  X, Save, Phone, Mail, Building, MapPin, DollarSign,
   Calendar, User, AlertCircle, CheckCircle, Plus, Trash2,
   Search, Package, Tag
 } from 'lucide-react';
@@ -9,6 +9,7 @@ import prospectosService from '../../../services/prospectosService';
 import productosService from '../../../services/productosService';
 import { useProspectoData } from '../../../hooks/useProspectoData';
 import { serializarProductosParaEnvio } from '../../../utils/productosUtils';
+import UbicacionesSelector from '../../ui/UbicacionesSelector';
 
 const ProspectoForm = ({ prospecto = null, onClose, onSave, mode = 'create' }) => {
   const prospectoNormalizado = useProspectoData(prospecto);
@@ -56,7 +57,7 @@ const ProspectoForm = ({ prospecto = null, onClose, onSave, mode = 'create' }) =
     { codigo: 'Email', nombre: 'Correo Electrónico', icono: '📧' }
   ];
 
-  // ✅ FUNCIÓN PARA PARSEAR PRODUCTOS LEGACY
+  // Función para parsear productos legacy
   const parsearProductosInteres = (productos) => {
     if (!productos) return [];
     
@@ -76,31 +77,70 @@ const ProspectoForm = ({ prospecto = null, onClose, onSave, mode = 'create' }) =
     return [];
   };
 
-useEffect(() => {
-    if (prospectoNormalizado && mode === 'edit') {
+  // Agregar esta función antes del useEffect existente
+const cargarDatosProspectoCompletos = async (prospectoId) => {
+  try {
+    setLoading(true);
+    const response = await prospectosService.obtenerPorId(prospectoId);
+    
+    if (response.success) {
+      const datos = response.data;
       setFormData({
-        nombre_cliente: prospectoNormalizado.nombre_cliente || '',
-        apellido_cliente: prospectoNormalizado.apellido_cliente || '',
-        telefono: prospectoNormalizado.telefono || '',
-        email: prospectoNormalizado.email || '',
-        empresa: prospectoNormalizado.empresa || '',
-        cargo: prospectoNormalizado.cargo || '',
-        direccion: prospectoNormalizado.direccion || '',
-        distrito: prospectoNormalizado.distrito || '',
-        ciudad: prospectoNormalizado.ciudad || 'Lima',
-        departamento: prospectoNormalizado.departamento || '',
-        canal_contacto: prospectoNormalizado.canal_contacto || 'WhatsApp',
-        productos_interes: prospectoNormalizado.productos_interes || [],
-        presupuesto_estimado: prospectoNormalizado.presupuesto_estimado || '',
-        valor_estimado: prospectoNormalizado.valor_estimado || '',
-        probabilidad_cierre: prospectoNormalizado.probabilidad_cierre || 50,
-        observaciones: prospectoNormalizado.observaciones || '',
-        fecha_seguimiento: prospectoNormalizado.fecha_seguimiento ? 
-          new Date(prospectoNormalizado.fecha_seguimiento).toISOString().slice(0, 16) : ''
+        nombre_cliente: datos.nombre_cliente || '',
+        apellido_cliente: datos.apellido_cliente || '',
+        telefono: datos.telefono || '',
+        email: datos.email || '',
+        empresa: datos.empresa || '',
+        cargo: datos.cargo || '',
+        direccion: datos.direccion || '',
+        distrito: datos.distrito || '',
+        ciudad: datos.ciudad || 'Lima',
+        departamento: datos.departamento || '',
+        canal_contacto: datos.canal_contacto || 'WhatsApp',
+        productos_interes: datos.productos_interes || [],
+        presupuesto_estimado: datos.presupuesto_estimado || '',
+        valor_estimado: datos.valor_estimado || '',
+        probabilidad_cierre: datos.probabilidad_cierre || 50,
+        observaciones: datos.observaciones || '',
+        fecha_seguimiento: datos.fecha_seguimiento ? 
+          new Date(datos.fecha_seguimiento).toISOString().slice(0, 16) : ''
       });
     }
-    cargarCanales();
-  }, [prospectoNormalizado, mode]);
+  } catch (error) {
+    console.error('Error cargando datos del prospecto:', error);
+  } finally {
+    setLoading(false);
+  }
+};
+
+  useEffect(() => {
+  if (mode === 'edit' && prospecto?.id) {
+    // Cargar datos frescos del servidor cuando se edita
+    cargarDatosProspectoCompletos(prospecto.id);
+  } else if (prospectoNormalizado && mode === 'edit') {
+    setFormData({
+      nombre_cliente: prospectoNormalizado.nombre_cliente || '',
+      apellido_cliente: prospectoNormalizado.apellido_cliente || '',
+      telefono: prospectoNormalizado.telefono || '',
+      email: prospectoNormalizado.email || '',
+      empresa: prospectoNormalizado.empresa || '',
+      cargo: prospectoNormalizado.cargo || '',
+      direccion: prospectoNormalizado.direccion || '',
+      distrito: prospectoNormalizado.distrito || '',
+      ciudad: prospectoNormalizado.ciudad || 'Lima',
+      departamento: prospectoNormalizado.departamento || '',
+      canal_contacto: prospectoNormalizado.canal_contacto || 'WhatsApp',
+      productos_interes: prospectoNormalizado.productos_interes || [],
+      presupuesto_estimado: prospectoNormalizado.presupuesto_estimado || '',
+      valor_estimado: prospectoNormalizado.valor_estimado || '',
+      probabilidad_cierre: prospectoNormalizado.probabilidad_cierre || 50,
+      observaciones: prospectoNormalizado.observaciones || '',
+      fecha_seguimiento: prospectoNormalizado.fecha_seguimiento ? 
+        new Date(prospectoNormalizado.fecha_seguimiento).toISOString().slice(0, 16) : ''
+    });
+  }
+  cargarCanales();
+}, [prospectoNormalizado, mode, prospecto?.id]);
 
   // Búsqueda de productos con debounce
   useEffect(() => {
@@ -116,7 +156,7 @@ useEffect(() => {
     return () => clearTimeout(timeoutId);
   }, [busquedaProducto]);
 
-  // ✅ CORREGIDO - useEffect para verificar duplicados con debounce
+  // useEffect para verificar duplicados con debounce
   useEffect(() => {
     if (formData.telefono && formData.telefono.length >= 9) {
       const timeoutId = setTimeout(() => {
@@ -129,17 +169,20 @@ useEffect(() => {
     }
   }, [formData.telefono, mode, prospecto?.id]);
 
+  // Actualización automática del valor estimado cuando cambian los productos
   useEffect(() => {
-  const tieneProductos = formData.productos_interes.length > 0;
-  
-  if (tieneProductos) {
-    const valorCalculado = calcularValorTotalEstimado();
-    setFormData(prev => ({
-      ...prev,
-      valor_estimado: valorCalculado.toString()
-    }));
-  }
-}, [formData.productos_interes]);
+    const tieneProductosConPrecio = formData.productos_interes.some(producto => 
+      typeof producto === 'object' && producto.precio_sin_igv && producto.precio_sin_igv > 0
+    );
+    
+    if (tieneProductosConPrecio) {
+      const valorCalculado = calcularValorTotalEstimado();
+      setFormData(prev => ({
+        ...prev,
+        valor_estimado: valorCalculado.toString()
+      }));
+    }
+  }, [formData.productos_interes]);
 
   const buscarProductos = async (texto) => {
     try {
@@ -235,7 +278,6 @@ useEffect(() => {
     }
   };
 
-  // ✅ CORREGIDO - handleInputChange sin return incorrecto
   const handleInputChange = (field, value) => {
     setFormData(prev => ({ ...prev, [field]: value }));
     
@@ -244,32 +286,38 @@ useEffect(() => {
     }
   };
 
-  // ✅ FUNCIÓN AGREGADA - Formatear precio con fallback
+  // FUNCIÓN CORREGIDA - Formatear precio con fallback mejorado
   const formatearPrecio = (precio) => {
-    if (!precio) return '0.00';
+    if (!precio || isNaN(precio)) return '0.00';
+    
+    const numero = parseFloat(precio);
+    if (numero === 0) return '0.00';
+    
     if (typeof productosService.formatearPrecio === 'function') {
-      return productosService.formatearPrecio(precio);
+      return productosService.formatearPrecio(numero);
     }
-    // Fallback si el método no existe
-    return Number(precio).toLocaleString('es-PE', {
+    
+    // Fallback mejorado
+    return numero.toLocaleString('es-PE', {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2
     });
   };
 
-  // ✅ FUNCIÓN AGREGADA - Calcular valor total estimado
+  // FUNCIÓN CORREGIDA - Calcular valor total estimado
   const calcularValorTotalEstimado = () => {
     return formData.productos_interes.reduce((total, producto) => {
-      if (typeof producto === 'object' && producto.precio_base) {
-        const cantidad = producto.cantidad_estimada || 1;
-        const valorLinea = producto.precio_base * cantidad;
+      if (typeof producto === 'object' && producto.precio_sin_igv) {
+        const precio = parseFloat(producto.precio_sin_igv) || 0;
+        const cantidad = parseInt(producto.cantidad_estimada) || 1;
+        const valorLinea = precio * cantidad;
         return total + valorLinea;
       }
       return total;
     }, 0);
   };
 
-  // ✅ FUNCIÓN AGREGADA - Actualizar cantidad de producto
+  // FUNCIÓN CORREGIDA - Actualizar cantidad de producto
   const actualizarCantidadProducto = (productoId, nuevaCantidad) => {
     const cantidad = Math.max(1, parseInt(nuevaCantidad) || 1);
     
@@ -277,7 +325,8 @@ useEffect(() => {
       ...prev,
       productos_interes: prev.productos_interes.map(producto => {
         if (typeof producto === 'object' && producto.id === productoId) {
-          const valorLinea = (producto.precio_base || 0) * cantidad;
+          const precio = parseFloat(producto.precio_sin_igv) || 0;
+          const valorLinea = precio * cantidad;
           return {
             ...producto,
             cantidad_estimada: cantidad,
@@ -289,57 +338,72 @@ useEffect(() => {
     }));
   };
 
+  // FUNCIÓN MEJORADA - Agregar producto desde búsqueda
   const agregarProductoDesdeSearch = (producto) => {
+    // Verificar si el producto ya existe
+    const yaExiste = formData.productos_interes.some(p => 
+      (typeof p === 'object' && p.codigo === producto.codigo) || 
+      (typeof p === 'string' && p.includes(producto.codigo))
+    );
+
+    if (yaExiste) {
+      alert('Este producto ya está agregado');
+      return;
+    }
+
     const nuevoProducto = {
       id: Date.now(),
       producto_id: producto.id,
       codigo: producto.codigo,
-      nombre: producto.descripcion,
+      descripcion_producto: producto.descripcion,
       marca: producto.marca,
       categoria: producto.categoria,
-      unidad: producto.unidad,
-      precio_base: producto.precio_base,
+      unidad_medida: producto.unidad,
+      precio_sin_igv: parseFloat(producto.precio_base) || 0,
       cantidad_estimada: 1,
-      valor_linea: producto.precio_base,
+      valor_linea: parseFloat(producto.precio_base) || 0,
       tipo: 'catalogo'
     };
     
-    if (!formData.productos_interes.some(p => 
-        (typeof p === 'object' && p.codigo === producto.codigo) || 
-        (typeof p === 'string' && p.includes(producto.codigo))
-    )) {
-      setFormData(prev => ({
-        ...prev,
-        productos_interes: [...prev.productos_interes, nuevoProducto]
-      }));
-    }
+    setFormData(prev => ({
+      ...prev,
+      productos_interes: [...prev.productos_interes, nuevoProducto]
+    }));
     
     setBusquedaProducto('');
     setProductosEncontrados([]);
     setShowProductosDropdown(false);
   };
 
+  // FUNCIÓN MEJORADA - Agregar producto personalizado
   const agregarProducto = () => {
     if (!nuevoProducto.trim()) return;
+
+    // Verificar si el producto personalizado ya existe
+    const yaExiste = formData.productos_interes.some(p => 
+      p.tipo === 'personalizado' && p.descripcion_producto === nuevoProducto.trim()
+    );
+
+    if (yaExiste) {
+      alert('Este producto personalizado ya está agregado');
+      return;
+    }
 
     const productoPersonalizado = {
       id: Date.now(),
       codigo: null,
-      nombre: nuevoProducto.trim(),
-      precio_base: null,
+      descripcion_producto: nuevoProducto.trim(),
+      precio_sin_igv: null,
       cantidad_estimada: 1,
       valor_linea: 0,
       tipo: 'personalizado'
     };
 
-    if (!formData.productos_interes.some(p => 
-        (p.tipo === 'personalizado' && p.nombre === nuevoProducto.trim())
-    )) {
-      setFormData(prev => ({
-        ...prev,
-        productos_interes: [...prev.productos_interes, productoPersonalizado]
-      }));
-    }
+    setFormData(prev => ({
+      ...prev,
+      productos_interes: [...prev.productos_interes, productoPersonalizado]
+    }));
+    
     setNuevoProducto('');
   };
 
@@ -355,6 +419,20 @@ useEffect(() => {
     ahora.setDate(ahora.getDate() + 1);
     ahora.setHours(9, 0, 0, 0);
     return ahora.toISOString().slice(0, 16);
+  };
+
+  // FUNCIÓN MEJORADA - Obtener nombre del producto para mostrar
+  const obtenerNombreProducto = (producto) => {
+    if (typeof producto === 'string') return producto;
+    
+    if (typeof producto === 'object' && producto !== null) {
+      if (producto.codigo && producto.descripcion_producto) {
+        return `${producto.codigo} - ${producto.descripcion_producto}`;
+      }
+      return producto.descripcion_producto || producto.nombre || 'Producto sin nombre';
+    }
+    
+    return 'Producto';
   };
 
   const handleSubmit = async (e) => {
@@ -379,8 +457,7 @@ useEffect(() => {
           parseFloat(formData.valor_estimado) : null,
         fecha_seguimiento: formData.fecha_seguimiento || 
           (mode === 'create' ? calcularFechaSeguimiento() : null),
-        // ✅ ASEGURAR que productos_interes se envíe como array
-productos_interes: serializarProductosParaEnvio(formData.productos_interes)
+        productos_interes: serializarProductosParaEnvio(formData.productos_interes)
       };
 
       let response;
@@ -556,63 +633,34 @@ productos_interes: serializarProductosParaEnvio(formData.productos_interes)
               Ubicación
             </h3>
             
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Dirección
-                </label>
-                <input
-                  type="text"
-                  value={formData.direccion}
-                  onChange={(e) => handleInputChange('direccion', e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="Dirección completa"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Distrito
-                </label>
-                <input
-                  type="text"
-                  value={formData.distrito}
-                  onChange={(e) => handleInputChange('distrito', e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="Distrito"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Ciudad *
-                </label>
-                <input
-                  type="text"
-                  value={formData.ciudad}
-                  onChange={(e) => handleInputChange('ciudad', e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="Ciudad"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Departamento *
-                </label>
-                <input
-                  type="text"
-                  value={formData.departamento}
-                  onChange={(e) => handleInputChange('departamento', e.target.value)}
-                  className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                    errors.departamento ? 'border-red-300' : 'border-gray-300'
-                  }`}
-                  placeholder="Lima, Arequipa, Cusco..."
-                />
-                {errors.departamento && (
-                  <p className="text-red-500 text-xs mt-1">{errors.departamento}</p>
-                )}
-              </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Ubicación *
+              </label>
+              <UbicacionesSelector
+                value={{
+                  departamento: formData.departamento,
+                  provincia: formData.ciudad, // En tu BD ciudad guarda la provincia
+                  distrito: formData.distrito
+                }}
+                onChange={(ubicacion) => {
+                  // Actualizar los campos del formulario
+                  handleInputChange('departamento', ubicacion.departamento);
+                  handleInputChange('ciudad', ubicacion.provincia); // Tu BD usa 'ciudad' para provincia
+                  handleInputChange('distrito', ubicacion.distrito);
+                }}
+                required={true}
+                showDistrito={true}
+                size="default"
+                placeholder={{
+                  departamento: 'Selecciona departamento',
+                  provincia: 'Selecciona provincia',
+                  distrito: 'Selecciona distrito (opcional)'
+                }}
+              />
+              {errors.departamento && (
+                <p className="text-red-500 text-xs mt-1">{errors.departamento}</p>
+              )}
             </div>
           </div>
 
@@ -760,12 +808,9 @@ productos_interes: serializarProductosParaEnvio(formData.productos_interes)
                       <div className="flex items-start flex-1 min-w-0">
                         <Package className="h-5 w-5 text-blue-500 mr-3 flex-shrink-0 mt-0.5" />
                         <div className="flex-1 space-y-2">
-                          {/* Nombre del producto */}
+                          {/* Nombre del producto CORREGIDO */}
                           <div className="text-sm font-medium text-gray-900">
-                            {typeof producto === 'object' 
-                              ? (producto.codigo ? `${producto.codigo} - ${producto.nombre}` : producto.nombre)
-                              : producto
-                            }
+                            {obtenerNombreProducto(producto)}
                           </div>
                           
                           {/* Información adicional para productos del catálogo */}
@@ -783,9 +828,9 @@ productos_interes: serializarProductosParaEnvio(formData.productos_interes)
                                 />
                               </div>
                               
-                              {/* Precio unitario */}
+                              {/* Precio unitario CORREGIDO */}
                               <div className="text-xs text-gray-600">
-                                x ${formatearPrecio(producto.precio_base)} / {producto.unidad}
+                                x ${formatearPrecio(producto.precio_sin_igv)} / {producto.unidad_medida}
                               </div>
                               
                               {/* Valor línea */}
@@ -870,9 +915,9 @@ productos_interes: serializarProductosParaEnvio(formData.productos_interes)
                   type="number"
                   value={formData.valor_estimado}
                   onChange={(e) => handleInputChange('valor_estimado', e.target.value)}
-                  disabled={formData.productos_interes.length > 0}
+                  disabled={formData.productos_interes.some(p => typeof p === 'object' && p.precio_sin_igv)}
                   className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                    formData.productos_interes.length > 0 ? 'bg-gray-100 cursor-not-allowed' : ''
+                    formData.productos_interes.some(p => typeof p === 'object' && p.precio_sin_igv) ? 'bg-gray-100 cursor-not-allowed' : ''
                   } ${
                     errors.valor_estimado ? 'border-red-300' : 'border-gray-300'
                   }`}

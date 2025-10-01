@@ -1,12 +1,6 @@
-const { createClient } = require('@supabase/supabase-js');
-const { v4: uuidv4 } = require('uuid');
 const winston = require('winston');
 const almacenService = require('../services/almacenService');
-
-// Configuración de Supabase
-const supabaseUrl = process.env.SUPABASE_URL;
-const supabaseKey = process.env.SUPABASE_ANON_KEY;
-const supabase = createClient(supabaseUrl, supabaseKey);
+const reportesService = require('../services/reportesService');
 
 // Configuración de logging
 const logger = winston.createLogger({
@@ -39,124 +33,14 @@ const obtenerDashboard = async (req, res) => {
     try {
         const { almacen_id } = req.query;
 
-        // Obtener métricas principales
-        const metricas = await Promise.all([
-            // Total productos con stock
-            supabase
-                .from('vista_inventario_completo')
-                .select('*', { count: 'exact', head: true })
-                .gt('stock_actual', 0),
+        // Delegar al service para obtener métricas del dashboard
+        const resultado = await almacenService.obtenerDashboardMetricas(almacen_id);
 
-            // Productos con stock bajo
-            supabase
-                .from('vista_inventario_completo')
-                .select('*', { count: 'exact', head: true })
-                .eq('estado_stock', 'BAJO'),
+        if (!resultado.success) {
+            return res.status(500).json(resultado);
+        }
 
-            // Productos agotados
-            supabase
-                .from('vista_inventario_completo')
-                .select('*', { count: 'exact', head: true })
-                .eq('estado_stock', 'AGOTADO'),
-
-            // Valor total de inventario
-            supabase
-                .from('vista_inventario_completo')
-                .select('valor_inventario.sum()'),
-
-            // Movimientos del día
-            supabase
-                .from('movimientos_inventario')
-                .select('*', { count: 'exact', head: true })
-                .gte('fecha_movimiento', new Date().toISOString().split('T')[0]),
-
-            // Alertas activas
-            supabase
-                .from('alertas_inventario')
-                .select('*', { count: 'exact', head: true })
-                .eq('activa', true),
-
-            // Despachos pendientes
-            supabase
-                .from('despachos')
-                .select('*', { count: 'exact', head: true })
-                .eq('activo', true)
-                .in('estado', ['PENDIENTE', 'PREPARANDO']),
-
-            // Despachos del día
-            supabase
-                .from('despachos')
-                .select('*', { count: 'exact', head: true })
-                .eq('activo', true)  
-                .eq('fecha_programada', new Date().toISOString().split('T')[0])
-        ]);
-
-        // Obtener productos con mayor rotación (últimos 30 días)
-        const { data: productosRotacion } = await supabase
-            .from('movimientos_inventario')
-            .select(`
-                producto_id,
-                productos:producto_id (codigo, descripcion),
-                cantidad.sum()
-            `)
-            .eq('tipo_movimiento', 'SALIDA')
-            .gte('fecha_movimiento', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString())
-            .order('cantidad.sum()', { ascending: false })
-            .limit(10);
-
-        // Obtener despachos próximos
-        const { data: despachoProximos } = await supabase
-            .from('despachos')
-            .select(`
-                *,
-                ventas:venta_id (
-                    codigo,
-                    nombre_cliente,
-                    apellido_cliente,
-                    valor_final
-                ),
-                almacenes:almacen_id (
-                    codigo,
-                    nombre
-                )
-            `)
-            .eq('activo', true)
-            .in('estado', ['PENDIENTE', 'PREPARANDO'])
-            .lte('fecha_programada', new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().split('T')[0])
-            .order('fecha_programada')
-            .limit(15);
-
-        // Obtener alertas críticas
-        const { data: alertasCriticas } = await supabase
-            .from('alertas_inventario')
-            .select(`
-                *,
-                productos:producto_id (codigo, descripcion),
-                almacenes:almacen_id (codigo, nombre)
-            `)
-            .eq('activa', true)
-            .in('nivel_prioridad', ['ALTA', 'CRITICA'])
-            .order('fecha_alerta', { ascending: false })
-            .limit(10);
-
-        res.json({
-            success: true,
-            data: {
-                metricas: {
-                    productos_con_stock: metricas[0].count || 0,
-                    productos_stock_bajo: metricas[1].count || 0,
-                    productos_agotados: metricas[2].count || 0,
-                    valor_total_inventario: metricas[3].data?.[0]?.sum || 0,
-                    movimientos_dia: metricas[4].count || 0,
-                    alertas_activas: metricas[5].count || 0,
-                    despachos_pendientes: metricas[6].count || 0,
-                    despachos_dia: metricas[7].count || 0
-                },
-                productos_mayor_rotacion: productosRotacion || [],
-                despachos_proximos: despachoProximos || [],
-                alertas_criticas: alertasCriticas || []
-            }
-        });
+        res.json(resultado);
 
     } catch (error) {
         logger.error('Error en obtenerDashboard:', error);
@@ -172,76 +56,24 @@ const obtenerDashboard = async (req, res) => {
 
 const obtenerInventario = async (req, res) => {
     try {
-        const {
-            page = 1,
-            limit = 20,
-            categoria,
-            busqueda,
-            estado_stock,
-            almacen_id,
-            orden = 'producto_codigo',
-            direccion = 'asc'
-        } = req.query;
+        const filtros = {
+            page: req.query.page || 1,
+            limit: req.query.limit || 20,
+            categoria: req.query.categoria,
+            busqueda: req.query.busqueda,
+            estado_stock: req.query.estado_stock,
+            almacen_id: req.query.almacen_id,
+            orden: req.query.orden || 'producto_codigo',
+            direccion: req.query.direccion || 'asc'
+        };
 
-        let query = supabase
-            .from('vista_inventario_completo')
-            .select('*');
+        const resultado = await almacenService.obtenerInventarioConFiltros(filtros);
 
-        // Filtros
-        if (categoria) {
-            query = query.eq('categoria', categoria);
+        if (!resultado.success) {
+            return res.status(500).json(resultado);
         }
 
-        if (busqueda) {
-            query = query.or(
-                `producto_codigo.ilike.%${busqueda}%,producto_descripcion.ilike.%${busqueda}%,marca.ilike.%${busqueda}%`
-            );
-        }
-
-        if (estado_stock) {
-            query = query.eq('estado_stock', estado_stock);
-        }
-
-        if (almacen_id) {
-            query = query.eq('almacen_id', almacen_id);
-        }
-
-        // Ordenamiento
-        const ordenValido = ['producto_codigo', 'producto_descripcion', 'stock_actual', 'stock_minimo', 'valor_inventario', 'ultimo_movimiento'];
-        if (ordenValido.includes(orden)) {
-            query = query.order(orden, { ascending: direccion === 'asc' });
-        }
-
-        // Paginación
-        const offset = (Number(page) - 1) * Number(limit);
-        query = query.range(offset, offset + Number(limit) - 1);
-
-        const { data, error } = await query;
-
-        if (error) {
-            logger.error('Error al obtener inventario:', error);
-            return res.status(500).json({
-                success: false,
-                error: 'Error interno del servidor',
-                details: error.message
-            });
-        }
-
-        // Obtener conteo total
-        const { count: totalRegistros } = await supabase
-            .from('vista_inventario_completo')
-            .select('*', { count: 'exact', head: true });
-
-        res.json({
-            success: true,
-            data: data || [],
-            pagination: {
-                page: Number(page),
-                limit: Number(limit),
-                total: totalRegistros || 0,
-                totalPages: Math.ceil((totalRegistros || 0) / Number(limit))
-            }
-        });
+        res.json(resultado);
 
     } catch (error) {
         logger.error('Error en obtenerInventario:', error);
@@ -257,19 +89,13 @@ const obtenerInventarioPorProducto = async (req, res) => {
     try {
         const { producto_id } = req.params;
 
-        const { data, error } = await supabase
-            .from('vista_inventario_completo')
-            .select('*')
-            .eq('producto_id', producto_id);
+        const resultado = await almacenService.obtenerInventarioPorProducto(producto_id);
 
-        if (error) {
-            throw error;
+        if (!resultado.success) {
+            return res.status(500).json(resultado);
         }
 
-        res.json({
-            success: true,
-            data: data || []
-        });
+        res.json(resultado);
 
     } catch (error) {
         logger.error('Error en obtenerInventarioPorProducto:', error);
@@ -307,126 +133,34 @@ const actualizarStockProducto = async (req, res) => {
             });
         }
 
-        // Obtener stock anterior
-        const { data: inventarioAnterior, error: errorAnterior } = await supabase
-            .from('inventario')
-            .select('stock_actual')
-            .eq('producto_id', producto_id)
-            .eq('almacen_id', almacen_id)
-            .single();
-
-        if (errorAnterior && errorAnterior.code !== 'PGRST116') {
-            throw errorAnterior;
-        }
-
-        const stockAnterior = inventarioAnterior?.stock_actual || 0;
-        const diferencia = Number(stock_actual) - stockAnterior;
-
-        // Actualizar o insertar inventario
-        const datosInventario = {
-            producto_id: producto_id,
-            almacen_id: almacen_id,
+        const datosActualizacion = {
+            producto_id,
+            almacen_id,
             stock_actual: Number(stock_actual),
             stock_minimo: Number(stock_minimo),
             stock_maximo: stock_maximo ? Number(stock_maximo) : null,
             costo_promedio: costo_promedio ? Number(costo_promedio) : null,
-            ultimo_movimiento: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-            updated_by: req.user?.id || 1
+            motivo,
+            usuario_id: req.user?.id
         };
 
-        if (inventarioAnterior) {
-            // Actualizar existente
-            const { data, error } = await supabase
-                .from('inventario')
-                .update(datosInventario)
-                .eq('producto_id', producto_id)
-                .eq('almacen_id', almacen_id)
-                .select()
-                .single();
+        const resultado = await almacenService.actualizarStockProducto(datosActualizacion);
 
-            if (error) throw error;
-        } else {
-            // Insertar nuevo
-            const { data, error } = await supabase
-                .from('inventario')
-                .insert({
-                    id: uuidv4(),
-                    ...datosInventario,
-                    created_by: req.user?.id || 1
-                })
-                .select()
-                .single();
-
-            if (error) throw error;
-        }
-
-        // Registrar movimiento si hay diferencia
-        if (diferencia !== 0) {
-            const tipoMovimiento = diferencia > 0 ? 'AJUSTE_POSITIVO' : 'AJUSTE_NEGATIVO';
-            
-            await supabase
-                .from('movimientos_inventario')
-                .insert({
-                    id: uuidv4(),
-                    producto_id: producto_id,
-                    almacen_destino_id: almacen_id,
-                    tipo_movimiento: tipoMovimiento,
-                    cantidad: Math.abs(diferencia),
-                    precio_unitario: costo_promedio || 0,
-                    stock_anterior: stockAnterior,
-                    stock_posterior: Number(stock_actual),
-                    motivo: motivo,
-                    referencia_tipo: 'AJUSTE',
-                    usuario_id: req.user?.id || 1
-                });
-        }
-
-        // Verificar alertas de stock mínimo
-        if (Number(stock_actual) <= Number(stock_minimo) && Number(stock_actual) > 0) {
-            await supabase
-                .from('alertas_inventario')
-                .insert({
-                    id: uuidv4(),
-                    producto_id: producto_id,
-                    almacen_id: almacen_id,
-                    tipo_alerta: 'STOCK_MINIMO',
-                    nivel_prioridad: 'MEDIA',
-                    mensaje: `Stock por debajo del mínimo establecido`,
-                    stock_actual: Number(stock_actual),
-                    stock_minimo: Number(stock_minimo)
-                });
-        } else if (Number(stock_actual) === 0) {
-            await supabase
-                .from('alertas_inventario')
-                .insert({
-                    id: uuidv4(),
-                    producto_id: producto_id,
-                    almacen_id: almacen_id,
-                    tipo_alerta: 'STOCK_AGOTADO',
-                    nivel_prioridad: 'CRITICA',
-                    mensaje: `Producto agotado en almacén`,
-                    stock_actual: 0,
-                    stock_minimo: Number(stock_minimo)
-                });
+        if (!resultado.success) {
+            return res.status(400).json(resultado);
         }
 
         logger.info('Stock actualizado exitosamente', {
             producto_id,
             almacen_id,
-            stock_anterior: stockAnterior,
-            stock_nuevo: stock_actual,
-            diferencia
+            stock_actual,
+            usuario: req.user?.id
         });
 
         res.json({
             success: true,
             message: 'Stock actualizado exitosamente',
-            data: {
-                stock_anterior: stockAnterior,
-                stock_actual: Number(stock_actual),
-                diferencia: diferencia
-            }
+            data: resultado.data
         });
 
     } catch (error) {
@@ -443,77 +177,69 @@ const actualizarStockProducto = async (req, res) => {
 
 const obtenerMovimientos = async (req, res) => {
     try {
-        const {
-            page = 1,
-            limit = 20,
-            producto_id,
-            almacen_id,
-            tipo_movimiento,
-            fecha_desde,
-            fecha_hasta,
-            orden = 'fecha_movimiento',
-            direccion = 'desc'
-        } = req.query;
+        const filtros = {
+            page: req.query.page || 1,
+            limit: req.query.limit || 20,
+            producto_id: req.query.producto_id,
+            almacen_id: req.query.almacen_id,
+            tipo_movimiento: req.query.tipo_movimiento,
+            fecha_desde: req.query.fecha_desde,
+            fecha_hasta: req.query.fecha_hasta,
+            orden: req.query.orden || 'fecha_movimiento',
+            direccion: req.query.direccion || 'desc'
+        };
 
-        let query = supabase
-            .from('movimientos_inventario')
-            .select(`
-                *,
-                productos:producto_id (codigo, descripcion),
-                almacenes_origen:almacen_origen_id (codigo, nombre),
-                almacenes_destino:almacen_destino_id (codigo, nombre),
-                usuarios:usuario_id (nombre, apellido)
-            `);
+        const resultado = await almacenService.obtenerMovimientosConFiltros(filtros);
 
-        // Filtros
-        if (producto_id) {
-            query = query.eq('producto_id', producto_id);
+        if (!resultado.success) {
+            return res.status(500).json(resultado);
         }
 
-        if (almacen_id) {
-            query = query.or(`almacen_origen_id.eq.${almacen_id},almacen_destino_id.eq.${almacen_id}`);
-        }
-
-        if (tipo_movimiento) {
-            query = query.eq('tipo_movimiento', tipo_movimiento);
-        }
-
-        if (fecha_desde) {
-            query = query.gte('fecha_movimiento', fecha_desde);
-        }
-
-        if (fecha_hasta) {
-            query = query.lte('fecha_movimiento', fecha_hasta);
-        }
-
-        // Ordenamiento
-        const ordenValido = ['fecha_movimiento', 'tipo_movimiento', 'cantidad'];
-        if (ordenValido.includes(orden)) {
-            query = query.order(orden, { ascending: direccion === 'asc' });
-        }
-
-        // Paginación
-        const offset = (Number(page) - 1) * Number(limit);
-        query = query.range(offset, offset + Number(limit) - 1);
-
-        const { data, error } = await query;
-
-        if (error) {
-            logger.error('Error al obtener movimientos:', error);
-            return res.status(500).json({
-                success: false,
-                error: 'Error interno del servidor',
-                details: error.message
-            });
-        }
-
-        res.json({
-            success: true,
-            data: data || []
-        });
+        res.json(resultado);
 
     } catch (error) {
         logger.error('Error en obtenerMovimientos:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Error interno del servidor',
+            details: error.message
+        });
+    }
+};
+
+// ==================== KARDEX DE PRODUCTO ====================
+
+const obtenerKardexProducto = async (req, res) => {
+    try {
+        const { producto_id } = req.params;
+        const filtros = {
+            producto_id,
+            almacen_id: req.query.almacen_id,
+            fecha_desde: req.query.fecha_desde,
+            fecha_hasta: req.query.fecha_hasta,
+            limit: req.query.limit || 100,
+            orden: req.query.orden || 'fecha_movimiento',
+            direccion: req.query.direccion || 'asc'
+        };
+
+        // Validación básica
+        if (!producto_id) {
+            return res.status(400).json({
+                success: false,
+                error: 'El ID del producto es requerido'
+            });
+        }
+
+        const resultado = await almacenService.obtenerKardexProducto(filtros);
+
+        if (!resultado.success) {
+            return res.status(500).json(resultado);
+        }
+
+        res.json(resultado);
+
+    } catch (error) {
+        logger.error('Error en obtenerKardexProducto:', error);
         res.status(500).json({
             success: false,
             error: 'Error interno del servidor',
@@ -563,7 +289,7 @@ const transferirStock = async (req, res) => {
             almacen_destino_id,
             cantidad,
             motivo,
-            req.user?.id || 1
+            req.user?.id
         );
 
         if (!resultado.success) {
@@ -600,38 +326,13 @@ const obtenerAlmacenes = async (req, res) => {
     try {
         const { incluir_jerarquia = true } = req.query;
 
-        let query = supabase
-            .from('almacenes')
-            .select('*')
-            .eq('activo', true);
+        const resultado = await almacenService.obtenerAlmacenesConJerarquia(incluir_jerarquia === 'true');
 
-        if (incluir_jerarquia === 'true') {
-            query = query.select(`
-                *,
-                almacen_padre:almacen_padre_id (
-                    codigo,
-                    nombre
-                )
-            `);
+        if (!resultado.success) {
+            return res.status(500).json(resultado);
         }
 
-        query = query.order('tipo').order('piso').order('nombre');
-
-        const { data, error } = await query;
-
-        if (error) {
-            logger.error('Error al obtener almacenes:', error);
-            return res.status(500).json({
-                success: false,
-                error: 'Error interno del servidor',
-                details: error.message
-            });
-        }
-
-        res.json({
-            success: true,
-            data: data || []
-        });
+        res.json(resultado);
 
     } catch (error) {
         logger.error('Error en obtenerAlmacenes:', error);
@@ -647,49 +348,21 @@ const obtenerAlmacenes = async (req, res) => {
 
 const obtenerAlertas = async (req, res) => {
     try {
-        const {
-            page = 1,
-            limit = 20,
-            nivel_prioridad,
-            tipo_alerta,
-            activa = true
-        } = req.query;
+        const filtros = {
+            page: req.query.page || 1,
+            limit: req.query.limit || 20,
+            nivel_prioridad: req.query.nivel_prioridad,
+            tipo_alerta: req.query.tipo_alerta,
+            activa: req.query.activa !== 'all' ? req.query.activa === 'true' : null
+        };
 
-        let query = supabase
-            .from('alertas_inventario')
-            .select(`
-                *,
-                productos:producto_id (codigo, descripcion),
-                almacenes:almacen_id (codigo, nombre)
-            `);
+        const resultado = await almacenService.obtenerAlertasConFiltros(filtros);
 
-        if (activa !== 'all') {
-            query = query.eq('activa', activa === 'true');
+        if (!resultado.success) {
+            return res.status(500).json(resultado);
         }
 
-        if (nivel_prioridad) {
-            query = query.eq('nivel_prioridad', nivel_prioridad);
-        }
-
-        if (tipo_alerta) {
-            query = query.eq('tipo_alerta', tipo_alerta);
-        }
-
-        query = query.order('fecha_alerta', { ascending: false });
-
-        const offset = (Number(page) - 1) * Number(limit);
-        query = query.range(offset, offset + Number(limit) - 1);
-
-        const { data, error } = await query;
-
-        if (error) {
-            throw error;
-        }
-
-        res.json({
-            success: true,
-            data: data || []
-        });
+        res.json(resultado);
 
     } catch (error) {
         logger.error('Error en obtenerAlertas:', error);
@@ -706,26 +379,20 @@ const resolverAlerta = async (req, res) => {
         const { id } = req.params;
         const { observaciones_resolucion } = req.body;
 
-        const { data, error } = await supabase
-            .from('alertas_inventario')
-            .update({
-                activa: false,
-                fecha_resolucion: new Date().toISOString(),
-                resuelto_por: req.user?.id || 1,
-                observaciones_resolucion: observaciones_resolucion || 'Resuelta manualmente'
-            })
-            .eq('id', id)
-            .select()
-            .single();
+        const resultado = await almacenService.resolverAlerta(
+            id,
+            req.user?.id,
+            observaciones_resolucion || 'Resuelta manualmente'
+        );
 
-        if (error) {
-            throw error;
+        if (!resultado.success) {
+            return res.status(400).json(resultado);
         }
 
         res.json({
             success: true,
             message: 'Alerta resuelta exitosamente',
-            data: data
+            data: resultado.data
         });
 
     } catch (error) {
@@ -738,7 +405,7 @@ const resolverAlerta = async (req, res) => {
     }
 };
 
-// ==================== GESTIÓN DE DESPACHOS (FUNCIONES FALTANTES) ====================
+// ==================== GESTIÓN DE DESPACHOS ====================
 
 const obtenerDespachos = async (req, res) => {
     try {
@@ -790,7 +457,7 @@ const actualizarEstadoDespacho = async (req, res) => {
         const resultado = await almacenService.actualizarEstadoDespacho(
             id,
             nuevo_estado,
-            req.user?.id || 1,
+            req.user?.id,
             observaciones
         );
 
@@ -830,7 +497,7 @@ const crearDespachoDesdeVenta = async (req, res) => {
     }
 };
 
-// ==================== REPORTES (FUNCIONES FALTANTES) ====================
+// ==================== REPORTES ====================
 
 const generarKardex = async (req, res) => {
     try {
@@ -905,7 +572,7 @@ const obtenerStockConsolidado = async (req, res) => {
     }
 };
 
-// ==================== UPLOAD MASIVO (FUNCIONES FALTANTES) ====================
+// ==================== UPLOAD MASIVO ====================
 
 const generarPlantillaStock = async (req, res) => {
     try {
@@ -966,9 +633,23 @@ const ejecutarUploadStock = async (req, res) => {
             });
         }
 
+        // Obtener modo de importación del body
+        const modoImportacion = req.body.modo_importacion || 'SOLO_VALIDOS';
+
+        // Validar que el usuario tenga un ID válido
+        const usuarioId = req.user?.id;
+        if (!usuarioId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(usuarioId)) {
+            return res.status(400).json({
+                success: false,
+                error: 'Usuario no identificado correctamente. Se requiere un ID de usuario válido.',
+                codigo: 'USER_ID_INVALID'
+            });
+        }
+
         const resultado = await almacenService.ejecutarUploadStock(
             req.file.buffer,
-            req.user?.id || 1
+            usuarioId,
+            modoImportacion
         );
 
         if (!resultado.success) {
@@ -987,7 +668,7 @@ const ejecutarUploadStock = async (req, res) => {
     }
 };
 
-// ==================== INTEGRACIÓN CON VENTAS (FUNCIONES FALTANTES) ====================
+// ==================== INTEGRACIÓN CON VENTAS ====================
 
 const verificarStockParaVenta = async (req, res) => {
     try {
@@ -1019,7 +700,7 @@ const descontarStockVenta = async (req, res) => {
             venta_id,
             productos,
             almacen_id,
-            req.user?.id || 1
+            req.user?.id
         );
 
         if (!resultado.success) {
@@ -1038,7 +719,7 @@ const descontarStockVenta = async (req, res) => {
     }
 };
 
-// ==================== ANÁLISIS ESPECÍFICOS (NUEVOS) ====================
+// ==================== ANÁLISIS ESPECÍFICOS ====================
 
 const obtenerRotacionInventario = async (req, res) => {
     try {
@@ -1139,6 +820,49 @@ const obtenerTendenciasInventario = async (req, res) => {
     }
 };
 
+// ✅ CONTROLADOR CONSOLIDADO - OPTIMIZACIÓN PRINCIPAL
+const obtenerAnalisisConsolidado = async (req, res) => {
+    try {
+        const periodo = req.query.periodo || '30d';
+        const resultado = await reportesService.getAnalisisConsolidado(periodo);
+
+        if (!resultado.success) {
+            return res.status(500).json(resultado);
+        }
+
+        res.json(resultado);
+    } catch (error) {
+        logger.error('Error en obtenerAnalisisConsolidado:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Error interno del servidor',
+            details: error.message
+        });
+    }
+};
+
+const obtenerReportesConsolidado = async (req, res) => {
+    try {
+        const { tipo_reporte } = req.params;
+        const periodo = req.query.periodo || '30d';
+
+        const resultado = await reportesService.getReportesConsolidado(tipo_reporte, periodo);
+
+        if (!resultado.success) {
+            return res.status(500).json(resultado);
+        }
+
+        res.json(resultado);
+    } catch (error) {
+        logger.error('Error en obtenerReportesConsolidado:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Error interno del servidor',
+            details: error.message
+        });
+    }
+};
+
 const ejecutarQuery = async (req, res) => {
     try {
         const { query, params = [] } = req.body;
@@ -1159,13 +883,14 @@ const ejecutarQuery = async (req, res) => {
             });
         }
         
-        // Por simplicidad, usar alguna función existente del service
-        // O implementar lógica específica según necesites
-        res.json({
-            success: true,
-            message: 'Funcionalidad de query personalizada disponible',
-            data: []
-        });
+        // Delegar al service para ejecutar query personalizada
+        const resultado = await almacenService.ejecutarQueryPersonalizada(query, params);
+        
+        if (!resultado.success) {
+            return res.status(400).json(resultado);
+        }
+        
+        res.json(resultado);
         
     } catch (error) {
         logger.error('Error en ejecutarQuery:', error);
@@ -1177,14 +902,13 @@ const ejecutarQuery = async (req, res) => {
     }
 };
 
-    // ==================== REPORTES AVANZADOS (FUNCIONES FALTANTES) ====================
+// ==================== REPORTES AVANZADOS ====================
 
 const getPerformanceComparativa = async (req, res) => {
     try {
-        const { fecha_desde, fecha_hasta, almacen_id } = req.query;
-        const periodo = req.query.periodo || '30d'; // Parámetro adicional
+        const periodo = req.query.periodo || '30d';
 
-        const resultado = await almacenService.getPerformanceComparativa(periodo);
+        const resultado = await reportesService.getPerformanceComparativa(periodo);
 
         if (!resultado.success) {
             return res.status(500).json(resultado);
@@ -1206,7 +930,7 @@ const getAnalisisPredictivoAlertas = async (req, res) => {
     try {
         const periodo = req.query.periodo || '30d';
 
-        const resultado = await almacenService.getAnalisisPredictivoAlertas(periodo);
+        const resultado = await reportesService.getAnalisisPredictivoAlertas(periodo);
 
         if (!resultado.success) {
             return res.status(500).json(resultado);
@@ -1228,7 +952,7 @@ const getValorizacionEvolutiva = async (req, res) => {
     try {
         const periodo = req.query.periodo || '30d';
 
-        const resultado = await almacenService.getValorizacionEvolutiva(periodo);
+        const resultado = await reportesService.getValorizacionEvolutiva(periodo);
 
         if (!resultado.success) {
             return res.status(500).json(resultado);
@@ -1250,7 +974,7 @@ const getKardexInteligente = async (req, res) => {
     try {
         const periodo = req.query.periodo || '30d';
 
-        const resultado = await almacenService.getKardexInteligente(periodo);
+        const resultado = await reportesService.getKardexInteligente(periodo);
 
         if (!resultado.success) {
             return res.status(500).json(resultado);
@@ -1272,7 +996,7 @@ const getEficienciaDespachos = async (req, res) => {
     try {
         const periodo = req.query.periodo || '30d';
 
-        const resultado = await almacenService.getEficienciaDespachos(periodo);
+        const resultado = await reportesService.getEficienciaDespachos(periodo);
 
         if (!resultado.success) {
             return res.status(500).json(resultado);
@@ -1290,7 +1014,7 @@ const getEficienciaDespachos = async (req, res) => {
     }
 };
 
-// ==================== MANTENIMIENTO (FUNCIONES FALTANTES) ====================
+// ==================== MANTENIMIENTO ====================
 
 const generarAlertasAutomaticas = async (req, res) => {
     try {
@@ -1346,14 +1070,12 @@ const limpiarAlertasAntiguas = async (req, res) => {
 
 const healthCheck = async (req, res) => {
     try {
-        // Verificar conexión a BD
-        const dbStart = Date.now();
-        const { error } = await supabase
-            .from('almacenes')
-            .select('id')
-            .limit(1)
-            .single();
-        const dbTime = Date.now() - dbStart;
+        // Delegar al service para verificar salud del sistema
+        const resultado = await almacenService.verificarSaludSistema();
+
+        if (!resultado.success) {
+            return res.status(500).json(resultado);
+        }
 
         const memory = process.memoryUsage();
         const uptime = process.uptime();
@@ -1361,11 +1083,7 @@ const healthCheck = async (req, res) => {
         res.json({
             status: 'healthy',
             timestamp: new Date().toISOString(),
-            database: {
-                connected: !error,
-                responseTime: `${dbTime}ms`,
-                status: dbTime < 1000 ? 'good' : dbTime < 3000 ? 'warning' : 'slow'
-            },
+            database: resultado.data.database,
             memory: {
                 rss: `${Math.round(memory.rss / 1024 / 1024)}MB`,
                 heapUsed: `${Math.round(memory.heapUsed / 1024 / 1024)}MB`,
@@ -1396,6 +1114,7 @@ module.exports = {
     
     // Movimientos
     obtenerMovimientos,
+    obtenerKardexProducto,
     transferirStock,
     
     // Almacenes
@@ -1405,43 +1124,49 @@ module.exports = {
     obtenerAlertas,
     resolverAlerta,
     
-    // Despachos (agregadas)
+    // Despachos
     obtenerDespachos,
     obtenerDespachoPorId,
     actualizarEstadoDespacho,
     crearDespachoDesdeVenta,
     
-    // Reportes (agregadas)
+    // Reportes
     generarKardex,
     generarReporteValorizacion,
     obtenerStockConsolidado,
     
-    // Upload masivo (agregadas)
+    // Upload masivo
     generarPlantillaStock,
     previewUploadStock,
     ejecutarUploadStock,
     
-    // Integración con ventas (agregadas)
+    // Integración con ventas
     verificarStockParaVenta,
     descontarStockVenta,
     
-    // Mantenimiento (agregadas)
-    generarAlertasAutomaticas,
-    limpiarAlertasAntiguas,
-
+    // Análisis específicos
     obtenerRotacionInventario,
     obtenerEficienciaOperativa,
     obtenerAnalisisStockSeguridad,
     obtenerMapaCalorAlmacenes,
     obtenerTendenciasInventario,
+
+    // Análisis consolidado (OPTIMIZADO)
+    obtenerAnalisisConsolidado,
+    obtenerReportesConsolidado,
+
     ejecutarQuery,
     
-    // Reportes avanzados (AGREGAR ESTAS 5)
+    // Reportes avanzados
     getPerformanceComparativa,
     getAnalisisPredictivoAlertas,
     getValorizacionEvolutiva,
     getKardexInteligente,
     getEficienciaDespachos,
+    
+    // Mantenimiento
+    generarAlertasAutomaticas,
+    limpiarAlertasAntiguas,
     
     // Utilidades
     healthCheck

@@ -191,10 +191,11 @@ class AlmacenService {
   async obtenerMovimientos(filtros = {}) {
     try {
       const params = new URLSearchParams();
-      
+
       if (filtros.almacen_id) params.append('almacen_id', filtros.almacen_id);
       if (filtros.producto_id) params.append('producto_id', filtros.producto_id);
       if (filtros.tipo_movimiento) params.append('tipo_movimiento', filtros.tipo_movimiento);
+      if (filtros.busqueda) params.append('busqueda', filtros.busqueda);
       if (filtros.fecha_desde) {
         const fechaFormateada = this.formatearFechaParaAPI(filtros.fecha_desde);
         if (fechaFormateada) params.append('fecha_desde', fechaFormateada);
@@ -205,6 +206,8 @@ class AlmacenService {
       }
       if (filtros.page) params.append('page', filtros.page);
       if (filtros.limit) params.append('limit', filtros.limit);
+      if (filtros.orden) params.append('orden', filtros.orden);
+      if (filtros.direccion) params.append('direccion', filtros.direccion);
 
       const response = await this.apiClient.get(`/almacen/movimientos?${params.toString()}`);
       return {
@@ -447,7 +450,7 @@ class AlmacenService {
   async generarKardex(productoId, filtros = {}) {
     try {
       const params = new URLSearchParams();
-      
+
       if (filtros.fecha_desde) {
         const fechaFormateada = this.formatearFechaParaAPI(filtros.fecha_desde);
         if (fechaFormateada) params.append('fecha_desde', fechaFormateada);
@@ -469,6 +472,38 @@ class AlmacenService {
       return {
         success: false,
         error: error.response?.data?.error || 'Error generando kardex',
+        details: error.response?.data
+      };
+    }
+  }
+
+  async obtenerKardexProducto(productoId, filtros = {}) {
+    try {
+      const params = new URLSearchParams();
+
+      if (filtros.fecha_desde) {
+        const fechaFormateada = this.formatearFechaParaAPI(filtros.fecha_desde);
+        if (fechaFormateada) params.append('fecha_desde', fechaFormateada);
+      }
+      if (filtros.fecha_hasta) {
+        const fechaFormateada = this.formatearFechaParaAPI(filtros.fecha_hasta);
+        if (fechaFormateada) params.append('fecha_hasta', fechaFormateada);
+      }
+      if (filtros.almacen_id) params.append('almacen_id', filtros.almacen_id);
+      if (filtros.tipo_movimiento) params.append('tipo_movimiento', filtros.tipo_movimiento);
+      if (filtros.busqueda) params.append('busqueda', filtros.busqueda);
+
+      const response = await this.apiClient.get(
+        `/almacen/kardex/${productoId}?${params.toString()}`
+      );
+      return {
+        success: true,
+        data: response.data.data || response.data
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: error.response?.data?.error || 'Error obteniendo kardex del producto',
         details: error.response?.data
       };
     }
@@ -527,7 +562,7 @@ class AlmacenService {
         headers: {
           'Content-Type': 'multipart/form-data',
         },
-        timeout: 30000 // 30 segundos para uploads
+        timeout: 120000 // 2 minutos para preview de archivos grandes
       });
       return {
         success: true,
@@ -548,7 +583,7 @@ class AlmacenService {
         headers: {
           'Content-Type': 'multipart/form-data',
         },
-        timeout: 60000 // 60 segundos para ejecución
+        timeout: 300000 // 5 minutos para ejecución de archivos grandes
       });
       return {
         success: true,
@@ -1048,6 +1083,53 @@ class AlmacenService {
     }
   }
 
+  // ✅ MÉTODO CONSOLIDADO OPTIMIZADO - REEMPLAZA 5 LLAMADAS CON 1 SOLA
+  async obtenerAnalisisConsolidado(periodo = '30d') {
+    try {
+      const response = await this.apiClient.get(`/almacen/analisis/consolidado?periodo=${periodo}`);
+      return {
+        success: true,
+        data: response.data.data || response.data,
+        performance: response.data.performance || {}
+      };
+    } catch (error) {
+      console.error('Error en análisis consolidado, usando fallback:', error);
+
+      // FALLBACK: Si falla, usar métodos individuales
+      try {
+        const [rotacion, eficiencia, stockSeguridad, mapaCalor, tendencias] = await Promise.all([
+          this.obtenerRotacionInventario(periodo),
+          this.obtenerEficienciaOperativa(periodo),
+          this.obtenerAnalisisStockSeguridad(),
+          this.obtenerMapaCalorAlmacenes(periodo),
+          this.obtenerTendenciasInventario(periodo)
+        ]);
+
+        return {
+          success: true,
+          data: {
+            rotacion: rotacion.data || [],
+            eficiencia: eficiencia.data || { movimientos_por_dia: [], metricas_generales: {} },
+            stock_seguridad: stockSeguridad.data || { distribucion: [], productos_criticos: [], recomendaciones: {} },
+            mapa_calor: mapaCalor.data || [],
+            tendencias: tendencias.data || []
+          },
+          fallback: true,
+          performance: {
+            optimizado: false,
+            nota: 'Usando métodos individuales como fallback'
+          }
+        };
+      } catch (fallbackError) {
+        return {
+          success: false,
+          error: 'Error en análisis consolidado y fallback: ' + fallbackError.message,
+          details: error.response?.data
+        };
+      }
+    }
+  }
+
   // Validar que la query sea segura (solo SELECT, no DELETE/DROP/etc)
   validarQuerySegura(query) {
     if (!query || typeof query !== 'string') {
@@ -1098,7 +1180,7 @@ class AlmacenService {
 
   async getAnalisisPredictivoAlertas(periodo = '30d') {
     try {
-      const response = await this.apiClient.get(`/almacen/reportes/analisis-predictivo-alertas?periodo=${periodo}`);
+      const response = await this.apiClient.get(`/almacen/reportes/analisis-predictivo?periodo=${periodo}`);
       return {
         success: true,
         data: response.data.data || response.data
@@ -1155,6 +1237,23 @@ class AlmacenService {
       return {
         success: false,
         error: error.response?.data?.error || 'Error obteniendo eficiencia de despachos',
+        details: error.response?.data
+      };
+    }
+  }
+
+  // ==================== REPORTES CONSOLIDADO ====================
+  async getReportesConsolidado(tipo_reporte, periodo = '30d') {
+    try {
+      const response = await this.apiClient.get(`/almacen/reportes/consolidado/${tipo_reporte}?periodo=${periodo}`);
+      return {
+        success: true,
+        data: response.data.data || response.data
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: error.response?.data?.error || 'Error obteniendo reporte consolidado',
         details: error.response?.data
       };
     }

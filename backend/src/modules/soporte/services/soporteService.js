@@ -1,10 +1,11 @@
 // =====================================
-// SERVICIO DE SOPORTE TÉCNICO
+// SERVICIO DE SOPORTE TÉCNICO - VERSIÓN CORREGIDA POSTGRESQL
 // =====================================
 // Contiene la lógica de negocio para el módulo de soporte
 // Maneja notificaciones, flujos automáticos y reglas de negocio
+// CORREGIDO: Usa PostgreSQL directo con función query() en lugar de Supabase SDK
 
-const supabase = require('../../../config/supabase');
+const { query } = require('../../../config/database');
 
 class SoporteService {
     // ====================================
@@ -48,27 +49,31 @@ class SoporteService {
      */
     static async asignarTecnicoAutomatico(ticket) {
         try {
-            // Obtener técnicos disponibles
-            const { data: tecnicos, error } = await supabase
-                .from('usuarios')
-                .select('id, nombre, apellido')
-                .eq('activo', true)
-                .eq('rol', 'TECNICO') // Asumiendo que tienes un campo rol
-                .is('deleted_at', null);
+            // CORREGIDO: Obtener técnicos disponibles usando PostgreSQL directo
+            const sqlTecnicos = `
+                SELECT id, nombre, apellido 
+                FROM usuarios 
+                WHERE activo = true 
+                  AND rol = 'TECNICO' 
+                  AND deleted_at IS NULL
+            `;
+            const resultTecnicos = await query(sqlTecnicos, []);
+            const tecnicos = resultTecnicos.rows;
 
-            if (error || !tecnicos.length) {
+            if (!tecnicos.length) {
                 console.log('No hay técnicos disponibles para asignación automática');
                 return null;
             }
 
-            // Lógica simple: asignar al técnico con menos tickets activos
-            const { data: cargaTrabajo, error: errorCarga } = await supabase
-                .from('tickets_soporte')
-                .select('tecnico_asignado_id')
-                .in('estado', ['PENDIENTE', 'ASIGNADO', 'EN_PROCESO'])
-                .eq('activo', true);
-
-            if (errorCarga) throw errorCarga;
+            // CORREGIDO: Lógica simple: asignar al técnico con menos tickets activos usando PostgreSQL directo
+            const sqlCargaTrabajo = `
+                SELECT tecnico_asignado_id 
+                FROM tickets_soporte 
+                WHERE estado IN ('PENDIENTE', 'ASIGNADO', 'EN_PROCESO') 
+                  AND activo = true
+            `;
+            const resultCarga = await query(sqlCargaTrabajo, []);
+            const cargaTrabajo = resultCarga.rows;
 
             // Contar tickets por técnico
             const conteoTickets = {};
@@ -90,17 +95,19 @@ class SoporteService {
                 }
             });
 
-            // Asignar el técnico
-            const { error: errorAsignacion } = await supabase
-                .from('tickets_soporte')
-                .update({
-                    tecnico_asignado_id: tecnicoSeleccionado.id,
-                    estado: 'ASIGNADO',
-                    updated_at: new Date().toISOString()
-                })
-                .eq('id', ticket.id);
-
-            if (errorAsignacion) throw errorAsignacion;
+            // CORREGIDO: Asignar el técnico usando PostgreSQL directo
+            const sqlAsignacion = `
+                UPDATE tickets_soporte 
+                SET tecnico_asignado_id = $1, 
+                    estado = 'ASIGNADO', 
+                    updated_at = $2 
+                WHERE id = $3
+            `;
+            await query(sqlAsignacion, [
+                tecnicoSeleccionado.id, 
+                new Date().toISOString(), 
+                ticket.id
+            ]);
 
             console.log(`Ticket ${ticket.codigo} asignado automáticamente a ${tecnicoSeleccionado.nombre}`);
             return tecnicoSeleccionado;
@@ -156,27 +163,29 @@ class SoporteService {
         try {
             switch (nuevoEstado) {
                 case 'EN_PROCESO':
-                    // Marcar fecha de inicio de atención
-                    await supabase
-                        .from('tickets_soporte')
-                        .update({ fecha_inicio_atencion: new Date().toISOString() })
-                        .eq('id', ticket.id);
+                    // CORREGIDO: Marcar fecha de inicio de atención usando PostgreSQL directo
+                    const sqlInicio = `
+                        UPDATE tickets_soporte 
+                        SET fecha_inicio_atencion = $1 
+                        WHERE id = $2
+                    `;
+                    await query(sqlInicio, [new Date().toISOString(), ticket.id]);
                     break;
 
                 case 'COMPLETADO':
-                    // Marcar fecha de finalización y calcular tiempo real
+                    // CORREGIDO: Marcar fecha de finalización y calcular tiempo real usando PostgreSQL directo
                     const fechaFin = new Date().toISOString();
                     const tiempoReal = ticket.fecha_inicio_atencion 
                         ? Math.ceil((new Date(fechaFin) - new Date(ticket.fecha_inicio_atencion)) / (1000 * 60 * 60))
                         : null;
 
-                    await supabase
-                        .from('tickets_soporte')
-                        .update({ 
-                            fecha_finalizacion: fechaFin,
-                            tiempo_real_horas: tiempoReal
-                        })
-                        .eq('id', ticket.id);
+                    const sqlCompletado = `
+                        UPDATE tickets_soporte 
+                        SET fecha_finalizacion = $1, 
+                            tiempo_real_horas = $2 
+                        WHERE id = $3
+                    `;
+                    await query(sqlCompletado, [fechaFin, tiempoReal, ticket.id]);
 
                     // Notificar cliente si corresponde
                     if (ticket.cliente_email) {
@@ -206,19 +215,19 @@ class SoporteService {
      */
     static async crearRegistroCapacitacion(ticket) {
         try {
-            // Buscar si ya existe un registro de capacitación para este ticket
-            const { data: existente, error: errorBusqueda } = await supabase
-                .from('soporte_capacitaciones')
-                .select('id')
-                .eq('ticket_id', ticket.id)
-                .single();
+            // CORREGIDO: Buscar si ya existe un registro de capacitación para este ticket usando PostgreSQL directo
+            const sqlBusqueda = `
+                SELECT id FROM soporte_capacitaciones 
+                WHERE ticket_id = $1 AND activo = true
+            `;
+            const resultBusqueda = await query(sqlBusqueda, [ticket.id]);
 
-            if (existente) {
+            if (resultBusqueda.rows.length > 0) {
                 console.log('Ya existe registro de capacitación para este ticket');
-                return existente;
+                return resultBusqueda.rows[0];
             }
 
-            // Crear nuevo registro de capacitación
+            // CORREGIDO: Crear nuevo registro de capacitación usando PostgreSQL directo
             const datosCapacitacion = {
                 ticket_id: ticket.id,
                 venta_id: ticket.venta_id,
@@ -231,16 +240,23 @@ class SoporteService {
                 tipo_capacitacion: 'USO_BASICO', // Por defecto
                 modalidad: 'PRESENCIAL', // Por defecto
                 created_by: ticket.created_by,
-                updated_by: ticket.updated_by
+                updated_by: ticket.updated_by,
+                created_at: new Date().toISOString(),
+                updated_at: new Date().toISOString(),
+                activo: true
             };
 
-            const { data: nuevaCapacitacion, error } = await supabase
-                .from('soporte_capacitaciones')
-                .insert([datosCapacitacion])
-                .select('*')
-                .single();
+            const campos = Object.keys(datosCapacitacion);
+            const valores = Object.values(datosCapacitacion);
+            const placeholders = campos.map((_, index) => `$${index + 1}`).join(', ');
 
-            if (error) throw error;
+            const sqlInsert = `
+                INSERT INTO soporte_capacitaciones (${campos.join(', ')}) 
+                VALUES (${placeholders}) 
+                RETURNING *
+            `;
+            const resultInsert = await query(sqlInsert, valores);
+            const nuevaCapacitacion = resultInsert.rows[0];
 
             console.log(`Registro de capacitación creado: ${nuevaCapacitacion.id}`);
             return nuevaCapacitacion;
@@ -261,31 +277,53 @@ class SoporteService {
                 fecha_capacitacion_realizada: new Date().toISOString().split('T')[0],
                 duracion_real_horas: datos.duracion_real || null,
                 capacitacion_exitosa: datos.exitosa !== false,
-                objetivos_cumplidos: datos.objetivos_cumplidos || [],
-                temas_pendientes: datos.temas_pendientes || [],
+                objetivos_cumplidos: JSON.stringify(datos.objetivos_cumplidos || []),
+                temas_pendientes: JSON.stringify(datos.temas_pendientes || []),
                 calificacion_cliente: datos.calificacion || null,
                 comentarios_cliente: datos.comentarios || null,
                 observaciones_tecnico: datos.observaciones_tecnico || null,
-                materiales_entregados: datos.materiales || [],
+                materiales_entregados: JSON.stringify(datos.materiales || []),
                 updated_at: new Date().toISOString(),
                 ...datos
             };
 
-            const { data, error } = await supabase
-                .from('soporte_capacitaciones')
-                .update(datosActualizacion)
-                .eq('id', capacitacionId)
-                .select('*')
-                .single();
+            // CORREGIDO: Actualizar usando PostgreSQL directo
+            const campos = [];
+            const valores = [];
+            let contador = 1;
 
-            if (error) throw error;
+            Object.keys(datosActualizacion).forEach(campo => {
+                if (datosActualizacion[campo] !== undefined) {
+                    campos.push(`${campo} = $${contador}`);
+                    valores.push(datosActualizacion[campo]);
+                    contador++;
+                }
+            });
 
-            // Actualizar ticket relacionado si existe
+            const sqlUpdate = `
+                UPDATE soporte_capacitaciones 
+                SET ${campos.join(', ')} 
+                WHERE id = $${contador} 
+                RETURNING *
+            `;
+            valores.push(capacitacionId);
+
+            const resultUpdate = await query(sqlUpdate, valores);
+
+            if (resultUpdate.rows.length === 0) {
+                throw new Error('Capacitación no encontrada');
+            }
+
+            const data = resultUpdate.rows[0];
+
+            // CORREGIDO: Actualizar ticket relacionado si existe usando PostgreSQL directo
             if (data.ticket_id) {
-                await supabase
-                    .from('tickets_soporte')
-                    .update({ estado: 'COMPLETADO' })
-                    .eq('id', data.ticket_id);
+                const sqlTicket = `
+                    UPDATE tickets_soporte 
+                    SET estado = 'COMPLETADO' 
+                    WHERE id = $1
+                `;
+                await query(sqlTicket, [data.ticket_id]);
             }
 
             console.log(`Capacitación completada: ${capacitacionId}`);
@@ -441,17 +479,26 @@ class SoporteService {
      */
     static async registrarAuditoria(tipo, id, accion, detalles = {}) {
         try {
+            // CORREGIDO: Registrar usando PostgreSQL directo
             const registro = {
                 referencia_tipo: tipo,
                 referencia_id: id,
                 campo_modificado: accion,
                 valor_nuevo: JSON.stringify(detalles),
-                fecha_cambio: new Date().toISOString()
+                fecha_cambio: new Date().toISOString(),
+                created_at: new Date().toISOString(),
+                activo: true
             };
 
-            await supabase
-                .from('soporte_historial_estados')
-                .insert([registro]);
+            const campos = Object.keys(registro);
+            const valores = Object.values(registro);
+            const placeholders = campos.map((_, index) => `$${index + 1}`).join(', ');
+
+            const sqlInsert = `
+                INSERT INTO soporte_historial_estados (${campos.join(', ')}) 
+                VALUES (${placeholders})
+            `;
+            await query(sqlInsert, valores);
 
             return { success: true };
         } catch (error) {
@@ -465,14 +512,19 @@ class SoporteService {
      */
     static async obtenerConfiguracion() {
         try {
-            const { data, error } = await supabase
-                .from('soporte_configuracion')
-                .select('*')
-                .eq('activo', true)
-                .single();
+            // CORREGIDO: Obtener configuración usando PostgreSQL directo
+            const sql = `
+                SELECT * FROM soporte_configuracion 
+                WHERE activo = true 
+                LIMIT 1
+            `;
+            const result = await query(sql, []);
 
-            if (error) throw error;
-            return { success: true, data };
+            if (result.rows.length === 0) {
+                throw new Error('Configuración no encontrada');
+            }
+
+            return { success: true, data: result.rows[0] };
         } catch (error) {
             console.error('Error obteniendo configuración:', error);
             return { success: false, error: error.message };
@@ -513,7 +565,24 @@ class SoporteService {
      */
     static async registrarAlerta(tipo, referenciaId, detalles) {
         try {
-            // Registrar en tabla de alertas o sistema de monitoreo
+            // MEJORA: Registrar en tabla de alertas si existe, sino solo log
+            try {
+                const sql = `
+                    INSERT INTO soporte_alertas (tipo, referencia_id, detalles, created_at, activo) 
+                    VALUES ($1, $2, $3, $4, $5)
+                `;
+                await query(sql, [
+                    tipo, 
+                    referenciaId, 
+                    JSON.stringify(detalles), 
+                    new Date().toISOString(), 
+                    true
+                ]);
+            } catch (dbError) {
+                // Si la tabla no existe, solo hacer log
+                console.log('Tabla soporte_alertas no disponible, usando solo log');
+            }
+
             console.log(`⚠️ ALERTA: ${tipo} - ${JSON.stringify(detalles)}`);
             return { success: true };
         } catch (error) {

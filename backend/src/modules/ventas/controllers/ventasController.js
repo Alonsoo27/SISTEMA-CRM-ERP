@@ -463,6 +463,7 @@ exports.crearVenta = async (req, res) => {
         recibio_capacitacion_inmediata = false, observaciones_almacen
     } = req.body;
 
+
         const productosArray = productos.length > 0 ? productos : detalles;
         const validaciones = [];
 
@@ -558,31 +559,112 @@ exports.crearVenta = async (req, res) => {
         await query('BEGIN');
 
         try {
+            // 🆕 CREAR O BUSCAR CLIENTE AUTOMÁTICAMENTE
+            let clienteId = null;
+
+            // El frontend envía como cliente_documento, no numero_documento
+            let tipo_documento = req.body.tipo_documento;
+            const numero_documento = req.body.numero_documento || req.body.cliente_documento;
+
+            // 🔍 DEBUG TEMPORAL - VER QUÉ LLEGA DEL FRONTEND
+            console.log('🔍 [FRONTEND DATA]:', {
+                tipo_documento: req.body.tipo_documento,
+                numero_documento: numero_documento,
+                nombre_cliente: req.body.nombre_cliente,
+                apellido_cliente: req.body.apellido_cliente,
+                cliente_empresa: req.body.cliente_empresa
+            });
+
+            // ⚡ VALIDACIÓN Y LIMPIEZA DE TIPO_DOCUMENTO
+            const tiposValidos = ['DNI', 'RUC', 'PASAPORTE', 'CE'];
+
+            // Si no es válido, intentar auto-detectar por longitud
+            if (!tiposValidos.includes(tipo_documento) && numero_documento) {
+                const doc = numero_documento.trim();
+                if (/^\d{8}$/.test(doc)) {
+                    tipo_documento = 'DNI';
+                } else if (/^\d{11}$/.test(doc)) {
+                    tipo_documento = 'RUC';
+                } else if (/^[A-Z0-9]{6,12}$/i.test(doc)) {
+                    tipo_documento = 'PASAPORTE';
+                } else {
+                    // Si no se puede detectar, no crear cliente
+                    tipo_documento = null;
+                }
+            }
+
+            if (tipo_documento && tiposValidos.includes(tipo_documento) && numero_documento) {
+                // Buscar cliente existente
+                const clienteExistente = await query(
+                    'SELECT id FROM clientes WHERE numero_documento = $1 AND activo = true',
+                    [numero_documento.trim()]
+                );
+
+                if (clienteExistente.rows.length > 0) {
+                    // Cliente existe
+                    clienteId = clienteExistente.rows[0].id;
+                    console.log(`✅ Cliente existente encontrado: ID ${clienteId}`);
+                } else {
+                    // ⚡ DETECTAR TIPO POR DOCUMENTO, NO POR CAMPO EMPRESA
+                    const tipoCliente = tipo_documento === 'RUC' ? 'empresa' : 'persona';
+
+                    const nuevoClienteQuery = `
+                        INSERT INTO clientes (
+                            tipo_cliente, nombres, apellidos, razon_social,
+                            tipo_documento, numero_documento, telefono, email,
+                            direccion, distrito, provincia, departamento,
+                            estado, activo, created_by, updated_by
+                        ) VALUES (
+                            $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 'activo', true, $13, $13
+                        ) RETURNING id
+                    `;
+
+                    const nuevoClienteResult = await query(nuevoClienteQuery, [
+                        tipoCliente,
+                        tipoCliente === 'persona' ? nombre_cliente.trim() : null,
+                        tipoCliente === 'persona' ? (apellido_cliente?.trim() || null) : null,
+                        tipoCliente === 'empresa' ? (cliente_empresa || nombre_cliente.trim()) : null,
+                        tipo_documento,
+                        numero_documento.trim(),
+                        cliente_telefono,
+                        cliente_email,
+                        req.body.direccion || null,
+                        distrito?.trim() || null,
+                        departamento?.trim() || null,
+                        ciudad?.trim() || null,
+                        req.user.id
+                    ]);
+
+                    clienteId = nuevoClienteResult.rows[0].id;
+                    console.log(`🆕 Nuevo cliente creado automáticamente: ID ${clienteId}`);
+                }
+            }
+
             const ventaQuery = `
     INSERT INTO ventas (
-        codigo, correlativo_asesor, prospecto_id, asesor_id, 
+        codigo, correlativo_asesor, prospecto_id, asesor_id, cliente_id,
         nombre_cliente, apellido_cliente, cliente_empresa,
         cliente_email, cliente_telefono, canal_contacto,
-        ciudad, departamento, distrito, 
-        valor_total, descuento_porcentaje, descuento_monto, valor_final, 
-        estado_detallado, canal_origen, tipo_venta, 
+        ciudad, departamento, distrito,
+        valor_total, descuento_porcentaje, descuento_monto, valor_final,
+        estado_detallado, canal_origen, tipo_venta,
         probabilidad_cierre, fecha_entrega_estimada, fecha_venta,
         notas_internas, condiciones_especiales,
         es_venta_presencial, se_lo_llevo_directamente, recibio_capacitacion_inmediata,
         observaciones_almacen, activo, created_by, updated_by, created_at, updated_at
     ) VALUES (
-        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, true, $30, $30, NOW(), NOW()
+        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, true, $31, $31, NOW(), NOW()
     ) RETURNING *
 `;
 
             const ventaResult = await query(ventaQuery, [
-                codigoVenta, correlativoAsesor, prospecto_id, req.user.id, 
-                nombre_cliente.trim(), apellido_cliente?.trim() || null, cliente_empresa, 
+                codigoVenta, correlativoAsesor, prospecto_id, req.user.id, clienteId,
+                nombre_cliente.trim(), apellido_cliente?.trim() || null, cliente_empresa,
                 cliente_email, cliente_telefono, canal_contacto || 'WhatsApp',
                 ciudad?.trim() || '', departamento?.trim() || '', distrito?.trim() || '',
-                valorTotalNum, descuentoPorcentajeNum, descuentoMontoNum, valorFinal, 
+                valorTotalNum, descuentoPorcentajeNum, descuentoMontoNum, valorFinal,
                 estado_detallado, canal_origen, tipo_venta,
-                probabilidad_cierre, 
+                probabilidad_cierre,
                     fecha_entrega_estimada ? convertirLimaAUTC(fecha_entrega_estimada) : null,
                     fecha_venta ? convertirLimaAUTC(fecha_venta) : convertirLimaAUTC(obtenerFechaActualLima()),
                 notas_internas, condiciones_especiales,
@@ -637,7 +719,7 @@ exports.crearVenta = async (req, res) => {
             if (prospecto_id) {
                 try {
                     await query(`
-                        UPDATE prospectos 
+                        UPDATE prospectos
                         SET estado = 'Convertido', venta_id = $1, updated_at = NOW(), updated_by = $2
                         WHERE id = $3 AND activo = true
                     `, [nuevaVenta.id, req.user.id, prospecto_id]);
@@ -1741,6 +1823,249 @@ const obtenerVentaCompleta = async (ventaId) => {
     } catch (error) {
         console.error('Error al obtener venta completa:', error);
         return null;
+    }
+};
+
+// ============================================
+// OBTENER ASESORES DISPONIBLES PARA FILTROS
+// ============================================
+exports.obtenerAsesores = async (req, res) => {
+    try {
+        logRequest('obtenerAsesores', req);
+
+        // Solo devolver asesores que tienen ventas activas
+        const asesoresQuery = `
+            SELECT DISTINCT
+                u.id,
+                u.nombre,
+                u.apellido,
+                u.email,
+                'ASESOR' as rol,
+                COUNT(v.id) as total_ventas,
+                MAX(v.created_at) as ultima_venta
+            FROM usuarios u
+            INNER JOIN ventas v ON u.id = v.asesor_id
+            WHERE u.activo = true
+                AND v.activo = true
+            GROUP BY u.id, u.nombre, u.apellido, u.email
+            HAVING COUNT(v.id) > 0
+            ORDER BY u.nombre, u.apellido
+        `;
+
+        const result = await query(asesoresQuery);
+
+        const asesores = result.rows.map(asesor => ({
+            id: asesor.id,
+            nombre: asesor.nombre,
+            apellido: asesor.apellido,
+            email: asesor.email,
+            rol: asesor.rol,
+            total_ventas: parseInt(asesor.total_ventas),
+            ultima_venta: asesor.ultima_venta
+        }));
+
+        logSuccess('obtenerAsesores', { count: asesores.length });
+
+        res.json({
+            success: true,
+            data: asesores,
+            total: asesores.length
+        });
+
+    } catch (error) {
+        logError('obtenerAsesores', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error al obtener lista de asesores',
+            error: isDevelopment ? error.message : undefined
+        });
+    }
+};
+
+// ============================================
+// EXPORTAR VENTAS A EXCEL/CSV
+// ============================================
+exports.exportarVentas = async (req, res) => {
+    try {
+        logRequest('exportarVentas', req, { filtros: req.query });
+
+        const {
+            asesor_id,
+            estado,
+            estado_detallado,
+            fecha_desde,
+            fecha_hasta,
+            formato = 'excel'
+        } = req.query;
+
+        // Construir query con filtros
+        let whereConditions = ['v.activo = true'];
+        let queryParams = [];
+        let paramCount = 0;
+
+        if (asesor_id) {
+            paramCount++;
+            whereConditions.push(`v.asesor_id = $${paramCount}`);
+            queryParams.push(asesor_id);
+        }
+
+        if (estado) {
+            paramCount++;
+            whereConditions.push(`v.estado = $${paramCount}`);
+            queryParams.push(estado);
+        }
+
+        if (estado_detallado) {
+            paramCount++;
+            whereConditions.push(`v.estado_detallado = $${paramCount}`);
+            queryParams.push(estado_detallado);
+        }
+
+        if (fecha_desde) {
+            paramCount++;
+            whereConditions.push(`v.fecha_creacion >= $${paramCount}`);
+            queryParams.push(fecha_desde);
+        }
+
+        if (fecha_hasta) {
+            paramCount++;
+            whereConditions.push(`v.fecha_creacion <= $${paramCount}`);
+            queryParams.push(fecha_hasta + ' 23:59:59');
+        }
+
+        const exportQuery = `
+            SELECT
+                v.codigo,
+                v.fecha_creacion::date as fecha_venta,
+                CONCAT(v.nombre_cliente, ' ', COALESCE(v.apellido_cliente, '')) as cliente,
+                v.cliente_email,
+                v.cliente_telefono,
+                v.cliente_empresa,
+                v.tipo_venta,
+                v.estado_detallado,
+                v.valor_total,
+                v.descuento_monto,
+                v.valor_final,
+                v.moneda,
+                CONCAT(u.nombre, ' ', COALESCE(u.apellido, '')) as asesor,
+                v.canal_origen,
+                '' as observaciones,
+                v.fecha_entrega_estimada::date as entrega_estimada,
+                v.fecha_entrega_real::date as entrega_real,
+                COUNT(vd.id) as total_productos
+            FROM ventas v
+            LEFT JOIN usuarios u ON v.asesor_id = u.id
+            LEFT JOIN venta_detalles vd ON v.id = vd.venta_id AND vd.activo = true
+            WHERE ${whereConditions.join(' AND ')}
+            GROUP BY v.id, u.nombre, u.apellido
+            ORDER BY v.fecha_creacion DESC
+        `;
+
+        const result = await query(exportQuery, queryParams);
+
+        if (result.rows.length === 0) {
+            return res.status(404).json({
+                success: false,
+                message: 'No se encontraron ventas con los filtros aplicados'
+            });
+        }
+
+        const ventas = result.rows;
+
+        if (formato === 'csv') {
+            // Generar CSV
+            const headers = [
+                'Código', 'Fecha', 'Cliente', 'Email', 'Teléfono', 'Empresa',
+                'Tipo Documento', 'Estado', 'Valor Total', 'Descuento', 'Valor Final',
+                'Moneda', 'Asesor', 'Canal', 'Observaciones', 'Entrega Estimada',
+                'Entrega Real', 'Total Productos'
+            ];
+
+            let csvContent = headers.join(',') + '\n';
+
+            ventas.forEach(venta => {
+                const row = [
+                    venta.codigo || '',
+                    venta.fecha_venta || '',
+                    `"${venta.cliente || ''}"`,
+                    venta.cliente_email || '',
+                    venta.cliente_telefono || '',
+                    `"${venta.cliente_empresa || ''}"`,
+                    venta.tipo_venta || '',
+                    venta.estado_detallado || '',
+                    venta.valor_total || 0,
+                    venta.descuento_monto || 0,
+                    venta.valor_final || 0,
+                    venta.moneda || 'USD',
+                    `"${venta.asesor || ''}"`,
+                    venta.canal_origen || '',
+                    `"${venta.observaciones || ''}"`,
+                    venta.entrega_estimada || '',
+                    venta.entrega_real || '',
+                    venta.total_productos || 0
+                ];
+                csvContent += row.join(',') + '\n';
+            });
+
+            res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+            res.setHeader('Content-Disposition', `attachment; filename=ventas_${new Date().toISOString().split('T')[0]}.csv`);
+            res.send('\ufeff' + csvContent); // BOM for UTF-8
+
+        } else {
+            // Para Excel, necesitaríamos una librería como xlsx
+            // Por ahora, devolver JSON con estructura Excel-compatible
+            const excelData = {
+                headers: [
+                    'Código', 'Fecha', 'Cliente', 'Email', 'Teléfono', 'Empresa',
+                    'Tipo Documento', 'Estado', 'Valor Total', 'Descuento', 'Valor Final',
+                    'Moneda', 'Asesor', 'Canal', 'Observaciones', 'Entrega Estimada',
+                    'Entrega Real', 'Total Productos'
+                ],
+                data: ventas.map(venta => [
+                    venta.codigo,
+                    venta.fecha_venta,
+                    venta.cliente,
+                    venta.cliente_email,
+                    venta.cliente_telefono,
+                    venta.cliente_empresa,
+                    venta.tipo_venta,
+                    venta.estado_detallado,
+                    parseFloat(venta.valor_total || 0),
+                    parseFloat(venta.descuento_monto || 0),
+                    parseFloat(venta.valor_final || 0),
+                    venta.moneda,
+                    venta.asesor,
+                    venta.canal_origen,
+                    venta.observaciones,
+                    venta.entrega_estimada,
+                    venta.entrega_real,
+                    parseInt(venta.total_productos || 0)
+                ]),
+                resumen: {
+                    total_registros: ventas.length,
+                    valor_total: ventas.reduce((sum, v) => sum + parseFloat(v.valor_final || 0), 0),
+                    fecha_exportacion: new Date().toISOString()
+                }
+            };
+
+            res.setHeader('Content-Type', 'application/json');
+            res.setHeader('Content-Disposition', `attachment; filename=ventas_${new Date().toISOString().split('T')[0]}.json`);
+            res.json(excelData);
+        }
+
+        logSuccess('exportarVentas', {
+            count: ventas.length,
+            formato,
+            value: ventas.reduce((sum, v) => sum + parseFloat(v.valor_final || 0), 0)
+        });
+
+    } catch (error) {
+        logError('exportarVentas', error, { filtros: req.query });
+        res.status(500).json({
+            success: false,
+            message: 'Error al exportar ventas',
+            error: isDevelopment ? error.message : undefined
+        });
     }
 };
 

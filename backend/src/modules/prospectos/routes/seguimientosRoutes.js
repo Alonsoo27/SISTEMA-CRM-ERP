@@ -45,14 +45,14 @@ router.post('/:id/seguimiento', seguimientosRateLimit, SeguimientosController.cr
  * Marcar seguimiento como completado
  * Body: { resultado? }
  */
-router.put('/seguimientos/:id/completar', seguimientosRateLimit, SeguimientosController.completarSeguimiento);
+router.put('/:id/completar', seguimientosRateLimit, SeguimientosController.completarSeguimiento);
 
 /**
  * PUT /api/prospectos/seguimientos/:id/posponer
  * Posponer seguimiento con justificación (snooze)
  * Body: { nueva_fecha, motivo }
  */
-router.put('/seguimientos/:id/posponer', seguimientosRateLimit, SeguimientosController.posponerSeguimiento);
+router.put('/:id/posponer', seguimientosRateLimit, SeguimientosController.posponerSeguimiento);
 
 // =====================================================
 // RUTAS DEL SISTEMA DE REASIGNACIONES
@@ -63,14 +63,14 @@ router.put('/seguimientos/:id/posponer', seguimientosRateLimit, SeguimientosCont
  * Obtener seguimientos vencidos que requieren procesamiento
  * Solo para administradores y jefes de área
  */
-router.get('/seguimientos/vencidos', SeguimientosController.obtenerSeguimientosVencidos);
+router.get('/vencidos', SeguimientosController.obtenerSeguimientosVencidos);
 
 /**
  * POST /api/prospectos/seguimientos/procesar-vencidos
  * Procesar seguimientos vencidos manualmente (también se ejecuta automáticamente)
  * Endpoint para testing y ejecución manual del cron job
  */
-router.post('/seguimientos/procesar-vencidos', cronJobRateLimit, SeguimientosController.procesarSeguimientosVencidos);
+router.post('/procesar-vencidos', cronJobRateLimit, SeguimientosController.procesarSeguimientosVencidos);
 
 /**
  * GET /api/prospectos/modo-libre/:asesorId
@@ -108,6 +108,17 @@ router.post('/:id/cerrar-modo-libre', (req, res) => {
         message: 'Funcionalidad de modo libre en desarrollo'
     });
 });
+
+// =====================================================
+// 📊 HISTORIAL COMPLETO EMPRESARIAL
+// =====================================================
+
+/**
+ * GET /api/prospectos/seguimientos/historial-completo/:asesor_id
+ * Obtener historial completo empresarial con contexto de negocio
+ * Query params: page, limit, fecha_desde, fecha_hasta, tipo_actividad, estado
+ */
+router.get('/historial-completo/:asesor_id', SeguimientosController.obtenerHistorialCompleto);
 
 // =====================================================
 // RUTAS DE DASHBOARDS Y MÉTRICAS

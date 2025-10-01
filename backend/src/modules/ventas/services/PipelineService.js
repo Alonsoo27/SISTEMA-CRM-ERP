@@ -32,9 +32,9 @@ class PipelineService {
             NULLIF(COUNT(*), 0) * 100, 2
           ) as tasa_conversion_general,
           
-          -- Valores usando campos reales
-          SUM(valor_estimado) FILTER (WHERE estado IN ('Prospecto', 'Cotizado', 'Negociacion')) as valor_pipeline_activo,
-          AVG(valor_estimado) FILTER (WHERE estado = 'Cerrado') as valor_promedio_estimado,
+          -- Valores usando campos reales (convertidos a USD)
+          SUM(valor_estimado / 3.7) FILTER (WHERE estado IN ('Prospecto', 'Cotizado', 'Negociacion')) as valor_pipeline_activo,
+          AVG(valor_estimado / 3.7) FILTER (WHERE estado = 'Cerrado') as valor_promedio_estimado,
           
           -- Seguimientos usando campos reales
           COUNT(*) FILTER (WHERE seguimiento_vencido = true) as seguimientos_vencidos,
@@ -45,21 +45,33 @@ class PipelineService {
             EXTRACT(days FROM (fecha_cierre - fecha_contacto))
           ) FILTER (WHERE estado = 'Cerrado') as dias_promedio_cierre,
           
-          -- Ingresos desde tabla ventas
+          -- Ingresos desde tabla ventas (usando fecha_venta y conversión USD)
           (
-            SELECT COALESCE(SUM(v.valor_final), 0)
-            FROM ventas v 
-            INNER JOIN prospectos p2 ON v.prospecto_id = p2.id
-            WHERE p2.fecha_contacto::date BETWEEN $1 AND $2
-            ${whereAsesor.replace('asesor_id', 'p2.asesor_id')}
+            SELECT COALESCE(SUM(
+              CASE
+                WHEN v.moneda = 'USD' THEN v.valor_final
+                WHEN v.moneda = 'PEN' THEN v.valor_final / 3.7
+                ELSE v.valor_final / 3.7
+              END
+            ), 0)
+            FROM ventas v
+            WHERE v.activo = true
+              AND v.fecha_venta::date BETWEEN $1 AND $2
+              ${asesorId ? 'AND v.asesor_id = $3' : ''}
           ) as ingresos_totales,
-          
+
           (
-            SELECT COALESCE(AVG(v.valor_final), 0)
-            FROM ventas v 
-            INNER JOIN prospectos p2 ON v.prospecto_id = p2.id
-            WHERE p2.fecha_contacto::date BETWEEN $1 AND $2
-            ${whereAsesor.replace('asesor_id', 'p2.asesor_id')}
+            SELECT COALESCE(AVG(
+              CASE
+                WHEN v.moneda = 'USD' THEN v.valor_final
+                WHEN v.moneda = 'PEN' THEN v.valor_final / 3.7
+                ELSE v.valor_final / 3.7
+              END
+            ), 0)
+            FROM ventas v
+            WHERE v.activo = true
+              AND v.fecha_venta::date BETWEEN $1 AND $2
+              ${asesorId ? 'AND v.asesor_id = $3' : ''}
           ) as ticket_promedio
           
         FROM prospectos 
@@ -90,8 +102,8 @@ class PipelineService {
         SELECT 
           estado,
           COUNT(*) as cantidad,
-          SUM(valor_estimado) as valor_total,
-          AVG(valor_estimado) as valor_promedio,
+          SUM(valor_estimado / 3.7) as valor_total,
+          AVG(valor_estimado / 3.7) as valor_promedio,
           AVG(probabilidad_cierre) as probabilidad_promedio,
           ROUND(
             COUNT(*) * 100.0 / SUM(COUNT(*)) OVER(), 2
@@ -197,11 +209,17 @@ class PipelineService {
             COUNT(*) FILTER (WHERE p.convertido_venta = true)::decimal / 
             NULLIF(COUNT(*), 0) * 100, 2
           ) as tasa_conversion,
-          SUM(valor_estimado) FILTER (WHERE estado IN ('Prospecto', 'Cotizado', 'Negociacion')) as pipeline_activo,
+          SUM(valor_estimado / 3.7) FILTER (WHERE estado IN ('Prospecto', 'Cotizado', 'Negociacion')) as pipeline_activo,
           COUNT(*) FILTER (WHERE seguimiento_vencido = true) as seguimientos_pendientes,
           
-          -- Ingresos reales desde ventas
-          COALESCE(SUM(v.valor_final), 0) as ingresos_generados,
+          -- Ingresos reales desde ventas (conversión USD)
+          COALESCE(SUM(
+            CASE
+              WHEN v.moneda = 'USD' THEN v.valor_final
+              WHEN v.moneda = 'PEN' THEN v.valor_final / 3.7
+              ELSE v.valor_final / 3.7
+            END
+          ), 0) as ingresos_generados,
           
           AVG(
             EXTRACT(days FROM (p.fecha_cierre - p.fecha_contacto))
@@ -238,9 +256,9 @@ class PipelineService {
         SELECT 
           estado,
           COUNT(*) as cantidad,
-          SUM(valor_estimado) as valor_total,
+          SUM(valor_estimado / 3.7) as valor_total,
           AVG(probabilidad_cierre) as probabilidad_promedio,
-          SUM(valor_estimado * (probabilidad_cierre / 100.0)) as valor_ponderado
+          SUM((valor_estimado / 3.7) * (probabilidad_cierre / 100.0)) as valor_ponderado
         FROM prospectos 
         WHERE activo = true
           AND estado IN ('Prospecto', 'Cotizado', 'Negociacion')
@@ -300,9 +318,9 @@ class PipelineService {
         SELECT 
           estado,
           COUNT(*) as cantidad_oportunidades,
-          SUM(valor_estimado) as valor_pipeline,
+          SUM(valor_estimado / 3.7) as valor_pipeline,
           AVG(probabilidad_cierre) as probabilidad_promedio,
-          SUM(valor_estimado * (probabilidad_cierre / 100.0)) as valor_proyectado
+          SUM((valor_estimado / 3.7) * (probabilidad_cierre / 100.0)) as valor_proyectado
         FROM prospectos 
         WHERE activo = true
           AND estado IN ('Prospecto', 'Cotizado', 'Negociacion')
@@ -356,7 +374,6 @@ class PipelineService {
           seguimiento_obligatorio,
           seguimiento_vencido,
           asesor_nombre,
-          productos_interes,
           observaciones,
           
           -- Días de retraso calculado

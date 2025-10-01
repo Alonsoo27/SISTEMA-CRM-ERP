@@ -83,8 +83,8 @@ const validarFiltrosInventario = (req, res, next) => {
         errores.push('La página debe ser un número mayor a 0');
     }
     
-    if (limit && (isNaN(limit) || Number(limit) < 1 || Number(limit) > 100)) {
-        errores.push('El límite debe ser un número entre 1 y 100');
+    if (limit && (isNaN(limit) || Number(limit) < 1 || Number(limit) > 6000)) {
+        errores.push('El límite debe ser un número entre 1 y 6000');
     }
     
     // Validar estado de stock
@@ -188,8 +188,8 @@ const validarFiltrosMovimientos = (req, res, next) => {
         errores.push('La página debe ser un número mayor a 0');
     }
     
-    if (limit && (isNaN(limit) || Number(limit) < 1 || Number(limit) > 100)) {
-        errores.push('El límite debe ser un número entre 1 y 100');
+    if (limit && (isNaN(limit) || Number(limit) < 1 || Number(limit) > 6000)) {
+        errores.push('El límite debe ser un número entre 1 y 6000');
     }
     
     // Validar tipo de movimiento
@@ -294,8 +294,8 @@ const validarFiltrosAlertas = (req, res, next) => {
         errores.push('La página debe ser un número mayor a 0');
     }
     
-    if (limit && (isNaN(limit) || Number(limit) < 1 || Number(limit) > 100)) {
-        errores.push('El límite debe ser un número entre 1 y 100');
+    if (limit && (isNaN(limit) || Number(limit) < 1 || Number(limit) > 6000)) {
+        errores.push('El límite debe ser un número entre 1 y 6000');
     }
     
     // Validar nivel de prioridad
@@ -363,8 +363,8 @@ const validarFiltrosDespachos = (req, res, next) => {
         errores.push('La página debe ser un número mayor a 0');
     }
     
-    if (limit && (isNaN(limit) || Number(limit) < 1 || Number(limit) > 100)) {
-        errores.push('El límite debe ser un número entre 1 y 100');
+    if (limit && (isNaN(limit) || Number(limit) < 1 || Number(limit) > 6000)) {
+        errores.push('El límite debe ser un número entre 1 y 6000');
     }
     
     // Validar estado
@@ -561,10 +561,57 @@ const validarParametrosValorizacion = (req, res, next) => {
 
 // ==================== VALIDACIONES DE UPLOAD ====================
 
+// Validación para archivos Excel (upload masivo)
+const validarUploadExcel = (req, res, next) => {
+    // Validar que existe archivo
+    if (!req.file) {
+        return res.status(400).json({
+            success: false,
+            error: 'No se proporcionó archivo Excel',
+            codigo: 'NO_FILE_PROVIDED'
+        });
+    }
+
+    // Validar tipo de archivo
+    const validMimeTypes = [
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', // .xlsx
+        'application/vnd.ms-excel' // .xls
+    ];
+
+    if (!validMimeTypes.includes(req.file.mimetype)) {
+        return res.status(400).json({
+            success: false,
+            error: 'Solo se permiten archivos Excel (.xlsx, .xls)',
+            codigo: 'INVALID_FILE_TYPE'
+        });
+    }
+
+    // Validar tamaño de archivo (10MB máximo)
+    const MAX_SIZE = 10 * 1024 * 1024; // 10MB
+    if (req.file.size > MAX_SIZE) {
+        return res.status(400).json({
+            success: false,
+            error: 'El archivo no puede exceder 10MB',
+            codigo: 'FILE_TOO_LARGE'
+        });
+    }
+
+    // Validar que tiene contenido
+    if (!req.file.buffer || req.file.buffer.length === 0) {
+        return res.status(400).json({
+            success: false,
+            error: 'El archivo está vacío',
+            codigo: 'EMPTY_FILE'
+        });
+    }
+
+    next();
+};
+
 const validarUploadMasivo = (req, res, next) => {
     const errores = [];
     const { productos } = req.body;
-    
+
     // Validar estructura básica
     if (!Array.isArray(productos) || productos.length === 0) {
         return res.status(400).json({
@@ -573,7 +620,7 @@ const validarUploadMasivo = (req, res, next) => {
             codigo: 'INVALID_PRODUCTS_ARRAY'
         });
     }
-    
+
     // Validar límite de productos
     const MAX_PRODUCTOS = 5000;
     if (productos.length > MAX_PRODUCTOS) {
@@ -803,6 +850,7 @@ module.exports = {
     validarParametrosPeriodo,
     
     // Validaciones de upload
+    validarUploadExcel,
     validarUploadMasivo,
     
     // Validaciones de integración

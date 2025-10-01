@@ -266,7 +266,7 @@ class ComisionesController {
             // Control de acceso
             const targetAsesorId = asesor_id || userId;
             
-            if (!['admin', 'super_admin', 'manager', 'supervisor'].includes(userRole) && targetAsesorId != userId) {
+            if (!['ADMIN', 'SUPER_ADMIN', 'GERENTE', 'JEFE_VENTAS'].includes(userRole) && targetAsesorId != userId) {
                 return res.status(403).json({
                     success: false,
                     message: 'Sin permisos para ver este bono'
@@ -444,7 +444,7 @@ class ComisionesController {
         try {
             const userRole = req.user?.rol || 'asesor';
 
-            if (!['admin', 'super_admin', 'manager', 'supervisor'].includes(userRole)) {
+            if (!['ADMIN', 'SUPER_ADMIN', 'GERENTE', 'JEFE_VENTAS'].includes(userRole)) {
                 return res.status(403).json({
                     success: false,
                     message: 'Sin permisos para ver dashboard de equipo'

@@ -196,7 +196,7 @@ router.use((req, res, next) => {
  * 🔐 Requiere rol: asesor, admin, supervisor + ownership
  */
 router.get('/:usuarioId', 
-    requireRole(['asesor', 'admin', 'supervisor', 'SUPER_ADMIN']), 
+    requireRole(['VENDEDOR', 'ADMIN', 'JEFE_VENTAS', 'SUPER_ADMIN']), 
     requireOwnership,
     queryRateLimit,
     NotificacionesController.obtenerNotificaciones
@@ -208,7 +208,7 @@ router.get('/:usuarioId',
  * 🔐 Requiere rol: asesor, admin, supervisor + ownership
  */
 router.get('/contador/:usuarioId', 
-    requireRole(['asesor', 'admin', 'supervisor', 'SUPER_ADMIN']), 
+    requireRole(['VENDEDOR', 'ADMIN', 'JEFE_VENTAS', 'SUPER_ADMIN']), 
     requireOwnership,
     queryRateLimit,
     NotificacionesController.obtenerContador
@@ -229,7 +229,7 @@ router.get('/contador/:usuarioId',
  * - Masivo: { "tipo": "marketing", "modo": "masivo", "usuarios": [1,2,3], "data": { "titulo": "Promoción", "mensaje": "Nueva campaña" } }
  */
 router.post('/crear', 
-    requireRole(['asesor', 'admin', 'super_admin']),
+    requireRole(['VENDEDOR', 'ADMIN', 'SUPER_ADMIN']),
     createNotificationsRateLimit,
     NotificacionesController.crearNotificacion
 );
@@ -240,7 +240,7 @@ router.post('/crear',
  * 🔐 Requiere rol: asesor, admin, supervisor
  */
 router.put('/:id/marcar-leida', 
-    requireRole(['asesor', 'admin', 'supervisor', 'SUPER_ADMIN']),
+    requireRole(['VENDEDOR', 'ADMIN', 'JEFE_VENTAS', 'SUPER_ADMIN']),
     queryRateLimit,
     NotificacionesController.marcarLeida
 );
@@ -251,7 +251,7 @@ router.put('/:id/marcar-leida',
  * 🔐 Requiere rol: asesor, admin, supervisor + ownership
  */
 router.put('/marcar-todas-leidas/:usuarioId', 
-    requireRole(['asesor', 'admin', 'supervisor', 'SUPER_ADMIN']),
+    requireRole(['VENDEDOR', 'ADMIN', 'JEFE_VENTAS', 'SUPER_ADMIN']),
     requireOwnership,
     queryRateLimit,
     NotificacionesController.marcarTodasLeidas
@@ -267,7 +267,7 @@ router.put('/marcar-todas-leidas/:usuarioId',
  * 🔐 Requiere rol: admin, supervisor
  */
 router.post('/seguimiento-vencido', 
-    requireRole(['admin', 'supervisor']),
+    requireRole(['ADMIN', 'JEFE_VENTAS', 'GERENTE', 'SUPER_ADMIN']),
     createNotificationsRateLimit,
     async (req, res) => {
         try {
@@ -302,7 +302,7 @@ router.post('/seguimiento-vencido',
  * 🔐 Requiere rol: admin, supervisor
  */
 router.post('/oportunidad-alto-valor', 
-    requireRole(['admin', 'supervisor']),
+    requireRole(['ADMIN', 'JEFE_VENTAS', 'GERENTE', 'SUPER_ADMIN']),
     createNotificationsRateLimit,
     async (req, res) => {
         try {
@@ -337,7 +337,7 @@ router.post('/oportunidad-alto-valor',
  * 🔐 Requiere rol: admin
  */
 router.post('/masivas', 
-    requireRole(['admin']),
+    requireRole(['ADMIN', 'SUPER_ADMIN']),
     massiveNotificationsRateLimit,
     async (req, res) => {
         try {
@@ -384,7 +384,7 @@ router.post('/masivas',
  * 🔐 Requiere rol: admin
  */
 router.get('/test/crear-ejemplo', 
-    requireRole(['admin']),
+    requireRole(['ADMIN', 'SUPER_ADMIN']),
     async (req, res) => {
         try {
             const { usuario_id = 1, tipo = 'manual' } = req.query;

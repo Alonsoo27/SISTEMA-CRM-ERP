@@ -46,6 +46,7 @@ router.get('/test', (req, res) => {
         available_endpoints: [
             'POST /api/auth/login',
             'GET /api/auth/verify',
+            'GET /api/auth/me',
             'POST /api/auth/logout',
             'GET /api/auth/profile',
             'GET /api/auth/test'
@@ -362,6 +363,72 @@ router.get('/profile', (req, res) => {
         res.status(500).json({
             success: false,
             message: 'Error al obtener perfil de usuario'
+        });
+    }
+});
+
+// ============================================
+// USUARIO ACTUAL (ME) - ENDPOINT DINÁMICO
+// ============================================
+/**
+ * @route   GET /api/auth/me
+ * @desc    Obtener información del usuario autenticado actual
+ * @access  Private (requiere token válido)
+ */
+router.get('/me', authenticateToken, (req, res) => {
+    try {
+        logAuthEvent('GET_CURRENT_USER', {
+            user_id: req.user.id,
+            rol: req.user.rol,
+            ip: req.ip
+        });
+
+        // El middleware authenticateToken ya validó el token y poblá req.user
+        // Solo necesitamos retornar la información del usuario
+        res.json({
+            success: true,
+            message: 'Usuario obtenido exitosamente',
+            data: {
+                usuario: {
+                    id: req.user.id,
+                    user_id: req.user.user_id, // Compatibilidad
+                    nombre: req.user.nombre,
+                    apellido: req.user.apellido,
+                    nombre_completo: req.user.nombre_completo,
+                    email: req.user.email,
+                    rol: req.user.rol,
+                    rol_id: req.user.rol_id,
+                    es_jefe: req.user.es_jefe,
+                    vende: req.user.vende,
+                    jefe_id: req.user.jefe_id,
+                    area_id: req.user.area_id,
+                    area_nombre: req.user.area_nombre,
+                    jefe_nombre: req.user.jefe_nombre
+                },
+                permisos: {
+                    es_ejecutivo: [1, 2, 3, 11].includes(req.user.rol_id),
+                    es_administrador: [1, 2, 11].includes(req.user.rol_id),
+                    puede_vender: req.user.vende,
+                    es_supervisor: req.user.es_jefe
+                },
+                timestamp: new Date().toISOString(),
+                session_info: {
+                    environment: process.env.NODE_ENV || 'development',
+                    token_type: process.env.NODE_ENV === 'development' ? 'fake' : 'jwt'
+                }
+            }
+        });
+
+    } catch (error) {
+        logAuthEvent('GET_CURRENT_USER_ERROR', {
+            error: error.message,
+            user_id: req.user?.id
+        });
+
+        res.status(500).json({
+            success: false,
+            message: 'Error al obtener información del usuario',
+            code: 'GET_USER_ERROR'
         });
     }
 });

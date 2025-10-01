@@ -29,8 +29,8 @@ const PipelineCharts = ({ vista, datos, periodo }) => {
   };
 
   const formatearMoneda = (cantidad) => {
-    if (!cantidad) return 'S/ 0';
-    return `S/ ${formatearNumero(cantidad)}`;
+    if (!cantidad) return '$0';
+    return `$${formatearNumero(cantidad)}`;
   };
 
   // Custom tooltip para gráficos
@@ -89,7 +89,7 @@ const PipelineCharts = ({ vista, datos, periodo }) => {
         return { distribucionEtapas, performanceAsesores };
 
       case 'embudo':
-        // Datos para el embudo - usando distribucion real
+        // Datos para el embudo - usando distribucion real del dashboard
         const datosEmbudo = dashboard?.distribucion_etapas?.map((etapa, index) => ({
           etapa: etapa.estado,
           cantidad: parseInt(etapa.cantidad || 0),
@@ -98,8 +98,8 @@ const PipelineCharts = ({ vista, datos, periodo }) => {
           fill: coloresPaleta[index % coloresPaleta.length]
         })) || [];
 
-        // Tasas de conversión del embudo
-        const tasasConversion = embudo?.tasas_conversion || {};
+        // Tasas de conversión del embudo - usar datos del dashboard también
+        const tasasConversion = embudo?.tasas_conversion || dashboard?.tasas_conversion || {};
 
         return { datosEmbudo, tasasConversion };
 
@@ -414,4 +414,4 @@ const PipelineCharts = ({ vista, datos, periodo }) => {
   return null;
 };
 
-export default PipelineCharts;
+export default PipelineCharts;  

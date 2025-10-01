@@ -1,26 +1,36 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
-  TrendingUp, TrendingDown, DollarSign, Target, 
+  TrendingUp, TrendingDown, DollarSign, Target,
   Award, Calendar, BarChart3, PieChart, User,
   RefreshCw, Download, AlertCircle, CheckCircle,
   Star, ArrowUp, ArrowDown, Minus, Trophy,
   Clock, Zap, Medal, MapPin, Maximize, Minimize,
-  Eye, Monitor
+  Eye, Monitor, MessageCircle, Phone, Users,
+  Activity, TrendingDown as TrendDown, Globe,
+  Building, Briefcase, Timer, BarChart,
+  LineChart, Filter, ChevronUp, ChevronDown
 } from 'lucide-react';
 
-const DashboardAsesores = ({ 
+const DashboardAsesores = ({
   usuarioActual,
-  refreshTrigger = 0 
+  refreshTrigger = 0
 }) => {
   const [metricas, setMetricas] = useState(null);
   const [metasInfo, setMetasInfo] = useState(null);
   const [datosGeografia, setDatosGeografia] = useState([]);
   const [datosSectores, setDatosSectores] = useState([]);
   const [datosRanking, setDatosRanking] = useState(null);
+  const [datosBono, setDatosBono] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [periodoSeleccionado, setPeriodoSeleccionado] = useState('mes_actual');
   const [notification, setNotification] = useState(null);
+
+  // NUEVO: Estados para el selector de asesores
+  const [asesorSeleccionado, setAsesorSeleccionado] = useState(usuarioActual?.id);
+  const [asesoresDisponibles, setAsesoresDisponibles] = useState([]);
+  const [modoVista, setModoVista] = useState('propio'); // 'propio' | 'supervisor'
+  const [loadingAsesores, setLoadingAsesores] = useState(false);
   
   // Estado para modo pantalla completa
   const [modoFullscreen, setModoFullscreen] = useState(false);
@@ -94,14 +104,113 @@ const DashboardAsesores = ({
     setTimeout(() => setNotification(null), 3000);
   }, []);
 
+  // NUEVA: Determinar modo de vista según permisos del usuario
+  const determinarModoVista = useCallback(() => {
+    const userVende = usuarioActual?.vende;
+    const userRole = usuarioActual?.rol_id;
+
+    // Roles que NO venden pero pueden supervisar
+    const rolesSoloSupervisores = [2, 3]; // GERENTE, JEFE_VENTAS
+
+    if (rolesSoloSupervisores.includes(userRole) || !userVende) {
+      // FORZAR modo supervisor para usuarios que no venden
+      setModoVista('supervisor');
+      setAsesorSeleccionado(null); // No seleccionar ningún asesor por defecto
+      return 'supervisor';
+    } else {
+      // Usuarios que venden inician viendo su propio dashboard
+      setModoVista('propio');
+      setAsesorSeleccionado(usuarioActual?.id);
+      return 'propio';
+    }
+  }, [usuarioActual]);
+
+  // NUEVA: Cargar lista de asesores supervisables
+  const cargarAsesores = useCallback(async () => {
+    try {
+      setLoadingAsesores(true);
+      const token = localStorage.getItem('token');
+
+      if (!token) {
+        console.error('Token no encontrado');
+        return;
+      }
+
+      const response = await fetch('/api/asesores/supervisables', {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setAsesoresDisponibles(data.data.asesores || []);
+        console.log('✅ Asesores cargados:', data.data.asesores.length);
+      } else {
+        console.error('Error cargando asesores:', response.status);
+      }
+
+    } catch (error) {
+      console.error('Error cargando asesores:', error);
+    } finally {
+      setLoadingAsesores(false);
+    }
+  }, []);
+
+  // NUEVA: Cambiar asesor seleccionado
+  const cambiarAsesor = useCallback((nuevoAsesorId) => {
+    if (nuevoAsesorId !== asesorSeleccionado) {
+      setAsesorSeleccionado(nuevoAsesorId);
+      setMetricas(null); // Limpiar datos para forzar recarga
+      setMetasInfo(null);
+      setDatosGeografia([]);
+      setDatosSectores([]);
+      setDatosRanking(null);
+    }
+  }, [asesorSeleccionado]);
+
+  // NUEVA: Toggle entre modo propio y supervisor
+  const toggleModoVista = useCallback(() => {
+    const userVende = usuarioActual?.vende;
+    const userRole = usuarioActual?.rol_id;
+    const rolesSoloSupervisores = [2, 3];
+
+    // Solo permitir toggle si el usuario puede vender
+    if (rolesSoloSupervisores.includes(userRole) || !userVende) {
+      return; // No hacer nada si es un rol que solo supervisa
+    }
+
+    if (modoVista === 'propio') {
+      setModoVista('supervisor');
+      setAsesorSeleccionado(null);
+    } else {
+      setModoVista('propio');
+      setAsesorSeleccionado(usuarioActual?.id);
+    }
+
+    // Limpiar datos para forzar recarga
+    setMetricas(null);
+    setMetasInfo(null);
+    setDatosGeografia([]);
+    setDatosSectores([]);
+    setDatosRanking(null);
+  }, [modoVista, usuarioActual]);
+
   // Cargar métricas del asesor
   const cargarMetricas = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
 
+      // VALIDACIÓN: No cargar si no hay asesor seleccionado
+      if (!asesorSeleccionado) {
+        setLoading(false);
+        return;
+      }
+
       const token = localStorage.getItem('token');
-      
+
       if (!token) {
         setError('Token de autenticación no encontrado');
         return;
@@ -112,19 +221,23 @@ const DashboardAsesores = ({
         'Content-Type': 'application/json'
       };
 
-      // Llamadas paralelas a todos los endpoints
+      console.log(`🔄 Cargando dashboard para asesor ${asesorSeleccionado} en modo ${modoVista}`);
+
+      // Llamadas paralelas a todos los endpoints usando el asesor seleccionado
       const [
         dashboardResponse,
         metasResponse,
         geografiaResponse,
         sectoresResponse,
-        rankingResponse
+        rankingResponse,
+        bonoResponse
       ] = await Promise.all([
-        fetch(`/api/dashboard/personal/${usuarioActual.id}?periodo=${periodoSeleccionado}`, { headers }),
-        fetch(`/api/metas/dashboard?asesor_id=${usuarioActual.id}&periodo=${periodoSeleccionado}`, { headers }),
-        fetch(`/api/dashboard/geografia-asesor/${usuarioActual.id}?periodo=${periodoSeleccionado}`, { headers }).catch(() => ({ ok: false })),
-        fetch(`/api/dashboard/sectores-asesor/${usuarioActual.id}?periodo=${periodoSeleccionado}`, { headers }).catch(() => ({ ok: false })),
-        fetch(`/api/dashboard/ranking-asesor/${usuarioActual.id}?periodo=${periodoSeleccionado}`, { headers }).catch(() => ({ ok: false }))
+        fetch(`/api/dashboard/personal/${asesorSeleccionado}?periodo=${periodoSeleccionado}`, { headers }),
+        fetch(`/api/metas/dashboard?asesor_id=${asesorSeleccionado}&periodo=${periodoSeleccionado}`, { headers }),
+        fetch(`/api/dashboard/geografia-asesor/${asesorSeleccionado}?periodo=${periodoSeleccionado}`, { headers }).catch(() => ({ ok: false })),
+        fetch(`/api/dashboard/sectores-asesor/${asesorSeleccionado}?periodo=${periodoSeleccionado}`, { headers }).catch(() => ({ ok: false })),
+        fetch(`/api/dashboard/ranking-asesor/${asesorSeleccionado}?periodo=${periodoSeleccionado}`, { headers }).catch(() => ({ ok: false })),
+        fetch(`/api/comisiones/bono-actual/${asesorSeleccionado}`, { headers }).catch(() => ({ ok: false }))
       ]);
 
       // Procesar respuestas
@@ -153,6 +266,11 @@ const DashboardAsesores = ({
         setDatosRanking(rankingData.data?.rankingData);
       }
 
+      if (bonoResponse.ok) {
+        const bonoData = await bonoResponse.json();
+        setDatosBono(bonoData.data);
+      }
+
       if (!autoRefresh) {
         showNotification('Dashboard actualizado correctamente', 'success');
       }
@@ -166,7 +284,24 @@ const DashboardAsesores = ({
     } finally {
       setLoading(false);
     }
-  }, [usuarioActual.id, periodoSeleccionado, autoRefresh, showNotification]);
+  }, [asesorSeleccionado, periodoSeleccionado, autoRefresh, showNotification, modoVista]);
+
+  // NUEVO: Inicialización del componente
+  useEffect(() => {
+    if (usuarioActual?.id) {
+      // Determinar modo de vista inicial
+      determinarModoVista();
+      // Cargar lista de asesores supervisables
+      cargarAsesores();
+    }
+  }, [usuarioActual?.id, determinarModoVista, cargarAsesores]);
+
+  // ACTUALIZADO: useEffect para cargar métricas cuando cambia el asesor o período
+  useEffect(() => {
+    if (asesorSeleccionado) {
+      cargarMetricas();
+    }
+  }, [cargarMetricas, refreshTrigger, asesorSeleccionado]);
 
   // Auto-refresh en modo fullscreen
   useEffect(() => {
@@ -229,9 +364,9 @@ const DashboardAsesores = ({
   }, [cargarMetricas, refreshTrigger, usuarioActual?.id]);
 
   const formatearMonto = (monto) => {
-    return new Intl.NumberFormat('es-PE', {
+    return new Intl.NumberFormat('en-US', {
       style: 'currency',
-      currency: 'PEN'
+      currency: 'USD'
     }).format(monto || 0);
   };
 
@@ -320,17 +455,67 @@ const DashboardAsesores = ({
     );
   }
 
+  // Determinar nombre del asesor actual
+  const asesorActual = asesoresDisponibles.find(a => a.id === asesorSeleccionado);
+  const nombreAsesorActual = asesorActual?.nombre_completo || usuarioActual?.nombre || 'Cargando...';
+
+  // Verificar si el usuario puede alternar entre modos
+  const puedeAlternarModos = usuarioActual?.vende && ![2, 3].includes(usuarioActual?.rol_id);
+
+  if (!asesorSeleccionado && modoVista === 'supervisor') {
+    return (
+      <div className="bg-white rounded-lg shadow p-8 text-center">
+        <Eye className="h-16 w-16 mx-auto text-blue-500 mb-4" />
+        <h3 className="text-xl font-semibold text-gray-900 mb-2">Selecciona un Asesor</h3>
+        <p className="text-gray-600 mb-6">Elige un asesor para ver su dashboard personal</p>
+
+        {loadingAsesores ? (
+          <div className="flex items-center justify-center">
+            <RefreshCw className="h-5 w-5 animate-spin mr-2" />
+            <span>Cargando asesores...</span>
+          </div>
+        ) : asesoresDisponibles.length > 0 ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 max-w-4xl mx-auto">
+            {asesoresDisponibles.map(asesor => (
+              <button
+                key={asesor.id}
+                onClick={() => cambiarAsesor(asesor.id)}
+                className="p-4 border border-gray-200 rounded-lg hover:border-blue-500 hover:bg-blue-50 transition-colors text-left"
+              >
+                <div className="flex items-center mb-2">
+                  <User className="h-5 w-5 text-blue-500 mr-2" />
+                  <span className="font-medium text-gray-900">{asesor.nombre_completo}</span>
+                </div>
+                <div className="text-sm text-gray-600">
+                  <p>{asesor.rol}</p>
+                  {asesor.metricas?.porcentaje_meta > 0 && (
+                    <p className="text-green-600">Meta: {asesor.metricas.porcentaje_meta}%</p>
+                  )}
+                </div>
+              </button>
+            ))}
+          </div>
+        ) : (
+          <p className="text-gray-500">No hay asesores disponibles para supervisar</p>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className={`space-y-6 ${modoFullscreen ? 'p-8' : ''}`} data-dashboard>
-      {/* Header */}
+      {/* Header Dinámico */}
       <div className="bg-gradient-to-r from-blue-600 to-blue-800 rounded-lg shadow p-6 text-white">
         <div className="flex items-center justify-between">
           <div>
             <h2 className={`font-bold ${modoFullscreen ? 'text-4xl' : 'text-2xl'}`}>
-              Mi Dashboard Personal
+              {modoVista === 'propio' ? 'Mi Dashboard Personal' : `Dashboard de ${nombreAsesorActual}`}
             </h2>
             <p className={`text-blue-100 ${modoFullscreen ? 'text-xl' : ''}`}>
-              Hola, {usuarioActual?.nombre}! Aquí tienes tus métricas y progreso
+              {modoVista === 'propio'
+                ? `Hola, ${usuarioActual?.nombre}! Aquí tienes tus métricas y progreso`
+                : `Supervisando el rendimiento de ${nombreAsesorActual}`
+              }
             </p>
             {modoFullscreen && autoRefresh && (
               <div className="flex items-center mt-2 text-blue-200">
@@ -339,8 +524,50 @@ const DashboardAsesores = ({
               </div>
             )}
           </div>
-          
+
           <div className="flex items-center space-x-3">
+            {/* Toggle de Modo (solo para usuarios que venden) */}
+            {puedeAlternarModos && (
+              <button
+                onClick={toggleModoVista}
+                className={`inline-flex items-center px-3 py-2 border border-blue-400 rounded-md text-white hover:bg-blue-700 transition-colors ${
+                  modoFullscreen ? 'px-4 py-3' : ''
+                }`}
+                title={modoVista === 'propio' ? 'Cambiar a modo supervisor' : 'Ver mi dashboard personal'}
+              >
+                {modoVista === 'propio' ? (
+                  <>
+                    <Eye className="h-4 w-4 mr-2" />
+                    Supervisar
+                  </>
+                ) : (
+                  <>
+                    <User className="h-4 w-4 mr-2" />
+                    Mi Dashboard
+                  </>
+                )}
+              </button>
+            )}
+
+            {/* Selector de Asesor (modo supervisor) */}
+            {modoVista === 'supervisor' && asesoresDisponibles.length > 0 && (
+              <select
+                value={asesorSeleccionado || ''}
+                onChange={(e) => cambiarAsesor(parseInt(e.target.value))}
+                className={`border border-blue-400 rounded-md px-3 py-2 text-sm bg-white text-gray-900 focus:ring-2 focus:ring-blue-300 ${
+                  modoFullscreen ? 'text-lg px-4 py-3' : ''
+                }`}
+                disabled={loadingAsesores}
+              >
+                <option value="">Seleccionar asesor...</option>
+                {asesoresDisponibles.map(asesor => (
+                  <option key={asesor.id} value={asesor.id}>
+                    {asesor.nombre_completo} ({asesor.rol})
+                  </option>
+                ))}
+              </select>
+            )}
+
             {/* Selector de período */}
             <select
               value={periodoSeleccionado}
@@ -390,98 +617,416 @@ const DashboardAsesores = ({
         </div>
       </div>
 
-      {/* Métricas principales */}
-      <div className={`grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 ${modoFullscreen ? 'gap-8' : ''}`}>
-        <div className={`bg-white rounded-lg shadow p-6 ${modoFullscreen ? 'p-8' : ''}`}>
+      {/* Métricas principales expandidas */}
+      <div className={`grid grid-cols-1 md:grid-cols-2 lg:grid-cols-7 gap-4 ${modoFullscreen ? 'gap-6' : ''}`}>
+        <div className={`bg-white rounded-lg shadow p-4 ${modoFullscreen ? 'p-6' : ''}`}>
           <div className="flex items-center justify-between">
             <div>
-              <p className={`font-medium text-gray-600 ${modoFullscreen ? 'text-lg' : 'text-sm'}`}>
+              <p className={`font-medium text-gray-600 ${modoFullscreen ? 'text-base' : 'text-xs'}`}>
                 Mis Ventas
               </p>
-              <p className={`font-bold text-gray-900 ${modoFullscreen ? 'text-5xl' : 'text-3xl'}`}>
-                {metricas?.metricas?.ventas_completadas || 0}
+              <p className={`font-bold text-gray-900 ${modoFullscreen ? 'text-4xl' : 'text-2xl'}`}>
+                {metricas?.ventas?.completadas || 0}
               </p>
-              <div className="flex items-center mt-2">
+              <div className="flex items-center mt-1">
                 {obtenerIconoTendencia(metricas?.tendencias?.ventas_completadas)}
                 <span className={`ml-1 ${obtenerColorTendencia(metricas?.tendencias?.ventas_completadas)} ${
-                  modoFullscreen ? 'text-base' : 'text-sm'
+                  modoFullscreen ? 'text-sm' : 'text-xs'
                 }`}>
-                  {metricas?.tendencias?.ventas_completadas > 0 ? '+' : ''}{metricas?.tendencias?.ventas_completadas}% vs período anterior
+                  {metricas?.tendencias?.ventas_completadas > 0 ? '+' : ''}{metricas?.tendencias?.ventas_completadas}%
                 </span>
               </div>
             </div>
-            <div className={`bg-blue-100 rounded-full ${modoFullscreen ? 'p-4' : 'p-3'}`}>
-              <DollarSign className={`text-blue-600 ${modoFullscreen ? 'h-12 w-12' : 'h-8 w-8'}`} />
+            <div className={`bg-blue-100 rounded-full ${modoFullscreen ? 'p-3' : 'p-2'}`}>
+              <DollarSign className={`text-blue-600 ${modoFullscreen ? 'h-8 w-8' : 'h-6 w-6'}`} />
             </div>
           </div>
         </div>
 
-        <div className={`bg-white rounded-lg shadow p-6 ${modoFullscreen ? 'p-8' : ''}`}>
+        <div className={`bg-white rounded-lg shadow p-4 ${modoFullscreen ? 'p-6' : ''}`}>
           <div className="flex items-center justify-between">
             <div>
-              <p className={`font-medium text-gray-600 ${modoFullscreen ? 'text-lg' : 'text-sm'}`}>
-                Mis Ingresos
+              <p className={`font-medium text-gray-600 ${modoFullscreen ? 'text-base' : 'text-xs'}`}>
+                Ingresos
               </p>
-              <p className={`font-bold text-gray-900 ${modoFullscreen ? 'text-5xl' : 'text-3xl'}`}>
-                {formatearMonto(metricas?.metricas?.valor_total_completadas)}
+              <p className={`font-bold text-gray-900 ${modoFullscreen ? 'text-4xl' : 'text-2xl'}`}>
+                {formatearMonto(metricas?.ventas?.valor_total)}
               </p>
-              <div className="flex items-center mt-2">
+              <div className="flex items-center mt-1">
                 {obtenerIconoTendencia(metricas?.tendencias?.valor_total_completadas)}
                 <span className={`ml-1 ${obtenerColorTendencia(metricas?.tendencias?.valor_total_completadas)} ${
-                  modoFullscreen ? 'text-base' : 'text-sm'
+                  modoFullscreen ? 'text-sm' : 'text-xs'
                 }`}>
-                  {metricas?.tendencias?.valor_total_completadas > 0 ? '+' : ''}{metricas?.tendencias?.valor_total_completadas}% vs período anterior
+                  {metricas?.tendencias?.valor_total_completadas > 0 ? '+' : ''}{metricas?.tendencias?.valor_total_completadas}%
                 </span>
               </div>
             </div>
-            <div className={`bg-green-100 rounded-full ${modoFullscreen ? 'p-4' : 'p-3'}`}>
-              <Target className={`text-green-600 ${modoFullscreen ? 'h-12 w-12' : 'h-8 w-8'}`} />
+            <div className={`bg-green-100 rounded-full ${modoFullscreen ? 'p-3' : 'p-2'}`}>
+              <Target className={`text-green-600 ${modoFullscreen ? 'h-8 w-8' : 'h-6 w-6'}`} />
             </div>
           </div>
         </div>
 
-        <div className={`bg-white rounded-lg shadow p-6 ${modoFullscreen ? 'p-8' : ''}`}>
+        <div className={`bg-white rounded-lg shadow p-4 ${modoFullscreen ? 'p-6' : ''}`}>
           <div className="flex items-center justify-between">
             <div>
-              <p className={`font-medium text-gray-600 ${modoFullscreen ? 'text-lg' : 'text-sm'}`}>
-                Mi Tasa de Éxito
+              <p className={`font-medium text-gray-600 ${modoFullscreen ? 'text-base' : 'text-xs'}`}>
+                Tasa Conversión
               </p>
-              <p className={`font-bold text-gray-900 ${modoFullscreen ? 'text-5xl' : 'text-3xl'}`}>
-                {metricas?.metricas?.tasa_exito || 0}%
+              <p className={`font-bold text-gray-900 ${modoFullscreen ? 'text-4xl' : 'text-2xl'}`}>
+                {metricas?.pipeline?.tasa_conversion || 0}%
               </p>
-              <div className="flex items-center mt-2">
-                <ArrowUp className="h-4 w-4 text-green-500" />
-                <span className={`ml-1 text-green-600 ${modoFullscreen ? 'text-base' : 'text-sm'}`}>
-                  Excelente rendimiento
+              <div className="flex items-center mt-1">
+                <Activity className={`h-3 w-3 ${metricas?.pipeline?.tasa_conversion >= 20 ? 'text-green-500' : 'text-yellow-500'}`} />
+                <span className={`ml-1 text-xs ${
+                  metricas?.pipeline?.tasa_conversion >= 20 ? 'text-green-600' : 'text-yellow-600'
+                }`}>
+                  {metricas?.pipeline?.total_oportunidades || 0} oportunidades
                 </span>
               </div>
             </div>
-            <div className={`bg-purple-100 rounded-full ${modoFullscreen ? 'p-4' : 'p-3'}`}>
-              <Award className={`text-purple-600 ${modoFullscreen ? 'h-12 w-12' : 'h-8 w-8'}`} />
+            <div className={`bg-purple-100 rounded-full ${modoFullscreen ? 'p-3' : 'p-2'}`}>
+              <BarChart className={`text-purple-600 ${modoFullscreen ? 'h-8 w-8' : 'h-6 w-6'}`} />
             </div>
           </div>
         </div>
 
-        <div className={`bg-white rounded-lg shadow p-6 ${modoFullscreen ? 'p-8' : ''}`}>
+        <div className={`bg-white rounded-lg shadow p-4 ${modoFullscreen ? 'p-6' : ''}`}>
           <div className="flex items-center justify-between">
             <div>
-              <p className={`font-medium text-gray-600 ${modoFullscreen ? 'text-lg' : 'text-sm'}`}>
+              <p className={`font-medium text-gray-600 ${modoFullscreen ? 'text-base' : 'text-xs'}`}>
                 Ticket Promedio
               </p>
-              <p className={`font-bold text-gray-900 ${modoFullscreen ? 'text-5xl' : 'text-3xl'}`}>
-                {formatearMonto(metricas?.metricas?.promedio_venta)}
+              <p className={`font-bold text-gray-900 ${modoFullscreen ? 'text-4xl' : 'text-2xl'}`}>
+                {formatearMonto(metricas?.ventas?.promedio_venta)}
               </p>
-              <div className="flex items-center mt-2">
+              <div className="flex items-center mt-1">
                 {obtenerIconoTendencia(metricas?.tendencias?.promedio_venta)}
                 <span className={`ml-1 ${obtenerColorTendencia(metricas?.tendencias?.promedio_venta)} ${
-                  modoFullscreen ? 'text-base' : 'text-sm'
+                  modoFullscreen ? 'text-sm' : 'text-xs'
                 }`}>
-                  {metricas?.tendencias?.promedio_venta > 0 ? '+' : ''}{metricas?.tendencias?.promedio_venta}% vs período anterior
+                  {metricas?.tendencias?.promedio_venta > 0 ? '+' : ''}{metricas?.tendencias?.promedio_venta}%
                 </span>
               </div>
             </div>
-            <div className={`bg-yellow-100 rounded-full ${modoFullscreen ? 'p-4' : 'p-3'}`}>
-              <Star className={`text-yellow-600 ${modoFullscreen ? 'h-12 w-12' : 'h-8 w-8'}`} />
+            <div className={`bg-yellow-100 rounded-full ${modoFullscreen ? 'p-3' : 'p-2'}`}>
+              <Star className={`text-yellow-600 ${modoFullscreen ? 'h-8 w-8' : 'h-6 w-6'}`} />
+            </div>
+          </div>
+        </div>
+
+        <div className={`bg-white rounded-lg shadow p-4 ${modoFullscreen ? 'p-6' : ''}`}>
+          <div className="flex items-center justify-between">
+            <div>
+              <p className={`font-medium text-gray-600 ${modoFullscreen ? 'text-base' : 'text-xs'}`}>
+                Clientes Únicos
+              </p>
+              <p className={`font-bold text-gray-900 ${modoFullscreen ? 'text-4xl' : 'text-2xl'}`}>
+                {metricas?.mercado?.clientes_unicos || 0}
+              </p>
+              <div className="flex items-center mt-1">
+                <Users className="h-3 w-3 text-blue-500" />
+                <span className={`ml-1 text-blue-600 ${modoFullscreen ? 'text-sm' : 'text-xs'}`}>
+                  {metricas?.mercado?.ciudades_atendidas || 0} ciudades
+                </span>
+              </div>
+            </div>
+            <div className={`bg-indigo-100 rounded-full ${modoFullscreen ? 'p-3' : 'p-2'}`}>
+              <Users className={`text-indigo-600 ${modoFullscreen ? 'h-8 w-8' : 'h-6 w-6'}`} />
+            </div>
+          </div>
+        </div>
+
+        <div className={`bg-white rounded-lg shadow p-4 ${modoFullscreen ? 'p-6' : ''}`}>
+          <div className="flex items-center justify-between">
+            <div>
+              <p className={`font-medium text-gray-600 ${modoFullscreen ? 'text-base' : 'text-xs'}`}>
+                Actividad Diaria
+              </p>
+              <p className={`font-bold text-gray-900 ${modoFullscreen ? 'text-4xl' : 'text-2xl'}`}>
+                {metricas?.actividad?.dias_activos || 0}
+              </p>
+              <div className="flex items-center mt-1">
+                <Activity className="h-3 w-3 text-green-500" />
+                <span className={`ml-1 text-green-600 ${modoFullscreen ? 'text-sm' : 'text-xs'}`}>
+                  días activos
+                </span>
+              </div>
+            </div>
+            <div className={`bg-green-100 rounded-full ${modoFullscreen ? 'p-3' : 'p-2'}`}>
+              <Activity className={`text-green-600 ${modoFullscreen ? 'h-8 w-8' : 'h-6 w-6'}`} />
+            </div>
+          </div>
+        </div>
+
+        {/* Bono Actual */}
+        <div className={`bg-white rounded-lg shadow p-4 ${modoFullscreen ? 'p-6' : ''} cursor-pointer hover:shadow-lg transition-shadow`}
+             title="Click para ver detalles del bono">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className={`font-medium text-gray-600 ${modoFullscreen ? 'text-base' : 'text-xs'}`}>
+                Mi Bono Actual
+              </p>
+              <p className={`font-bold text-gray-900 ${modoFullscreen ? 'text-4xl' : 'text-2xl'}`}>
+                ${datosBono?.bono_actual?.bono_usd || '0.00'}
+              </p>
+              <div className="flex items-center mt-1">
+                <Trophy className={`h-3 w-3 ${
+                  (datosBono?.bono_actual?.porcentaje || 0) >= 100 ? 'text-yellow-500' : 'text-orange-500'
+                }`} />
+                <span className={`ml-1 ${
+                  (datosBono?.bono_actual?.porcentaje || 0) >= 100 ? 'text-yellow-600' : 'text-orange-600'
+                } ${modoFullscreen ? 'text-sm' : 'text-xs'}`}>
+                  {Math.round(datosBono?.bono_actual?.porcentaje || 0)}% de meta
+                </span>
+              </div>
+            </div>
+            <div className={`bg-yellow-100 rounded-full ${modoFullscreen ? 'p-3' : 'p-2'}`}>
+              <Award className={`text-yellow-600 ${modoFullscreen ? 'h-8 w-8' : 'h-6 w-6'}`} />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Análisis de Canales de Venta */}
+      <div className={`bg-white rounded-lg shadow p-6 ${modoFullscreen ? 'p-8' : ''}`}>
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <h3 className={`font-bold text-gray-900 ${modoFullscreen ? 'text-3xl' : 'text-xl'}`}>
+              Mis Canales de Venta
+            </h3>
+            <p className={`text-gray-600 ${modoFullscreen ? 'text-lg' : ''}`}>
+              Distribución de ventas por canal de comunicación
+            </p>
+          </div>
+          <Briefcase className={`text-blue-500 ${modoFullscreen ? 'h-12 w-12' : 'h-8 w-8'}`} />
+        </div>
+
+        <div className={`grid grid-cols-1 md:grid-cols-3 gap-6 ${modoFullscreen ? 'gap-8' : ''}`}>
+          {/* WhatsApp */}
+          <div className={`bg-gradient-to-r from-green-50 to-green-100 rounded-lg p-6 ${modoFullscreen ? 'p-8' : ''}`}>
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center">
+                <div className={`bg-green-500 rounded-full p-3 ${modoFullscreen ? 'p-4' : ''}`}>
+                  <MessageCircle className={`text-white ${modoFullscreen ? 'h-8 w-8' : 'h-6 w-6'}`} />
+                </div>
+                <div className="ml-4">
+                  <h4 className={`font-semibold text-green-900 ${modoFullscreen ? 'text-2xl' : 'text-lg'}`}>
+                    WhatsApp
+                  </h4>
+                  <p className={`text-green-700 ${modoFullscreen ? 'text-base' : 'text-sm'}`}>
+                    Canal principal
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <div className={`flex justify-between ${modoFullscreen ? 'text-lg' : 'text-sm'}`}>
+                <span className="text-green-700">Ventas:</span>
+                <span className="font-bold text-green-900">{metricas?.canales?.whatsapp || 0}</span>
+              </div>
+              <div className={`flex justify-between ${modoFullscreen ? 'text-lg' : 'text-sm'}`}>
+                <span className="text-green-700">Porcentaje:</span>
+                <span className="font-bold text-green-900">
+                  {metricas?.ventas?.completadas > 0 ?
+                    Math.round(((metricas?.canales?.whatsapp || 0) / metricas.ventas.completadas) * 100) : 0}%
+                </span>
+              </div>
+              <div className={`w-full bg-green-200 rounded-full ${modoFullscreen ? 'h-4' : 'h-3'}`}>
+                <div
+                  className={`bg-green-500 rounded-full ${modoFullscreen ? 'h-4' : 'h-3'}`}
+                  style={{
+                    width: `${metricas?.ventas?.completadas > 0 ?
+                      Math.min(((metricas?.canales?.whatsapp || 0) / metricas.ventas.completadas) * 100, 100) : 0}%`
+                  }}
+                ></div>
+              </div>
+            </div>
+          </div>
+
+          {/* Llamadas */}
+          <div className={`bg-gradient-to-r from-blue-50 to-blue-100 rounded-lg p-6 ${modoFullscreen ? 'p-8' : ''}`}>
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center">
+                <div className={`bg-blue-500 rounded-full p-3 ${modoFullscreen ? 'p-4' : ''}`}>
+                  <Phone className={`text-white ${modoFullscreen ? 'h-8 w-8' : 'h-6 w-6'}`} />
+                </div>
+                <div className="ml-4">
+                  <h4 className={`font-semibold text-blue-900 ${modoFullscreen ? 'text-2xl' : 'text-lg'}`}>
+                    Llamadas
+                  </h4>
+                  <p className={`text-blue-700 ${modoFullscreen ? 'text-base' : 'text-sm'}`}>
+                    Contacto directo
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <div className={`flex justify-between ${modoFullscreen ? 'text-lg' : 'text-sm'}`}>
+                <span className="text-blue-700">Ventas:</span>
+                <span className="font-bold text-blue-900">{metricas?.canales?.llamadas || 0}</span>
+              </div>
+              <div className={`flex justify-between ${modoFullscreen ? 'text-lg' : 'text-sm'}`}>
+                <span className="text-blue-700">Porcentaje:</span>
+                <span className="font-bold text-blue-900">
+                  {metricas?.ventas?.completadas > 0 ?
+                    Math.round(((metricas?.canales?.llamadas || 0) / metricas.ventas.completadas) * 100) : 0}%
+                </span>
+              </div>
+              <div className={`w-full bg-blue-200 rounded-full ${modoFullscreen ? 'h-4' : 'h-3'}`}>
+                <div
+                  className={`bg-blue-500 rounded-full ${modoFullscreen ? 'h-4' : 'h-3'}`}
+                  style={{
+                    width: `${metricas?.ventas?.completadas > 0 ?
+                      Math.min(((metricas?.canales?.llamadas || 0) / metricas.ventas.completadas) * 100, 100) : 0}%`
+                  }}
+                ></div>
+              </div>
+            </div>
+          </div>
+
+          {/* Presenciales */}
+          <div className={`bg-gradient-to-r from-purple-50 to-purple-100 rounded-lg p-6 ${modoFullscreen ? 'p-8' : ''}`}>
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center">
+                <div className={`bg-purple-500 rounded-full p-3 ${modoFullscreen ? 'p-4' : ''}`}>
+                  <Users className={`text-white ${modoFullscreen ? 'h-8 w-8' : 'h-6 w-6'}`} />
+                </div>
+                <div className="ml-4">
+                  <h4 className={`font-semibold text-purple-900 ${modoFullscreen ? 'text-2xl' : 'text-lg'}`}>
+                    Presencial
+                  </h4>
+                  <p className={`text-purple-700 ${modoFullscreen ? 'text-base' : 'text-sm'}`}>
+                    Reuniones cara a cara
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <div className={`flex justify-between ${modoFullscreen ? 'text-lg' : 'text-sm'}`}>
+                <span className="text-purple-700">Ventas:</span>
+                <span className="font-bold text-purple-900">{metricas?.canales?.presenciales || 0}</span>
+              </div>
+              <div className={`flex justify-between ${modoFullscreen ? 'text-lg' : 'text-sm'}`}>
+                <span className="text-purple-700">Porcentaje:</span>
+                <span className="font-bold text-purple-900">
+                  {metricas?.ventas?.completadas > 0 ?
+                    Math.round(((metricas?.canales?.presenciales || 0) / metricas.ventas.completadas) * 100) : 0}%
+                </span>
+              </div>
+              <div className={`w-full bg-purple-200 rounded-full ${modoFullscreen ? 'h-4' : 'h-3'}`}>
+                <div
+                  className={`bg-purple-500 rounded-full ${modoFullscreen ? 'h-4' : 'h-3'}`}
+                  style={{
+                    width: `${metricas?.ventas?.completadas > 0 ?
+                      Math.min(((metricas?.canales?.presenciales || 0) / metricas.ventas.completadas) * 100, 100) : 0}%`
+                  }}
+                ></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Actividad y Comunicación */}
+      <div className={`bg-white rounded-lg shadow p-6 ${modoFullscreen ? 'p-8' : ''}`}>
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <h3 className={`font-bold text-gray-900 ${modoFullscreen ? 'text-3xl' : 'text-xl'}`}>
+              Mi Actividad Diaria
+            </h3>
+            <p className={`text-gray-600 ${modoFullscreen ? 'text-lg' : ''}`}>
+              Seguimiento de interacciones y comunicación con clientes
+            </p>
+          </div>
+          <Activity className={`text-green-500 ${modoFullscreen ? 'h-12 w-12' : 'h-8 w-8'}`} />
+        </div>
+
+        <div className={`grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 ${modoFullscreen ? 'gap-8' : ''}`}>
+          {/* Total Mensajes */}
+          <div className={`bg-gradient-to-r from-blue-50 to-blue-100 rounded-lg p-6 ${modoFullscreen ? 'p-8' : ''}`}>
+            <div className="flex items-center justify-between mb-4">
+              <MessageCircle className={`text-blue-500 ${modoFullscreen ? 'h-12 w-12' : 'h-8 w-8'}`} />
+              <span className={`font-bold text-blue-600 ${modoFullscreen ? 'text-4xl' : 'text-2xl'}`}>
+                {metricas?.actividad?.total_mensajes || 0}
+              </span>
+            </div>
+            <div>
+              <h4 className={`font-semibold text-blue-900 ${modoFullscreen ? 'text-xl' : ''}`}>
+                Total Mensajes
+              </h4>
+              <p className={`text-blue-700 ${modoFullscreen ? 'text-base' : 'text-sm'}`}>
+                Promedio: {Math.round(metricas?.actividad?.promedio_mensajes_dia || 0)}/día
+              </p>
+              <p className={`text-blue-600 ${modoFullscreen ? 'text-base' : 'text-xs'}`}>
+                Máximo: {metricas?.actividad?.max_mensajes_dia || 0} en un día
+              </p>
+            </div>
+          </div>
+
+          {/* Total Llamadas */}
+          <div className={`bg-gradient-to-r from-green-50 to-green-100 rounded-lg p-6 ${modoFullscreen ? 'p-8' : ''}`}>
+            <div className="flex items-center justify-between mb-4">
+              <Phone className={`text-green-500 ${modoFullscreen ? 'h-12 w-12' : 'h-8 w-8'}`} />
+              <span className={`font-bold text-green-600 ${modoFullscreen ? 'text-4xl' : 'text-2xl'}`}>
+                {metricas?.actividad?.total_llamadas || 0}
+              </span>
+            </div>
+            <div>
+              <h4 className={`font-semibold text-green-900 ${modoFullscreen ? 'text-xl' : ''}`}>
+                Total Llamadas
+              </h4>
+              <p className={`text-green-700 ${modoFullscreen ? 'text-base' : 'text-sm'}`}>
+                Promedio: {Math.round(metricas?.actividad?.promedio_llamadas_dia || 0)}/día
+              </p>
+              <p className={`text-green-600 ${modoFullscreen ? 'text-base' : 'text-xs'}`}>
+                Máximo: {metricas?.actividad?.max_llamadas_dia || 0} en un día
+              </p>
+            </div>
+          </div>
+
+          {/* Días Activos */}
+          <div className={`bg-gradient-to-r from-purple-50 to-purple-100 rounded-lg p-6 ${modoFullscreen ? 'p-8' : ''}`}>
+            <div className="flex items-center justify-between mb-4">
+              <Calendar className={`text-purple-500 ${modoFullscreen ? 'h-12 w-12' : 'h-8 w-8'}`} />
+              <span className={`font-bold text-purple-600 ${modoFullscreen ? 'text-4xl' : 'text-2xl'}`}>
+                {metricas?.actividad?.dias_activos || 0}
+              </span>
+            </div>
+            <div>
+              <h4 className={`font-semibold text-purple-900 ${modoFullscreen ? 'text-xl' : ''}`}>
+                Días Activos
+              </h4>
+              <p className={`text-purple-700 ${modoFullscreen ? 'text-base' : 'text-sm'}`}>
+                En el período seleccionado
+              </p>
+              <p className={`text-purple-600 ${modoFullscreen ? 'text-base' : 'text-xs'}`}>
+                Constancia en seguimiento
+              </p>
+            </div>
+          </div>
+
+          {/* Eficiencia */}
+          <div className={`bg-gradient-to-r from-yellow-50 to-yellow-100 rounded-lg p-6 ${modoFullscreen ? 'p-8' : ''}`}>
+            <div className="flex items-center justify-between mb-4">
+              <Zap className={`text-yellow-500 ${modoFullscreen ? 'h-12 w-12' : 'h-8 w-8'}`} />
+              <span className={`font-bold text-yellow-600 ${modoFullscreen ? 'text-4xl' : 'text-2xl'}`}>
+                {metricas?.insights?.eficiencia_mensajes || '0.00'}
+              </span>
+            </div>
+            <div>
+              <h4 className={`font-semibold text-yellow-900 ${modoFullscreen ? 'text-xl' : ''}`}>
+                Eficiencia
+              </h4>
+              <p className={`text-yellow-700 ${modoFullscreen ? 'text-base' : 'text-sm'}`}>
+                Mensajes por venta
+              </p>
+              <p className={`text-yellow-600 ${modoFullscreen ? 'text-base' : 'text-xs'}`}>
+                Eficiencia de contacto
+              </p>
             </div>
           </div>
         </div>
@@ -509,29 +1054,35 @@ const DashboardAsesores = ({
                 Meta de Ventas
               </h4>
               <span className={`font-bold text-blue-600 ${modoFullscreen ? 'text-4xl' : 'text-2xl'}`}>
-                {metasInfo?.metricas?.promedio_cumplimiento || 0}%
+                {metricas?.metas?.porcentaje_cumplimiento > 0 ?
+                  Math.round(((metricas?.ventas?.completadas || 0) / (metricas?.metas?.meta_cantidad || 1)) * 100) : 0}%
               </span>
             </div>
-            
+
             <div className="space-y-3">
               <div className={`flex justify-between ${modoFullscreen ? 'text-lg' : 'text-sm'}`}>
                 <span className="text-blue-700">Logrado:</span>
-                <span className="font-medium">{metricas?.metricas?.ventas_completadas || 0} ventas</span>
+                <span className="font-medium">{metricas?.ventas?.completadas || 0} ventas</span>
               </div>
               <div className={`flex justify-between ${modoFullscreen ? 'text-lg' : 'text-sm'}`}>
                 <span className="text-blue-700">Meta:</span>
-                <span className="font-medium">15 ventas</span>
+                <span className="font-medium">{metricas?.metas?.meta_cantidad || 'Sin meta'}</span>
               </div>
               <div className={`w-full bg-blue-200 rounded-full ${modoFullscreen ? 'h-4' : 'h-3'}`}>
-                <div 
+                <div
                   className={`${modoFullscreen ? 'h-4' : 'h-3'} rounded-full ${
-                    (metasInfo?.metricas?.promedio_cumplimiento || 0) >= 100 ? 'bg-green-500' :
-                    (metasInfo?.metricas?.promedio_cumplimiento || 0) >= 80 ? 'bg-blue-500' :
-                    (metasInfo?.metricas?.promedio_cumplimiento || 0) >= 50 ? 'bg-yellow-500' : 'bg-red-500'
+                    (metasInfo?.metas?.porcentaje_cumplimiento || 0) >= 100 ? 'bg-green-500' :
+                    (metasInfo?.metas?.porcentaje_cumplimiento || 0) >= 80 ? 'bg-blue-500' :
+                    (metasInfo?.metas?.porcentaje_cumplimiento || 0) >= 50 ? 'bg-yellow-500' : 'bg-red-500'
                   }`}
-                  style={{ width: `${Math.min(metasInfo?.metricas?.promedio_cumplimiento || 0, 100)}%` }}
+                  style={{ width: `${Math.min(metricas?.metas?.porcentaje_cumplimiento || 0, 100)}%` }}
                 ></div>
               </div>
+              {metricas?.insights?.ritmo_diario_necesario > 0 && (
+                <div className={`text-xs ${modoFullscreen ? 'text-sm' : ''} text-blue-600 bg-blue-50 p-2 rounded`}>
+                  <strong>Ritmo necesario:</strong> {formatearMonto(metricas.insights.ritmo_diario_necesario)}/día
+                </div>
+              )}
             </div>
           </div>
 
@@ -542,26 +1093,102 @@ const DashboardAsesores = ({
                 Meta de Ingresos
               </h4>
               <span className={`font-bold text-green-600 ${modoFullscreen ? 'text-4xl' : 'text-2xl'}`}>
-                {Math.round(((metricas?.metricas?.valor_total_completadas || 0) / 5000) * 100)}%
+                {metricas?.metas?.meta_valor > 0 ?
+                  Math.round(((metricas?.ventas?.valor_total || 0) / metricas?.metas?.meta_valor) * 100) :
+                  0}%
               </span>
             </div>
-            
+
             <div className="space-y-3">
               <div className={`flex justify-between ${modoFullscreen ? 'text-lg' : 'text-sm'}`}>
                 <span className="text-green-700">Logrado:</span>
-                <span className="font-medium">{formatearMonto(metricas?.metricas?.valor_total_completadas)}</span>
+                <span className="font-medium">{formatearMonto(metricas?.ventas?.valor_total)}</span>
               </div>
               <div className={`flex justify-between ${modoFullscreen ? 'text-lg' : 'text-sm'}`}>
                 <span className="text-green-700">Meta:</span>
-                <span className="font-medium">{formatearMonto(5000)}</span>
+                <span className="font-medium">{metricas?.metas?.meta_valor ? formatearMonto(metricas?.metas?.meta_valor) : 'Sin meta'}</span>
               </div>
               <div className={`w-full bg-green-200 rounded-full ${modoFullscreen ? 'h-4' : 'h-3'}`}>
-                <div 
+                <div
                   className={`bg-green-500 rounded-full ${modoFullscreen ? 'h-4' : 'h-3'}`}
-                  style={{ width: `${Math.min(((metricas?.metricas?.valor_total_completadas || 0) / 5000) * 100, 100)}%` }}
+                  style={{
+                    width: `${metricas?.metas?.meta_valor > 0 ?
+                      Math.min(((metricas?.ventas?.valor_total || 0) / metricas?.metas?.meta_valor) * 100, 100) : 0}%`
+                  }}
                 ></div>
               </div>
+              {metricas?.insights?.proyeccion_mes > 0 && (
+                <div className={`text-xs ${modoFullscreen ? 'text-sm' : ''} text-green-600 bg-green-50 p-2 rounded`}>
+                  <strong>Proyección del mes:</strong> {formatearMonto(metricas.insights.proyeccion_mes)}
+                </div>
+              )}
             </div>
+          </div>
+        </div>
+
+        {/* Métricas Avanzadas de Rendimiento */}
+        <div className={`bg-gradient-to-r from-gray-50 to-gray-100 rounded-lg p-6 ${modoFullscreen ? 'p-8' : ''} mt-6`}>
+          <h4 className={`font-bold text-gray-900 mb-6 ${modoFullscreen ? 'text-2xl' : 'text-lg'}`}>
+            <BarChart className={`inline-block mr-2 ${modoFullscreen ? 'h-8 w-8' : 'h-6 w-6'}`} />
+            Métricas Avanzadas de Rendimiento
+          </h4>
+
+          <div className={`grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 ${modoFullscreen ? 'gap-6' : ''}`}>
+            {/* Venta Mínima */}
+            <div className={`bg-white rounded-lg p-4 ${modoFullscreen ? 'p-6' : ''} border-l-4 border-red-400`}>
+              <div className="flex items-center justify-between mb-2">
+                <span className={`text-red-600 ${modoFullscreen ? 'text-lg' : 'text-sm'} font-medium`}>
+                  Venta Mínima
+                </span>
+                <TrendDown className={`text-red-500 ${modoFullscreen ? 'h-6 w-6' : 'h-4 w-4'}`} />
+              </div>
+              <p className={`font-bold text-gray-900 ${modoFullscreen ? 'text-2xl' : 'text-lg'}`}>
+                {formatearMonto(metricas?.ventas?.venta_minima)}
+              </p>
+            </div>
+
+            {/* Venta Máxima */}
+            <div className={`bg-white rounded-lg p-4 ${modoFullscreen ? 'p-6' : ''} border-l-4 border-green-400`}>
+              <div className="flex items-center justify-between mb-2">
+                <span className={`text-green-600 ${modoFullscreen ? 'text-lg' : 'text-sm'} font-medium`}>
+                  Venta Máxima
+                </span>
+                <TrendingUp className={`text-green-500 ${modoFullscreen ? 'h-6 w-6' : 'h-4 w-4'}`} />
+              </div>
+              <p className={`font-bold text-gray-900 ${modoFullscreen ? 'text-2xl' : 'text-lg'}`}>
+                {formatearMonto(metricas?.ventas?.venta_maxima)}
+              </p>
+            </div>
+
+            {/* Tiempo de Conversión */}
+            <div className={`bg-white rounded-lg p-4 ${modoFullscreen ? 'p-6' : ''} border-l-4 border-blue-400`}>
+              <div className="flex items-center justify-between mb-2">
+                <span className={`text-blue-600 ${modoFullscreen ? 'text-lg' : 'text-sm'} font-medium`}>
+                  Tiempo Conversión
+                </span>
+                <Timer className={`text-blue-500 ${modoFullscreen ? 'h-6 w-6' : 'h-4 w-4'}`} />
+              </div>
+              <p className={`font-bold text-gray-900 ${modoFullscreen ? 'text-2xl' : 'text-lg'}`}>
+                {Math.round(metricas?.ventas?.tiempo_promedio_conversion || 0)} días
+              </p>
+            </div>
+
+            {/* Pipeline Activo */}
+            <div className={`bg-white rounded-lg p-4 ${modoFullscreen ? 'p-6' : ''} border-l-4 border-purple-400`}>
+              <div className="flex items-center justify-between mb-2">
+                <span className={`text-purple-600 ${modoFullscreen ? 'text-lg' : 'text-sm'} font-medium`}>
+                  Pipeline Activo
+                </span>
+                <LineChart className={`text-purple-500 ${modoFullscreen ? 'h-6 w-6' : 'h-4 w-4'}`} />
+              </div>
+              <p className={`font-bold text-gray-900 ${modoFullscreen ? 'text-2xl' : 'text-lg'}`}>
+                {formatearMonto(metricas?.pipeline?.valor_pipeline_activo)}
+              </p>
+              <p className={`text-purple-600 ${modoFullscreen ? 'text-sm' : 'text-xs'}`}>
+                {metricas?.pipeline?.activas_pipeline || 0} oportunidades
+              </p>
+            </div>
+
           </div>
         </div>
       </div>

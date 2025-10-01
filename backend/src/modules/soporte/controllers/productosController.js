@@ -1,9 +1,11 @@
 // =====================================
-// CONTROLADOR ESPECÍFICO DE PRODUCTOS EN SOPORTE
+// CONTROLADOR ESPECÍFICO DE PRODUCTOS EN SOPORTE - VERSIÓN CORREGIDA POSTGRESQL
 // =====================================
 // Maneja operaciones específicas de los productos en las 4 categorías
 // y el sistema de pausas avanzado
+// CORREGIDO: Usa PostgreSQL directo con función query() en lugar de Supabase SDK
 
+const { query } = require('../../../config/database');
 const SoporteModel = require('../models/SoporteModel');
 const SoporteService = require('../services/soporteService');
 const { validarDatosSoporte, formatearProducto } = require('../utils/soporteHelpers');
@@ -119,19 +121,21 @@ class ProductosController {
                 });
             }
 
-            // Obtener producto actual para validación
-            const { data: productoActual, error: errorProducto } = await supabase
-                .from('soporte_productos')
-                .select('*')
-                .eq('id', id)
-                .single();
+            // CORREGIDO: Obtener producto actual para validación usando PostgreSQL directo
+            const sqlProducto = `
+                SELECT * FROM soporte_productos 
+                WHERE id = $1 AND activo = true
+            `;
+            const resultProducto = await query(sqlProducto, [id]);
 
-            if (errorProducto) {
+            if (resultProducto.rows.length === 0) {
                 return res.status(404).json({
                     success: false,
                     message: 'Producto no encontrado'
                 });
             }
+
+            const productoActual = resultProducto.rows[0];
 
             // Validaciones específicas por categoría
             if (nueva_categoria === 'REPARADO' && !motivo) {
@@ -145,7 +149,8 @@ class ProductosController {
             const datosActualizacion = {
                 categoria: nueva_categoria,
                 observaciones_origen: observaciones || motivo,
-                updated_by: user.id
+                updated_by: user.id,
+                updated_at: new Date()
             };
 
             // Lógica específica por categoría
@@ -182,12 +187,16 @@ class ProductosController {
                 });
             }
 
-            // Registrar en auditoría
-            await SoporteService.registrarAuditoria('PRODUCTO', id, 'CAMBIO_CATEGORIA', {
-                categoria_anterior: productoActual.categoria,
-                categoria_nueva: nueva_categoria,
-                motivo: motivo
-            });
+            // Registrar en auditoría (si el servicio está disponible)
+            try {
+                await SoporteService.registrarAuditoria('PRODUCTO', id, 'CAMBIO_CATEGORIA', {
+                    categoria_anterior: productoActual.categoria,
+                    categoria_nueva: nueva_categoria,
+                    motivo: motivo
+                });
+            } catch (auditError) {
+                console.log('Servicio de auditoría no disponible:', auditError.message);
+            }
 
             res.json({
                 success: true,
@@ -215,19 +224,38 @@ class ProductosController {
      */
     static async obtenerProductosPausados(req, res) {
         try {
-            const supabase = require('../../../config/supabase');
+            // CORREGIDO: Usar PostgreSQL directo en lugar de Supabase
+            let productos = [];
             
-            const { data, error } = await supabase
-                .from('vista_productos_con_pausas')
-                .select('*')
-                .eq('esta_pausado', true)
-                .order('fecha_pausa_actual', { ascending: true });
-
-            if (error) throw error;
+            try {
+                // Intentar usar la vista primero
+                const sqlVista = `
+                    SELECT * FROM vista_productos_con_pausas 
+                    WHERE esta_pausado = true 
+                    ORDER BY fecha_pausa_actual ASC
+                `;
+                const resultVista = await query(sqlVista, []);
+                productos = resultVista.rows;
+            } catch (vistaError) {
+                // Si la vista no existe, usar consulta directa
+                console.log('Vista vista_productos_con_pausas no disponible, usando consulta directa');
+                const sqlDirecta = `
+                    SELECT sp.*, pr.fecha_pausa_actual, pr.tipo_pausa
+                    FROM soporte_productos sp
+                    INNER JOIN soporte_pausas_reparacion pr ON sp.id = pr.producto_id
+                    WHERE pr.activo = true AND sp.activo = true
+                    ORDER BY pr.fecha_inicio ASC
+                `;
+                const resultDirecta = await query(sqlDirecta, []);
+                productos = resultDirecta.rows.map(row => ({
+                    ...row,
+                    esta_pausado: true
+                }));
+            }
 
             // Enriquecer con información de pausas
             const productosConPausas = await Promise.all(
-                data.map(async (producto) => {
+                productos.map(async (producto) => {
                     const historialPausas = await SoporteModel.obtenerHistorialPausas(producto.id);
                     return {
                         ...formatearProducto(producto),
@@ -331,21 +359,18 @@ class ProductosController {
      */
     static async obtenerEstadisticasPausas(req, res) {
         try {
-            const supabase = require('../../../config/supabase');
-            
-            // Consulta compleja para estadísticas de pausas
-            const { data: pausas, error } = await supabase
-                .from('soporte_pausas_reparacion')
-                .select(`
-                    tipo_pausa,
-                    es_pausa_justificada,
-                    duracion_horas,
-                    fecha_inicio,
-                    estado
-                `)
-                .eq('activo', true);
-
-            if (error) throw error;
+            // CORREGIDO: Consulta compleja para estadísticas de pausas usando PostgreSQL directo
+            const sql = `
+                SELECT tipo_pausa,
+                       es_pausa_justificada,
+                       duracion_horas,
+                       fecha_inicio,
+                       estado
+                FROM soporte_pausas_reparacion 
+                WHERE activo = true
+            `;
+            const result = await query(sql, []);
+            const pausas = result.rows;
 
             // Procesar estadísticas
             const estadisticas = {
@@ -440,7 +465,10 @@ class ProductosController {
 
             for (const productoId of productos_ids) {
                 try {
-                    let datosActualizacion = { updated_by: user.id };
+                    let datosActualizacion = { 
+                        updated_by: user.id,
+                        updated_at: new Date()
+                    };
 
                     switch (accion) {
                         case 'marcar_reparado':
@@ -497,12 +525,16 @@ class ProductosController {
                 }
             }
 
-            // Registrar en auditoría
-            await SoporteService.registrarAuditoria('PRODUCTO', 'MULTIPLE', 'PROCESAMIENTO_LOTE', {
-                accion: accion,
-                productos_procesados: resultados.length,
-                errores: errores.length
-            });
+            // Registrar en auditoría (si el servicio está disponible)
+            try {
+                await SoporteService.registrarAuditoria('PRODUCTO', 'MULTIPLE', 'PROCESAMIENTO_LOTE', {
+                    accion: accion,
+                    productos_procesados: resultados.length,
+                    errores: errores.length
+                });
+            } catch (auditError) {
+                console.log('Servicio de auditoría no disponible:', auditError.message);
+            }
 
             res.json({
                 success: errores.length === 0,
@@ -534,57 +566,85 @@ class ProductosController {
     static async obtenerReporteEficiencia(req, res) {
         try {
             const { fecha_desde, fecha_hasta, tecnico_id } = req.query;
-            const supabase = require('../../../config/supabase');
 
-            let query = supabase
-                .from('vista_productos_con_pausas')
-                .select('*')
-                .not('tiempo_efectivo_horas', 'is', null);
+            // CORREGIDO: Construir query PostgreSQL directo con filtros opcionales
+            let condiciones = ['tiempo_efectivo_horas IS NOT NULL'];
+            const valores = [];
+            let contador = 1;
 
             // Aplicar filtros
             if (fecha_desde) {
-                query = query.gte('fecha_recepcion', fecha_desde);
+                condiciones.push(`fecha_recepcion >= $${contador}`);
+                valores.push(fecha_desde);
+                contador++;
             }
             if (fecha_hasta) {
-                query = query.lte('fecha_recepcion', fecha_hasta);
+                condiciones.push(`fecha_recepcion <= $${contador}`);
+                valores.push(fecha_hasta);
+                contador++;
             }
 
-            const { data, error } = await query.order('eficiencia_porcentaje', { ascending: false });
-
-            if (error) throw error;
+            // CORREGIDO: Intentar usar vista, si no existe usar consulta directa
+            let productos = [];
+            try {
+                const sqlVista = `
+                    SELECT * FROM vista_productos_con_pausas 
+                    WHERE ${condiciones.join(' AND ')} 
+                    ORDER BY eficiencia_porcentaje DESC
+                `;
+                const resultVista = await query(sqlVista, valores);
+                productos = resultVista.rows;
+            } catch (vistaError) {
+                // Si la vista no existe, usar consulta directa
+                console.log('Vista vista_productos_con_pausas no disponible, usando consulta directa');
+                const sqlDirecta = `
+                    SELECT sp.*, 
+                           COALESCE(sp.tiempo_efectivo_horas, 0) as tiempo_efectivo_horas,
+                           CASE 
+                               WHEN sp.tiempo_total_horas > 0 AND sp.tiempo_efectivo_horas > 0 
+                               THEN ROUND((sp.tiempo_efectivo_horas::numeric / sp.tiempo_total_horas::numeric) * 100, 2)
+                               ELSE 0 
+                           END as eficiencia_porcentaje
+                    FROM soporte_productos sp
+                    WHERE ${condiciones.join(' AND ')} AND sp.activo = true
+                    ORDER BY eficiencia_porcentaje DESC
+                `;
+                const resultDirecta = await query(sqlDirecta, valores);
+                productos = resultDirecta.rows;
+            }
 
             // Calcular estadísticas del reporte
             const estadisticas = {
-                total_productos: data.length,
+                total_productos: productos.length,
                 eficiencia_promedio: 0,
                 tiempo_neto_promedio: 0,
                 tiempo_bruto_promedio: 0,
-                productos_con_pausas: data.filter(p => p.total_horas_pausadas > 0).length,
+                productos_con_pausas: productos.filter(p => p.total_horas_pausadas > 0).length,
                 mejor_eficiencia: null,
                 peor_eficiencia: null
             };
 
-            if (data.length > 0) {
+            if (productos.length > 0) {
                 estadisticas.eficiencia_promedio = Math.round(
-                    data.reduce((sum, p) => sum + (p.eficiencia_porcentaje || 0), 0) / data.length
+                    productos.reduce((sum, p) => sum + (p.eficiencia_porcentaje || 0), 0) / productos.length
                 );
                 
                 estadisticas.tiempo_neto_promedio = Math.round(
-                    data.reduce((sum, p) => sum + (p.tiempo_efectivo_horas || 0), 0) / data.length
+                    productos.reduce((sum, p) => sum + (p.tiempo_efectivo_horas || 0), 0) / productos.length
                 );
                 
                 estadisticas.tiempo_bruto_promedio = Math.round(
-                    data.reduce((sum, p) => sum + (p.tiempo_total_horas || 0), 0) / data.length
+                    productos.reduce((sum, p) => sum + (p.tiempo_total_horas || 0), 0) / productos.length
                 );
 
-                estadisticas.mejor_eficiencia = data[0];
-                estadisticas.peor_eficiencia = data[data.length - 1];
+                estadisticas.mejor_eficiencia = productos[0];
+                estadisticas.peor_eficiencia = productos[productos.length - 1];
             }
 
             res.json({
                 success: true,
                 data: {
-                    productos: data.map(formatearProducto),
+                    productos: productos.map(formatearProducto),
                     estadisticas
                 }
             });
@@ -627,12 +687,13 @@ class ProductosController {
                 });
             }
 
-            // Ordenar por prioridad (pausados primero, luego por tiempo)
+            // MEJORA: Ordenar por prioridad más inteligente
             productosUrgentes.sort((a, b) => {
+                // Pausados primero
                 if (a.esta_pausado && !b.esta_pausado) return -1;
                 if (!a.esta_pausado && b.esta_pausado) return 1;
                 
-                // Si ambos tienen el mismo tipo, ordenar por tiempo
+                // Si ambos tienen el mismo tipo, ordenar por tiempo (más antiguos primero)
                 const tiempoA = new Date(a.fecha_recepcion || a.created_at);
                 const tiempoB = new Date(b.fecha_recepcion || b.created_at);
                 return tiempoA - tiempoB;

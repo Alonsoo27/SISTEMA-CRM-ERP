@@ -62,9 +62,29 @@ router.get('/evolucion-asesor/:asesor_id',
  * @desc    Ranking del asesor vs otros asesores
  * @access  Private
  */
-router.get('/ranking-asesor/:asesor_id', 
+router.get('/ranking-asesor/:asesor_id',
     authenticateToken,
     DashboardController.rankingAsesor
+);
+
+/**
+ * @route   GET /api/dashboard/asesores-disponibles
+ * @desc    Lista de asesores disponibles (solo para supervisores)
+ * @access  Private
+ */
+router.get('/asesores-disponibles',
+    authenticateToken,
+    DashboardController.listarAsesoresDisponibles
+);
+
+/**
+ * @route   GET /api/dashboard/periodos-disponibles/:asesor_id
+ * @desc    Períodos con datos disponibles para selector dinámico
+ * @access  Private
+ */
+router.get('/periodos-disponibles/:asesor_id',
+    authenticateToken,
+    DashboardController.obtenerPeriodosDisponibles
 );
 
 // ============================================

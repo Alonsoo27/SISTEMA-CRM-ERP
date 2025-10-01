@@ -6,10 +6,12 @@ import Login from "./components/auth/Login/Login";
 import { AuthUtils } from './utils/auth'; // ✅ Importar AuthUtils
 
 // Páginas principales
-import ProductosList from './components/productos/ProductoList/ProductosList';
+import ProductosPage from './pages/ProductosPage';
 import ProspectosPage from './pages/ProspectosPage';
 import VentasPage from './pages/VentasPage';
 import AlmacenPage from './pages/AlmacenPage'; // ✅ NUEVO: Importar AlmacenPage real
+import SoportePage from './pages/SoportePage'; // ✅ NUEVO: Importar SoportePage con tabs
+// import ClientesPage from './pages/ClientesPage'; // ✅ ELIMINADO: ClientesPage removido
 
 // ✅ Componente para verificar autenticación CORREGIDO
 const ProtectedRoute = ({ children }) => {
@@ -46,24 +48,7 @@ const DashboardPage = () => (
   </div>
 );
 
-const SoportePage = () => (
-  <div className="h-full flex items-center justify-center">
-    <div className="text-center">
-      <div className="text-6xl mb-4">🎫</div>
-      <h1 className="text-2xl font-bold text-gray-900 mb-2">Soporte Técnico</h1>
-      <p className="text-gray-600 mb-4">Sistema de tickets y soporte</p>
-      <div className="text-sm text-gray-500">
-        <p>Funcionalidades planeadas:</p>
-        <ul className="mt-2 space-y-1">
-          <li>• Tickets automáticos post-entrega</li>
-          <li>• Escalamiento por tiempo de respuesta</li>
-          <li>• Base de conocimiento</li>
-          <li>• Chat en tiempo real</li>
-        </ul>
-      </div>
-    </div>
-  </div>
-);
+// ✅ ELIMINADO: Placeholder SoportePage - Ahora se usa SoporteDashboard real
 
 // ✅ ELIMINADO: Placeholder AlmacenPage - Ahora se importa desde pages/AlmacenPage
 
@@ -127,12 +112,12 @@ function App() {
           {/* Módulo de Ventas - COMPLETAMENTE FUNCIONAL ✅ */}
           <Route path="ventas" element={<VentasPage />} />
           
-          {/* Módulo de Productos - Ya existía (90% completo) */}
-          <Route path="productos" element={<ProductosList />} />
+          {/* Módulo de Productos - COMPLETAMENTE FUNCIONAL ✅ */}
+          <Route path="productos" element={<ProductosPage />} />
           
           {/* Módulo de Almacén - COMPLETAMENTE FUNCIONAL ✅ */}
           <Route path="almacen" element={<AlmacenPage />} />
-          
+
           {/* Otros módulos - Placeholders preparados para desarrollo */}
           <Route path="soporte" element={<SoportePage />} />
           <Route path="marketing" element={<MarketingPage />} />
@@ -183,7 +168,7 @@ const DevPage = () => (
               { nombre: 'Prospectos', progreso: 100, color: 'green' },
               { nombre: 'Ventas', progreso: 100, color: 'green' },
               { nombre: 'Autenticación', progreso: 100, color: 'green' },
-              { nombre: 'Productos', progreso: 90, color: 'blue' },
+              { nombre: 'Productos', progreso: 100, color: 'green' },
               { nombre: 'Almacén', progreso: 95, color: 'green' }, // ✅ ACTUALIZADO: Progreso del almacén
               { nombre: 'Soporte', progreso: 0, color: 'gray' }
             ].map((modulo, index) => (

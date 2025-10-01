@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import pipelineService from '../../../services/pipelineService';
 import PipelineCharts from '../PipelineCharts/PipelineCharts';
+import PeriodSelectorAdvanced from '../PeriodSelector/PeriodSelectorAdvanced';
 
 const PipelineMetrics = ({
   asesorId = null,
@@ -68,8 +69,8 @@ const PipelineMetrics = ({
   };
 
   const formatearMoneda = (cantidad) => {
-    if (!cantidad) return 'S/ 0';
-    return `S/ ${formatearNumero(cantidad)}`;
+    if (!cantidad) return '$0';
+    return `$${formatearNumero(cantidad)}`;
   };
 
   const formatearPorcentaje = (porcentaje) => {
@@ -225,64 +226,61 @@ const PipelineMetrics = ({
   return (
     <div className="space-y-6">
       {/* Header con controles */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <div>
-          <h2 className="text-2xl font-bold text-gray-900">Pipeline de Ventas</h2>
-          <p className="text-gray-600">Análisis de conversión y oportunidades</p>
-        </div>
-        
-        <div className="flex flex-col sm:flex-row gap-3">
-          {/* Selector de período */}
-          <select
-            value={periodoSeleccionado}
-            onChange={(e) => setPeriodoSeleccionado(e.target.value)}
-            className="border border-gray-300 rounded-lg px-3 py-2 text-sm"
-          >
-            {periodos.map(periodo => (
-              <option key={periodo.value} value={periodo.value}>
-                {periodo.label}
-              </option>
-            ))}
-          </select>
-
-          {/* Selector de vista */}
-          <div className="flex border border-gray-300 rounded-lg overflow-hidden">
-            <button
-              onClick={() => setVistaActual('general')}
-              className={`px-3 py-2 text-sm ${
-                vistaActual === 'general' ? 'bg-blue-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'
-              }`}
-            >
-              General
-            </button>
-            <button
-              onClick={() => setVistaActual('embudo')}
-              className={`px-3 py-2 text-sm border-l ${
-                vistaActual === 'embudo' ? 'bg-blue-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'
-              }`}
-            >
-              Embudo
-            </button>
-            <button
-              onClick={() => setVistaActual('proyeccion')}
-              className={`px-3 py-2 text-sm border-l ${
-                vistaActual === 'proyeccion' ? 'bg-blue-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'
-              }`}
-            >
-              Proyección
-            </button>
+      <div className="bg-gradient-to-r from-purple-600 to-blue-600 rounded-lg shadow-lg p-6 text-white">
+        <div className="flex justify-between items-start sm:items-center">
+          <div>
+            <h2 className="text-2xl font-bold">Pipeline de Ventas</h2>
+            <p className="text-purple-100 mt-1">Análisis de conversión y oportunidades</p>
           </div>
 
-          <button
-            onClick={cargarDatos}
-            disabled={loading}
-            className="flex items-center px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
-          >
-            <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
-            Actualizar
-          </button>
+          <div className="flex gap-3">
+            {/* Selector de vista */}
+            <div className="flex border border-white/20 rounded-lg overflow-hidden bg-white/10">
+              <button
+                onClick={() => setVistaActual('general')}
+                className={`px-3 py-2 text-sm ${
+                  vistaActual === 'general' ? 'bg-white text-purple-600' : 'text-white hover:bg-white/20'
+                }`}
+              >
+                General
+              </button>
+              <button
+                onClick={() => setVistaActual('embudo')}
+                className={`px-3 py-2 text-sm border-l border-white/20 ${
+                  vistaActual === 'embudo' ? 'bg-white text-purple-600' : 'text-white hover:bg-white/20'
+                }`}
+              >
+                Embudo
+              </button>
+              <button
+                onClick={() => setVistaActual('proyeccion')}
+                className={`px-3 py-2 text-sm border-l border-white/20 ${
+                  vistaActual === 'proyeccion' ? 'bg-white text-purple-600' : 'text-white hover:bg-white/20'
+                }`}
+              >
+                Proyección
+              </button>
+            </div>
+
+            <button
+              onClick={cargarDatos}
+              disabled={loading}
+              className="flex items-center px-3 py-2 bg-white/10 hover:bg-white/20 text-white rounded-lg transition-colors disabled:opacity-50 border border-white/20"
+            >
+              <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+              Actualizar
+            </button>
+          </div>
         </div>
       </div>
+
+      {/* Selector de Período */}
+      <PeriodSelectorAdvanced
+        asesorId={asesorId}
+        onPeriodChange={setPeriodoSeleccionado}
+        initialPeriod={periodoSeleccionado}
+        loading={loading}
+      />
 
       {/* KPIs Principales - usando datos reales del backend corregido */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">

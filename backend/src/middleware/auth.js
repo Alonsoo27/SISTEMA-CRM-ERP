@@ -1,8 +1,6 @@
 ﻿const jwt = require('jsonwebtoken');
-const { createClient } = require('@supabase/supabase-js');
+const { query } = require('../config/database');
 const winston = require('winston');
-
-const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY);
 
 const logger = winston.createLogger({
     level: process.env.LOG_LEVEL || 'info',
@@ -45,12 +43,19 @@ const authenticateToken = async (req, res, next) => {
             (token === 'fake-jwt-token-for-testing' || token.startsWith('fake-'))) {
             
             req.user = {
-                id: 1,
+                id: 1, // ID numérico real del usuario en la BD
                 user_id: 1, // Compatibilidad con ambos campos
                 nombre: 'Alonso',
                 apellido: 'Admin',
                 email: 'eliashuaraca2012@gmail.com',
                 rol: 'SUPER_ADMIN',
+                rol_id: 1,
+                es_jefe: true,
+                vende: true, // SUPER_ADMIN puede vender
+                jefe_id: null, // SUPER_ADMIN no tiene jefe
+                area_id: 1, // Dirección General
+                area_nombre: 'Dirección General',
+                jefe_nombre: null,
                 nombre_completo: 'Alonso Admin'
             };
             
@@ -88,21 +93,29 @@ const authenticateToken = async (req, res, next) => {
             });
         }
 
-        // Consultar usuario en Supabase con validaciones empresariales
-        const { data: usuario, error } = await supabase
-            .from('usuarios')
-            .select('id, nombre, apellido, email, rol_id, activo, roles(nombre)')
-            .eq('id', userId)
-            .eq('activo', true)
-            .single();
+        // CORREGIDO: Consultar usuario con jerarquía completa
+        const sql = `
+            SELECT u.id, u.nombre, u.apellido, u.email, u.rol_id, u.activo, u.es_jefe, u.vende,
+                   u.jefe_id, u.area_id,
+                   r.nombre as rol_nombre,
+                   a.nombre as area_nombre,
+                   CONCAT(jefe.nombre, ' ', jefe.apellido) as jefe_nombre
+            FROM usuarios u
+            LEFT JOIN roles r ON u.rol_id = r.id
+            LEFT JOIN areas a ON u.area_id = a.id
+            LEFT JOIN usuarios jefe ON u.jefe_id = jefe.id
+            WHERE u.id = $1 AND u.activo = true
+        `;
+        
+        const result = await query(sql, [userId]);
+        const usuario = result.rows.length > 0 ? result.rows[0] : null;
 
-        if (error || !usuario) {
+        if (!usuario) {
             logger.warn('Usuario no válido, inactivo o no encontrado', {
                 correlation_id: correlationId,
                 user_id: userId,
                 endpoint: req.path,
-                supabase_error: error?.message,
-                supabase_code: error?.code
+                database_rows_found: result.rows.length
             });
 
             return res.status(403).json({
@@ -113,15 +126,21 @@ const authenticateToken = async (req, res, next) => {
             });
         }
 
-        // Construir objeto de usuario empresarial
+        // Construir objeto de usuario empresarial completo
         req.user = {
             id: usuario.id,
             user_id: usuario.id, // Compatibilidad con ambos campos
             nombre: usuario.nombre,
             apellido: usuario.apellido,
             email: usuario.email,
-            rol: usuario.roles?.nombre || 'sin_rol',
+            rol: usuario.rol_nombre || 'sin_rol',
             rol_id: usuario.rol_id,
+            es_jefe: usuario.es_jefe || false,
+            vende: usuario.vende || false,
+            jefe_id: usuario.jefe_id,
+            area_id: usuario.area_id,
+            area_nombre: usuario.area_nombre,
+            jefe_nombre: usuario.jefe_nombre,
             nombre_completo: `${usuario.nombre} ${usuario.apellido}`
         };
 
@@ -163,8 +182,8 @@ const authenticateToken = async (req, res, next) => {
             });
         }
 
-        // Error de conexión a Supabase
-        if (error.message?.includes('fetch')) {
+        // Error de conexión a base de datos
+        if (error.message?.includes('connect') || error.message?.includes('ECONNREFUSED')) {
             return res.status(503).json({
                 success: false,
                 error: 'Error de conectividad del sistema',

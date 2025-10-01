@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { 
-    Search, 
-    Filter, 
-    Calendar, 
-    Truck, 
-    Package, 
+import {
+    Search,
+    Filter,
+    Calendar,
+    Truck,
+    Package,
     Eye,
     Edit,
     Clock,
@@ -19,9 +19,11 @@ import {
     ChevronRight,
     FileText,
     Send,
-    X
+    X,
+    Settings
 } from 'lucide-react';
 import almacenService from "../../../services/almacenService";
+import KardexModal from '../kardex/KardexModal';
 
 const DespachosList = () => {
     const [despachos, setDespachos] = useState([]);
@@ -43,10 +45,23 @@ const DespachosList = () => {
 
     const [paginacion, setPaginacion] = useState({
         page: 1,
-        limit: 20,
+        limit: 25,
         total: 0,
         totalPages: 0
     });
+
+    // Estados para kardex
+    const [showKardexModal, setShowKardexModal] = useState(false);
+    const [selectedProductoKardex, setSelectedProductoKardex] = useState(null);
+    const [almacenesData, setAlmacenesData] = useState([]);
+
+    // Estado para configuración de límite
+    const [showConfigLimit, setShowConfigLimit] = useState(false);
+    const limitesDisponibles = [10, 25, 50, 100];
+
+    // Estado para métricas dashboard
+    const [metricas, setMetricas] = useState(null);
+    const [loadingMetricas, setLoadingMetricas] = useState(false);
 
     const [showFiltros, setShowFiltros] = useState(false);
     const [despachoSeleccionado, setDespachoSeleccionado] = useState(null);
@@ -69,7 +84,7 @@ const DespachosList = () => {
     const formatearFecha = (fecha) => {
         if (!fecha) return '-';
         try {
-            return new Date(fecha).toLocaleDateString('es-PE', {
+            return new Date(fecha).toLocaleDateString('es-ES', {
                 year: 'numeric',
                 month: '2-digit',
                 day: '2-digit'
@@ -82,7 +97,7 @@ const DespachosList = () => {
     const formatearFechaHora = (fecha) => {
         if (!fecha) return '-';
         try {
-            return new Date(fecha).toLocaleString('es-PE', {
+            return new Date(fecha).toLocaleString('es-ES', {
                 year: 'numeric',
                 month: '2-digit',
                 day: '2-digit',
@@ -96,27 +111,41 @@ const DespachosList = () => {
 
     const formatearNumero = (numero, decimales = 2) => {
         if (numero === null || numero === undefined || isNaN(numero)) return '0';
-        return Number(numero).toLocaleString('es-PE', {
+        return Number(numero).toLocaleString('es-ES', {
             minimumFractionDigits: decimales,
             maximumFractionDigits: decimales
         });
     };
 
     const formatearMoneda = (monto) => {
-        if (monto === null || monto === undefined || isNaN(monto)) return 'S/ 0.00';
-        return new Intl.NumberFormat('es-PE', {
-            style: 'currency',
-            currency: 'PEN'
-        }).format(monto);
+        if (monto === null || monto === undefined || isNaN(monto)) return '$0.00';
+        return '$' + Number(monto).toLocaleString('es-ES', {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2
+        });
     };
 
     useEffect(() => {
         cargarDatos();
+        cargarAlmacenes();
+        cargarMetricas();
     }, []);
 
     useEffect(() => {
         cargarDespachos();
-    }, [filtros, paginacion.page]);
+    }, [filtros, paginacion.page, paginacion.limit]);
+
+    // Cerrar dropdown al hacer clic fuera
+    useEffect(() => {
+        const handleClickOutside = (event) => {
+            if (showConfigLimit && !event.target.closest('.config-limit-dropdown')) {
+                setShowConfigLimit(false);
+            }
+        };
+
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, [showConfigLimit]);
 
     const cargarDatos = async () => {
         try {
@@ -266,6 +295,72 @@ const DespachosList = () => {
         return estadosDespacho.find(e => e.value === estado) || estadosDespacho[0];
     };
 
+    // Función para cargar almacenes
+    const cargarAlmacenes = async () => {
+        try {
+            const response = await almacenService.obtenerAlmacenes();
+            if (response.success) {
+                setAlmacenesData(response.data || []);
+            }
+        } catch (error) {
+            console.error('Error cargando almacenes:', error);
+        }
+    };
+
+    // Función para cargar métricas del dashboard
+    const cargarMetricas = async () => {
+        try {
+            setLoadingMetricas(true);
+            // Aquí usaríamos la vista vista_despachos_dashboard
+            // Por ahora calculamos básico desde los despachos cargados
+            const response = await almacenService.obtenerDespachos({ limit: 1000 });
+            if (response.success) {
+                const data = response.data || [];
+                const metricas = {
+                    pendientes: data.filter(d => d.estado === 'PENDIENTE').length,
+                    preparando: data.filter(d => d.estado === 'PREPARANDO').length,
+                    listos: data.filter(d => d.estado === 'LISTO').length,
+                    enviados: data.filter(d => d.estado === 'ENVIADO').length,
+                    entregados: data.filter(d => d.estado === 'ENTREGADO').length,
+                    cancelados: data.filter(d => d.estado === 'CANCELADO').length,
+                    total: data.length
+                };
+                setMetricas(metricas);
+            }
+        } catch (error) {
+            console.error('Error cargando métricas:', error);
+        } finally {
+            setLoadingMetricas(false);
+        }
+    };
+
+    // Handler para abrir kardex de producto desde detalles de venta
+    const handleVerKardex = (producto) => {
+        const productoKardex = {
+            id: producto.producto_id,
+            codigo: producto.productos?.codigo || 'N/A',
+            nombre: producto.productos?.descripcion || producto.descripcion_personalizada || 'Producto'
+        };
+        setSelectedProductoKardex(productoKardex);
+        setShowKardexModal(true);
+    };
+
+    // Handler para cerrar modal de kardex
+    const handleCloseKardexModal = () => {
+        setShowKardexModal(false);
+        setSelectedProductoKardex(null);
+    };
+
+    // Cambiar límite de paginación
+    const cambiarLimite = (nuevoLimite) => {
+        setPaginacion(prev => ({
+            ...prev,
+            limit: nuevoLimite,
+            page: 1
+        }));
+        setShowConfigLimit(false);
+    };
+
     const EstadoDespachoBadge = ({ estado }) => {
         const config = obtenerConfigEstado(estado);
         const Icono = config.icono;
@@ -354,26 +449,26 @@ const DespachosList = () => {
                                             <div>
                                                 <label className="block text-sm font-medium text-gray-700">Cliente</label>
                                                 <p className="mt-1 text-sm text-gray-900">
-                                                    {despachoSeleccionado.ventas?.nombre_cliente || '-'} {despachoSeleccionado.ventas?.apellido_cliente || ''}
+                                                    {despachoSeleccionado.nombre_cliente || '-'} {despachoSeleccionado.apellido_cliente || ''}
                                                 </p>
                                             </div>
                                             <div>
                                                 <label className="block text-sm font-medium text-gray-700">Empresa</label>
                                                 <p className="mt-1 text-sm text-gray-900">
-                                                    {despachoSeleccionado.ventas?.cliente_empresa || '-'}
+                                                    {despachoSeleccionado.cliente_empresa || '-'}
                                                 </p>
                                             </div>
                                             <div>
                                                 <label className="block text-sm font-medium text-gray-700">Teléfono</label>
                                                 <div className="mt-1 flex items-center text-sm text-gray-900">
                                                     <Phone className="h-4 w-4 mr-1 text-gray-400" />
-                                                    {despachoSeleccionado.ventas?.cliente_telefono || '-'}
+                                                    {despachoSeleccionado.cliente_telefono || '-'}
                                                 </div>
                                             </div>
                                             <div>
                                                 <label className="block text-sm font-medium text-gray-700">Email</label>
                                                 <p className="mt-1 text-sm text-gray-900 break-words">
-                                                    {despachoSeleccionado.ventas?.cliente_email || '-'}
+                                                    {despachoSeleccionado.cliente_email || '-'}
                                                 </p>
                                             </div>
                                         </div>
@@ -382,8 +477,8 @@ const DespachosList = () => {
                                             <div className="mt-1 flex items-start text-sm text-gray-900">
                                                 <MapPin className="h-4 w-4 mr-1 text-gray-400 mt-0.5 flex-shrink-0" />
                                                 <span>
-                                                    {despachoSeleccionado.ventas?.ciudad || 'Lima'}, {despachoSeleccionado.ventas?.departamento || 'Lima'}
-                                                    {despachoSeleccionado.ventas?.distrito && `, ${despachoSeleccionado.ventas?.distrito}`}
+                                                    {despachoSeleccionado.ciudad || 'Lima'}, {despachoSeleccionado.departamento || 'Lima'}
+                                                    {despachoSeleccionado.distrito && `, ${despachoSeleccionado.distrito}`}
                                                 </span>
                                             </div>
                                         </div>
@@ -396,7 +491,7 @@ const DespachosList = () => {
                                             <div>
                                                 <label className="block text-sm font-medium text-gray-700">Almacén</label>
                                                 <p className="mt-1 text-sm text-gray-900">
-                                                    {despachoSeleccionado.almacenes?.nombre || '-'}
+                                                    {despachoSeleccionado.almacen_nombre || '-'}
                                                 </p>
                                             </div>
                                             <div>
@@ -409,7 +504,7 @@ const DespachosList = () => {
                                             <div>
                                                 <label className="block text-sm font-medium text-gray-700">Valor Total</label>
                                                 <p className="mt-1 text-sm text-gray-900 font-medium">
-                                                    {formatearMoneda(despachoSeleccionado.ventas?.valor_final)}
+                                                    {formatearMoneda(despachoSeleccionado.valor_final)}
                                                 </p>
                                             </div>
                                             {despachoSeleccionado.fecha_envio && (
@@ -441,13 +536,24 @@ const DespachosList = () => {
                                                                 {producto.productos?.marca || '-'} • {producto.productos?.unidad_medida || 'UND'}
                                                             </p>
                                                         </div>
-                                                        <div className="text-right">
-                                                            <p className="text-sm font-medium text-gray-900">
-                                                                {formatearNumero(producto.cantidad, 0)}
-                                                            </p>
-                                                            <p className="text-xs text-gray-500">
-                                                                {formatearMoneda(producto.precio_unitario)} c/u
-                                                            </p>
+                                                        <div className="flex items-center space-x-3">
+                                                            <div className="text-right">
+                                                                <p className="text-sm font-medium text-gray-900">
+                                                                    {formatearNumero(producto.cantidad, 0)}
+                                                                </p>
+                                                                <p className="text-xs text-gray-500">
+                                                                    {formatearMoneda(producto.precio_unitario)} c/u
+                                                                </p>
+                                                            </div>
+                                                            {producto.producto_id && (
+                                                                <button
+                                                                    onClick={() => handleVerKardex(producto)}
+                                                                    className="p-2 text-purple-600 hover:text-purple-900 hover:bg-purple-50 rounded-md transition-colors"
+                                                                    title="Ver kardex del producto"
+                                                                >
+                                                                    <FileText className="h-4 w-4" />
+                                                                </button>
+                                                            )}
                                                         </div>
                                                     </div>
                                                 ))}
@@ -707,6 +813,87 @@ const DespachosList = () => {
         );
     };
 
+    // Componente para métricas operativas
+    const MetricasWidget = () => {
+        if (!metricas && !loadingMetricas) return null;
+
+        return (
+            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4 mb-6">
+                <div className="bg-white p-4 rounded-lg shadow border">
+                    <div className="flex items-center">
+                        <Clock className="h-8 w-8 text-yellow-600" />
+                        <div className="ml-3">
+                            <p className="text-sm font-medium text-gray-600">Pendientes</p>
+                            <p className="text-2xl font-bold text-yellow-600">
+                                {loadingMetricas ? '--' : metricas?.pendientes || 0}
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                <div className="bg-white p-4 rounded-lg shadow border">
+                    <div className="flex items-center">
+                        <Package className="h-8 w-8 text-blue-600" />
+                        <div className="ml-3">
+                            <p className="text-sm font-medium text-gray-600">Preparando</p>
+                            <p className="text-2xl font-bold text-blue-600">
+                                {loadingMetricas ? '--' : metricas?.preparando || 0}
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                <div className="bg-white p-4 rounded-lg shadow border">
+                    <div className="flex items-center">
+                        <CheckCircle className="h-8 w-8 text-purple-600" />
+                        <div className="ml-3">
+                            <p className="text-sm font-medium text-gray-600">Listos</p>
+                            <p className="text-2xl font-bold text-purple-600">
+                                {loadingMetricas ? '--' : metricas?.listos || 0}
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                <div className="bg-white p-4 rounded-lg shadow border">
+                    <div className="flex items-center">
+                        <Truck className="h-8 w-8 text-orange-600" />
+                        <div className="ml-3">
+                            <p className="text-sm font-medium text-gray-600">En Ruta</p>
+                            <p className="text-2xl font-bold text-orange-600">
+                                {loadingMetricas ? '--' : metricas?.enviados || 0}
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                <div className="bg-white p-4 rounded-lg shadow border">
+                    <div className="flex items-center">
+                        <CheckCircle className="h-8 w-8 text-green-600" />
+                        <div className="ml-3">
+                            <p className="text-sm font-medium text-gray-600">Entregados</p>
+                            <p className="text-2xl font-bold text-green-600">
+                                {loadingMetricas ? '--' : metricas?.entregados || 0}
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                <div className="bg-white p-4 rounded-lg shadow border">
+                    <div className="flex items-center">
+                        <Package className="h-8 w-8 text-gray-600" />
+                        <div className="ml-3">
+                            <p className="text-sm font-medium text-gray-600">Total</p>
+                            <p className="text-2xl font-bold text-gray-900">
+                                {loadingMetricas ? '--' : metricas?.total || 0}
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        );
+    };
+
     return (
         <div className="p-6 space-y-6">
             {/* Header */}
@@ -717,7 +904,10 @@ const DespachosList = () => {
                 </div>
                 <div className="flex space-x-3">
                     <button
-                        onClick={cargarDespachos}
+                        onClick={() => {
+                            cargarDespachos();
+                            cargarMetricas();
+                        }}
                         disabled={loading}
                         className="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                     >
@@ -726,6 +916,9 @@ const DespachosList = () => {
                     </button>
                 </div>
             </div>
+
+            {/* Widget de métricas */}
+            <MetricasWidget />
 
             {/* Filtros */}
             <div className="bg-white shadow rounded-lg">
@@ -911,15 +1104,15 @@ const DespachosList = () => {
                                         <td className="px-6 py-4 text-sm text-gray-900">
                                             <div>
                                                 <p className="font-medium">
-                                                    {despacho.ventas?.nombre_cliente || 'Cliente'} {despacho.ventas?.apellido_cliente || ''}
+                                                    {despacho.nombre_cliente || 'Cliente'} {despacho.apellido_cliente ? despacho.apellido_cliente : ''}
                                                 </p>
                                                 <p className="text-xs text-gray-500">
-                                                    {despacho.ventas?.cliente_telefono || '-'}
+                                                    {despacho.cliente_telefono || '-'}
                                                 </p>
                                             </div>
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                                            {despacho.almacenes?.nombre || '-'}
+                                            {despacho.almacen_nombre || '-'}
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-center">
                                             <div className="flex items-center justify-center">
@@ -931,7 +1124,7 @@ const DespachosList = () => {
                                             <EstadoDespachoBadge estado={despacho.estado} />
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right font-medium">
-                                            {formatearMoneda(despacho.ventas?.valor_final)}
+                                            {formatearMoneda(despacho.valor_final)}
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                                             <div className="flex items-center justify-end space-x-2">
@@ -961,14 +1154,42 @@ const DespachosList = () => {
                 </div>
 
                 {/* Paginación */}
-                {!loading && !error && paginacion.totalPages > 1 && (
+                {!loading && !error && despachos.length > 0 && (
                     <div className="px-6 py-3 border-t border-gray-200 flex items-center justify-between">
                         <div className="flex-1 flex items-center justify-between">
-                            <div>
+                            <div className="flex items-center space-x-4">
                                 <p className="text-sm text-gray-700">
-                                    Página {paginacion.page} de {paginacion.totalPages}
+                                    Página {paginacion.page} de {paginacion.totalPages > 0 ? paginacion.totalPages : 1}
                                     {paginacion.total > 0 && ` - ${paginacion.total} registros total`}
                                 </p>
+                                <div className="relative config-limit-dropdown">
+                                    <button
+                                        onClick={() => setShowConfigLimit(!showConfigLimit)}
+                                        className="inline-flex items-center px-3 py-1 border border-gray-300 shadow-sm text-xs font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors"
+                                    >
+                                        <Settings className="h-3 w-3 mr-1" />
+                                        {paginacion.limit} por página
+                                    </button>
+                                    {showConfigLimit && (
+                                        <div className="absolute bottom-full mb-1 left-0 z-10 min-w-[140px] bg-white rounded-md shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none">
+                                            <div className="py-1">
+                                                {limitesDisponibles.map((limite) => (
+                                                    <button
+                                                        key={limite}
+                                                        onClick={() => cambiarLimite(limite)}
+                                                        className={`${
+                                                            paginacion.limit === limite
+                                                                ? 'bg-blue-50 text-blue-700'
+                                                                : 'text-gray-900 hover:bg-gray-50'
+                                                        } block w-full text-left px-4 py-2 text-sm transition-colors`}
+                                                    >
+                                                        {limite} registros
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
                             </div>
                             <div className="flex space-x-2">
                                 <button
@@ -980,7 +1201,7 @@ const DespachosList = () => {
                                 </button>
                                 <button
                                     onClick={() => setPaginacion(prev => ({ ...prev, page: prev.page + 1 }))}
-                                    disabled={paginacion.page === paginacion.totalPages}
+                                    disabled={paginacion.page >= paginacion.totalPages}
                                     className="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                                 >
                                     <ChevronRight className="h-5 w-5" />
@@ -994,6 +1215,16 @@ const DespachosList = () => {
             {/* Modales */}
             <ModalDetalle />
             <ModalEstado />
+
+            {/* Modal de Kardex */}
+            {showKardexModal && selectedProductoKardex && (
+                <KardexModal
+                    isOpen={showKardexModal}
+                    onClose={handleCloseKardexModal}
+                    producto={selectedProductoKardex}
+                    almacenes={almacenesData}
+                />
+            )}
         </div>
     );
 };

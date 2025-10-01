@@ -6,16 +6,16 @@ import {
   CheckCircle, XCircle, Bell, Users, TrendingUp,
   Target, CreditCard, PieChart, Activity,
   Map, Package, GitBranch, Eye, Layers,
-  Award, Zap, X
+  Award, Zap, X, User, Building, Mail, Phone
 } from 'lucide-react';
 import VentasList from '../components/ventas/VentasList/VentasList';
-import VentasMetrics from '../components/ventas/VentasMetrics/VentasMetrics';
+import VentasMetrics from '../components/ventas/VentasMetrics/VentasMetricsOptimized';
 import VentaForm from '../components/ventas/VentaForm/VentaForm';
-import ClienteForm from '../components/ventas/ClienteForm/ClienteForm';
 import VentaDetailsView from '../components/ventas/VentaDetailsView';
-import ActividadPage from '../components/ventas/ActividadPage/ActividadPage';
-import SmartHeader from '../components/ventas/SmartHeader/SmartHeader';
+import ActividadPage from '../components/ventas/ActividadPage/ActividadPageEnhanced';
 import ventasService from '../services/ventasService';
+import authService from '../services/authService';
+import clientesService from '../services/clientesService';
 import VistaUnificada from '../components/VistaUnificada';
 import AnalisisGeografico from '../components/AnalisisGeografico';
 import ABCProductos from '../components/ABCProductos';
@@ -24,7 +24,6 @@ import PipelineMetrics from '../components/ventas/PipelineMetrics/PipelineMetric
 const VentasPage = () => {
   const [vistaActual, setVistaActual] = useState('lista');
   const [showVentaForm, setShowVentaForm] = useState(false);
-  const [showClienteForm, setShowClienteForm] = useState(false);
   const [ventaSeleccionada, setVentaSeleccionada] = useState(null);
   const [clienteSeleccionado, setClienteSeleccionado] = useState(null);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
@@ -43,6 +42,16 @@ const VentasPage = () => {
   const [notification, setNotification] = useState(null);
   const [lastUpdated, setLastUpdated] = useState(null);
 
+  // Estados para clientes
+  const [clientes, setClientes] = useState([]);
+  const [clientesLoading, setClientesLoading] = useState(false);
+  const [clientesStats, setClientesStats] = useState(null);
+  const [filtrosClientes, setFiltrosClientes] = useState({
+    busqueda: '',
+    tipo_cliente: '',
+    tipo_documento: ''
+  });
+
   const [mostrarModalBonos, setMostrarModalBonos] = useState(false);
   const [dashboardActivo, setDashboardActivo] = useState('maestro');
   const [datosDashboard, setDatosDashboard] = useState(null);
@@ -52,11 +61,14 @@ const VentasPage = () => {
   const [showVentaDetails, setShowVentaDetails] = useState(false);
   const [ventaDetalles, setVentaDetalles] = useState(null);
 
-  const usuarioActual = {
-    id: 1,
-    nombre: 'Alonso Admin',
-    rol: 'admin'
-  };
+  // ESTADO DINÁMICO PARA USUARIO ACTUAL
+  const [usuarioActual, setUsuarioActual] = useState(null);
+  const [usuarioLoading, setUsuarioLoading] = useState(true);
+
+  // Cargar usuario actual al inicializar
+  useEffect(() => {
+    cargarUsuarioActual();
+  }, []);
 
   useEffect(() => {
     cargarStatsGenerales();
@@ -69,10 +81,50 @@ const VentasPage = () => {
     return () => clearInterval(interval);
   }, []);
   useEffect(() => {
-  if (vistaActual === 'dashboards-admin' && !datosDashboard && dashboardActivo === 'maestro') {
-    cargarDashboard('maestro');
-  }
-  }, [vistaActual, dashboardActivo]);
+    // Solo cargar si no hay datos ya cargados para el dashboard activo
+    if (vistaActual === 'dashboards-admin' && !datosDashboard) {
+      cargarDashboard(dashboardActivo);
+    }
+  }, [vistaActual]); // ❌ REMOVIDO dashboardActivo de dependencias
+
+  // Función para cargar usuario actual dinámicamente
+  const cargarUsuarioActual = useCallback(async () => {
+    try {
+      setUsuarioLoading(true);
+      console.log('🔍 VentasPage: Cargando usuario actual...');
+
+      // Intentar obtener usuario desde el servicio de auth
+      const usuario = await authService.getUser();
+
+      if (usuario) {
+        setUsuarioActual(usuario);
+        console.log('✅ VentasPage: Usuario cargado:', {
+          id: usuario.id,
+          nombre: usuario.nombre_completo,
+          rol: usuario.rol,
+          rol_id: usuario.rol_id,
+          es_ejecutivo: usuario.permisos?.es_ejecutivo
+        });
+      } else {
+        throw new Error('No se pudo obtener información del usuario');
+      }
+
+    } catch (error) {
+      console.error('❌ VentasPage: Error cargando usuario:', error);
+
+      // Si hay error de autenticación, mostrar notificación y redirigir
+      if (error.message.includes('Sesión expirada')) {
+        showNotification('Sesión expirada. Redirigiendo al login...', 'error');
+        setTimeout(() => {
+          window.location.href = '/login';
+        }, 2000);
+      } else {
+        showNotification('Error cargando información del usuario', 'error');
+      }
+    } finally {
+      setUsuarioLoading(false);
+    }
+  }, []);
   const cargarStatsGenerales = useCallback(async (silencioso = false) => {
     try {
       if (!silencioso) setStatsLoading(true);
@@ -83,7 +135,7 @@ const VentasPage = () => {
       }
       try {
         const token = localStorage.getItem('token');
-        const bonosResponse = await fetch('/api/comisiones/bono-actual/1', {
+        const bonosResponse = await fetch('http://localhost:3001/api/comisiones/bono-actual/1', {
           headers: { 'Authorization': `Bearer ${token}` }
         });
         const bonosData = await bonosResponse.json();
@@ -153,9 +205,13 @@ const VentasPage = () => {
   }, []);
 
   const handleDashboardChange = useCallback((dashboardKey) => {
-    setDashboardActivo(dashboardKey);
-    cargarDashboard(dashboardKey);
-  }, [cargarDashboard]);
+    // Solo cambiar si es diferente al actual
+    if (dashboardKey !== dashboardActivo) {
+      setDatosDashboard(null); // ✅ Limpiar datos antes de cargar nuevos
+      setDashboardActivo(dashboardKey);
+      cargarDashboard(dashboardKey);
+    }
+  }, [cargarDashboard, dashboardActivo]);
 
   const handleRefresh = useCallback(() => {
     setRefreshTrigger(prev => prev + 1);
@@ -167,9 +223,50 @@ const VentasPage = () => {
     setShowVentaForm(true);
   }, []);
 
+  // Función de notificaciones (se define primero)
+  const showNotification = useCallback((mensaje, tipo = 'info') => {
+    setNotification({ mensaje, tipo, id: Date.now() });
+    setTimeout(() => setNotification(null), 3000);
+  }, []);
+
+  // Función para clientes
   const handleCrearCliente = useCallback(() => {
-    setClienteSeleccionado(null);
-    setShowClienteForm(true);
+    // Función mejorada para crear cliente
+    showNotification('Función de creación de clientes disponible vía API', 'info');
+  }, [showNotification]);
+
+  const handleBuscarCliente = useCallback(async (documento) => {
+    if (!documento || documento.length < 3) {
+      showNotification('Ingrese un número de documento válido', 'warning');
+      return null;
+    }
+
+    try {
+      const response = await clientesService.buscarPorDocumento(documento);
+      showNotification('Cliente encontrado exitosamente', 'success');
+      return response.data;
+    } catch (error) {
+      if (error.message.includes('404')) {
+        showNotification('Cliente no encontrado', 'info');
+      } else {
+        showNotification('Error al buscar cliente: ' + error.message, 'error');
+      }
+      return null;
+    }
+  }, [showNotification]);
+
+  const handleAutocompletarClientes = useCallback(async (query) => {
+    if (!query || query.length < 2) {
+      return [];
+    }
+
+    try {
+      const response = await clientesService.autocomplete(query);
+      return response.data || [];
+    } catch (error) {
+      console.error('Error en autocompletado:', error);
+      return [];
+    }
   }, []);
 
   const handleEditarVenta = useCallback((venta) => {
@@ -178,9 +275,8 @@ const VentasPage = () => {
   }, []);
 
   const handleEditarCliente = useCallback((cliente) => {
-    setClienteSeleccionado(cliente);
-    setShowClienteForm(true);
-  }, []);
+    showNotification(`Editar cliente: ${cliente.nombres || cliente.razon_social}`, 'info');
+  }, [showNotification]);
 
   const handleVerDetalles = useCallback((venta) => {
     setVentaDetalles(venta);
@@ -197,10 +293,6 @@ const VentasPage = () => {
     setVentaSeleccionada(null);
   }, []);
 
-  const handleClienteFormClose = useCallback(() => {
-    setShowClienteForm(false);
-    setClienteSeleccionado(null);
-  }, []);
 
   const handleVentaFormSave = useCallback((nuevaVenta) => {
     handleRefresh();
@@ -210,18 +302,45 @@ const VentasPage = () => {
     setVentaSeleccionada(null);
   }, [ventaSeleccionada, handleRefresh]);
 
-  const handleClienteFormSave = useCallback((nuevoCliente) => {
-    handleRefresh();
-    const accion = clienteSeleccionado ? 'actualizado' : 'creado';
-    showNotification(`Cliente ${accion} exitosamente`, 'success');
-    setShowClienteForm(false);
-    setClienteSeleccionado(null);
-  }, [clienteSeleccionado, handleRefresh]);
+  // Funciones para clientes (usando API real)
+  const cargarClientes = useCallback(async () => {
+    try {
+      setClientesLoading(true);
+      const response = await clientesService.obtenerTodos(filtrosClientes);
+      setClientes(response.data || []);
+    } catch (error) {
+      console.error('Error cargando clientes:', error);
+      showNotification('Error al cargar clientes: ' + error.message, 'error');
+      setClientes([]);
+    } finally {
+      setClientesLoading(false);
+    }
+  }, [filtrosClientes, showNotification]);
 
-  const showNotification = useCallback((mensaje, tipo = 'info') => {
-    setNotification({ mensaje, tipo, id: Date.now() });
-    setTimeout(() => setNotification(null), 3000);
+  const cargarEstadisticasClientes = useCallback(async () => {
+    try {
+      const response = await clientesService.obtenerEstadisticas();
+      setClientesStats(response.data?.resumen || {});
+    } catch (error) {
+      console.error('Error cargando estadísticas de clientes:', error);
+      setClientesStats({
+        total: 0,
+        personas: 0,
+        empresas: 0,
+        activos: 0,
+        recientes: 0
+      });
+    }
   }, []);
+
+
+  // useEffect para cargar datos de clientes cuando se selecciona la pestaña
+  useEffect(() => {
+    if (vistaActual === 'clientes') {
+      cargarClientes();
+      cargarEstadisticasClientes();
+    }
+  }, [vistaActual, cargarClientes, cargarEstadisticasClientes]);
 
   const handleLimpiarFiltros = useCallback(() => {
     setFiltros({
@@ -266,7 +385,7 @@ const VentasPage = () => {
       }
     ];
 
-    if (usuarioActual.rol === 'admin') {
+    if (usuarioActual?.rol === 'admin' || usuarioActual?.rol === 'SUPER_ADMIN') {
       vistasBase.push(
         {
           id: 'dashboards-admin',
@@ -303,10 +422,10 @@ const VentasPage = () => {
     );
 
     return vistasBase;
-  }, [usuarioActual.rol]);
+  }, [usuarioActual?.rol]);
 
   const dashboardsDisponibles = useMemo(() => {
-    if (usuarioActual.rol === 'admin') {
+    if (usuarioActual?.rol === 'admin' || usuarioActual?.rol === 'SUPER_ADMIN') {
       return [
         { key: 'maestro', label: 'Vista Unificada', icono: Eye, color: 'purple' },
         { key: 'geografico', label: 'Análisis Geográfico', icono: Map, color: 'green' },
@@ -318,7 +437,7 @@ const VentasPage = () => {
         { key: 'maestro', label: 'Mi Dashboard Unificado', icono: Eye, color: 'purple' }
       ];
     }
-  }, [usuarioActual.rol]);
+  }, [usuarioActual?.rol]);
 
   const hayFiltrosActivos = useMemo(() => {
     return Object.values(filtros).some(value => {
@@ -328,6 +447,43 @@ const VentasPage = () => {
       return value !== null && value !== undefined && value !== '';
     });
   }, [filtros]);
+
+  // Loading state para usuario
+  if (usuarioLoading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="bg-white rounded-lg shadow-lg p-8 max-w-md w-full mx-4">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+            <h2 className="text-xl font-semibold text-gray-900 mb-2">Cargando Sistema</h2>
+            <p className="text-gray-600">Obteniendo información del usuario...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Error state para usuario
+  if (!usuarioActual) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="bg-white rounded-lg shadow-lg p-8 max-w-md w-full mx-4">
+          <div className="text-center">
+            <AlertCircle className="h-12 w-12 text-red-500 mx-auto mb-4" />
+            <h2 className="text-xl font-semibold text-gray-900 mb-2">Error de Autenticación</h2>
+            <p className="text-gray-600 mb-6">No se pudo cargar la información del usuario</p>
+            <button
+              onClick={cargarUsuarioActual}
+              className="w-full bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center"
+            >
+              <RefreshCw className="h-4 w-4 mr-2" />
+              Intentar de nuevo
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   const NotificationComponent = () => {
     if (!notification) return null;
@@ -413,13 +569,41 @@ const VentasPage = () => {
       );
     }
 
+    // Si el usuario aún está cargando, mostrar loading
+    if (usuarioLoading) {
+      return (
+        <div className="flex items-center justify-center h-64">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+          <span className="ml-3 text-gray-600">Cargando información del usuario...</span>
+        </div>
+      );
+    }
+
+    // Si no hay usuario, mostrar error
+    if (!usuarioActual) {
+      return (
+        <div className="text-center py-12">
+          <AlertCircle className="h-12 w-12 text-red-500 mx-auto mb-4" />
+          <h3 className="text-lg font-semibold text-gray-900 mb-2">Error de Autenticación</h3>
+          <p className="text-gray-600 mb-4">No se pudo cargar la información del usuario</p>
+          <button
+            onClick={cargarUsuarioActual}
+            className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+          >
+            <RefreshCw className="h-4 w-4 mr-2" />
+            Reintentar
+          </button>
+        </div>
+      );
+    }
+
     switch(dashboardActivo) {
   case 'maestro':
-    return <VistaUnificada usuarioActual={usuarioActual} />;        
+    return <VistaUnificada usuarioActual={usuarioActual} />;
   case 'geografico':
-    return <AnalisisGeografico />;      
+    return <AnalisisGeografico />;
   case 'abc-productos':
-    return <ABCProductos />;           
+    return <ABCProductos usuarioActual={usuarioActual} />;           
   case 'metas-avanzado':
     return <MetasAvanzado />;  
       default:
@@ -487,13 +671,6 @@ const VentasPage = () => {
         </div>
       </div>
 
-      {/* Smart Header Adaptativo */}
-      <SmartHeader 
-        vistaActual={vistaActual}
-        statsGenerales={statsGenerales}
-        loading={statsLoading}
-        onBonoClick={() => setMostrarModalBonos(true)}
-      />
 
       {/* Modal de bonos */}
       {mostrarModalBonos && (
@@ -643,28 +820,7 @@ const VentasPage = () => {
             })}
           </div>
 
-          <div className="flex items-center space-x-3">
-            {vistaActual !== 'metricas' && vistaActual !== 'pipeline' && vistaActual !== 'dashboards-admin' && vistaActual !== 'actividad' && (
-              <>
-                <button
-                  onClick={() => showNotification('Filtros avanzados próximamente', 'info')}
-                  className="inline-flex items-center px-3 py-2 border border-gray-300 rounded-md text-gray-700 bg-white hover:bg-gray-50 transition-colors"
-                >
-                  <Filter className="h-4 w-4 mr-2" />
-                  Filtros
-                </button>
-
-                <button
-                  onClick={handleExportar}
-                  disabled={loading}
-                  className="inline-flex items-center px-3 py-2 border border-gray-300 rounded-md text-gray-700 bg-white hover:bg-gray-50 transition-colors disabled:opacity-50"
-                >
-                  <Download className="h-4 w-4 mr-2" />
-                  Exportar
-                </button>
-              </>
-            )}
-          </div>
+          {/* ✅ ELIMINADAS DUPLICACIONES - VentasList maneja sus propios filtros y exportación */}
         </div>
       </div>
 
@@ -679,6 +835,7 @@ const VentasPage = () => {
               onEditCliente={handleEditarCliente}
               filtros={filtros}
               onFiltrosChange={setFiltros}
+              usuarioActual={usuarioActual}
             />
           </div>
         )}
@@ -704,7 +861,7 @@ const VentasPage = () => {
         {vistaActual === 'pipeline' && (
           <div className="h-full p-6 overflow-y-auto">
             <PipelineMetrics
-              asesorId={usuarioActual.id}
+              asesorId={usuarioActual?.id || 1}
               refreshTrigger={refreshTrigger}
             />
           </div>
@@ -712,26 +869,293 @@ const VentasPage = () => {
 
         {vistaActual === 'clientes' && (
           <div className="h-full p-6 overflow-y-auto">
-            <div className="bg-white rounded-lg shadow p-8 text-center">
-              <Users className="h-16 w-16 mx-auto text-gray-400 mb-4" />
-              <h3 className="text-lg font-semibold text-gray-900 mb-2">Gestión de Clientes</h3>
-              <p className="text-gray-600 mb-4">Vista especializada para gestión y seguimiento de clientes</p>
-              <div className="space-x-3">
+            {/* Header con estadísticas */}
+            <div className="mb-6">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h2 className="text-2xl font-bold text-gray-900">Gestión de Clientes</h2>
+                  <p className="text-gray-600">Administra tu base de datos de clientes</p>
+                </div>
                 <button
                   onClick={handleCrearCliente}
                   className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
                 >
                   <Plus className="h-4 w-4 mr-2" />
-                  Crear Cliente
-                </button>
-                <button
-                  onClick={() => showNotification('Vista de Clientes próximamente', 'info')}
-                  className="inline-flex items-center px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition-colors"
-                >
-                  <List className="h-4 w-4 mr-2" />
-                  Ver Lista Completa
+                  Nuevo Cliente
                 </button>
               </div>
+
+              {/* Estadísticas de clientes */}
+              {clientesStats && (
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                  <div className="bg-white rounded-lg shadow p-4">
+                    <div className="flex items-center">
+                      <div className="h-8 w-8 bg-blue-100 rounded-full flex items-center justify-center">
+                        <Users className="h-4 w-4 text-blue-600" />
+                      </div>
+                      <div className="ml-3">
+                        <p className="text-sm font-medium text-gray-600">Total Clientes</p>
+                        <p className="text-lg font-semibold text-gray-900">{clientesStats.total || 0}</p>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="bg-white rounded-lg shadow p-4">
+                    <div className="flex items-center">
+                      <div className="h-8 w-8 bg-green-100 rounded-full flex items-center justify-center">
+                        <User className="h-4 w-4 text-green-600" />
+                      </div>
+                      <div className="ml-3">
+                        <p className="text-sm font-medium text-gray-600">Personas</p>
+                        <p className="text-lg font-semibold text-gray-900">{clientesStats.personas || 0}</p>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="bg-white rounded-lg shadow p-4">
+                    <div className="flex items-center">
+                      <div className="h-8 w-8 bg-purple-100 rounded-full flex items-center justify-center">
+                        <Building className="h-4 w-4 text-purple-600" />
+                      </div>
+                      <div className="ml-3">
+                        <p className="text-sm font-medium text-gray-600">Empresas</p>
+                        <p className="text-lg font-semibold text-gray-900">{clientesStats.empresas || 0}</p>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="bg-white rounded-lg shadow p-4">
+                    <div className="flex items-center">
+                      <div className="h-8 w-8 bg-yellow-100 rounded-full flex items-center justify-center">
+                        <Calendar className="h-4 w-4 text-yellow-600" />
+                      </div>
+                      <div className="ml-3">
+                        <p className="text-sm font-medium text-gray-600">Este Mes</p>
+                        <p className="text-lg font-semibold text-gray-900">{clientesStats.nuevos_mes || 0}</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Filtros de búsqueda */}
+            <div className="bg-white rounded-lg shadow p-4 mb-6">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Buscar cliente
+                  </label>
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                    <input
+                      type="text"
+                      placeholder="Nombre, empresa, documento..."
+                      value={filtrosClientes.busqueda}
+                      onChange={(e) => setFiltrosClientes(prev => ({ ...prev, busqueda: e.target.value }))}
+                      className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Tipo de Cliente
+                  </label>
+                  <select
+                    value={filtrosClientes.tipo_cliente}
+                    onChange={(e) => setFiltrosClientes(prev => ({ ...prev, tipo_cliente: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  >
+                    <option value="">Todos</option>
+                    <option value="persona">Persona Natural</option>
+                    <option value="empresa">Empresa</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Tipo de Documento
+                  </label>
+                  <select
+                    value={filtrosClientes.tipo_documento}
+                    onChange={(e) => setFiltrosClientes(prev => ({ ...prev, tipo_documento: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  >
+                    <option value="">Todos</option>
+                    <option value="DNI">DNI</option>
+                    <option value="RUC">RUC</option>
+                    <option value="PASAPORTE">Pasaporte</option>
+                    <option value="CE">Carné de Extranjería</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between mt-4">
+                <div className="flex items-center space-x-2">
+                  <button
+                    onClick={() => setFiltrosClientes({ busqueda: '', tipo_cliente: '', tipo_documento: '' })}
+                    className="inline-flex items-center px-3 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition-colors text-sm"
+                  >
+                    <X className="h-4 w-4 mr-2" />
+                    Limpiar Filtros
+                  </button>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <button
+                    onClick={cargarClientes}
+                    disabled={clientesLoading}
+                    className="inline-flex items-center px-3 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition-colors text-sm"
+                  >
+                    <RefreshCw className={`h-4 w-4 mr-2 ${clientesLoading ? 'animate-spin' : ''}`} />
+                    Actualizar
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Tabla de clientes */}
+            <div className="bg-white rounded-lg shadow">
+              <div className="px-6 py-4 border-b border-gray-200">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-lg font-medium text-gray-900">
+                    Lista de Clientes ({clientes.length})
+                  </h3>
+                </div>
+              </div>
+
+              {clientesLoading ? (
+                <div className="flex items-center justify-center py-12">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                  <span className="ml-3 text-gray-600">Cargando clientes...</span>
+                </div>
+              ) : clientes.length === 0 ? (
+                <div className="text-center py-12">
+                  <Users className="h-12 w-12 mx-auto text-gray-400 mb-4" />
+                  <h3 className="text-lg font-medium text-gray-900 mb-2">No hay clientes</h3>
+                  <p className="text-gray-600 mb-4">
+                    {filtrosClientes.busqueda || filtrosClientes.tipo_cliente || filtrosClientes.tipo_documento
+                      ? 'No se encontraron clientes con los filtros aplicados'
+                      : 'Aún no tienes clientes registrados'}
+                  </p>
+                  <button
+                    onClick={handleCrearCliente}
+                    className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+                  >
+                    <Plus className="h-4 w-4 mr-2" />
+                    Crear Primer Cliente
+                  </button>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Cliente
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Tipo
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Documento
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Contacto
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Ubicación
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Acciones
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                      {clientes.map((cliente) => (
+                        <tr key={cliente.id} className="hover:bg-gray-50">
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="flex items-center">
+                              <div className="flex-shrink-0 h-10 w-10">
+                                <div className="h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center">
+                                  {cliente.tipo_cliente === 'empresa' ? (
+                                    <Building className="h-5 w-5 text-blue-600" />
+                                  ) : (
+                                    <User className="h-5 w-5 text-blue-600" />
+                                  )}
+                                </div>
+                              </div>
+                              <div className="ml-4">
+                                <div className="text-sm font-medium text-gray-900">
+                                  {cliente.tipo_cliente === 'empresa'
+                                    ? cliente.razon_social
+                                    : `${cliente.nombres} ${cliente.apellidos}`}
+                                </div>
+                                {cliente.tipo_cliente === 'empresa' && cliente.contacto_nombres && (
+                                  <div className="text-sm text-gray-500">
+                                    Contacto: {cliente.contacto_nombres} {cliente.contacto_apellidos}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                              cliente.tipo_cliente === 'empresa'
+                                ? 'bg-purple-100 text-purple-800'
+                                : 'bg-green-100 text-green-800'
+                            }`}>
+                              {cliente.tipo_cliente === 'empresa' ? 'Empresa' : 'Persona'}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                            <div>
+                              {cliente.tipo_documento}: {cliente.numero_documento}
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                            <div>
+                              {cliente.email && (
+                                <div className="flex items-center">
+                                  <Mail className="h-4 w-4 text-gray-400 mr-1" />
+                                  {cliente.email}
+                                </div>
+                              )}
+                              {cliente.telefono && (
+                                <div className="flex items-center mt-1">
+                                  <Phone className="h-4 w-4 text-gray-400 mr-1" />
+                                  {cliente.telefono}
+                                </div>
+                              )}
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            <div>
+                              {cliente.ciudad && <div>{cliente.ciudad}</div>}
+                              {cliente.departamento && <div>{cliente.departamento}</div>}
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                            <div className="flex items-center space-x-2">
+                              <button
+                                onClick={() => handleEditarCliente(cliente)}
+                                className="text-blue-600 hover:text-blue-900 transition-colors"
+                                title="Editar cliente"
+                              >
+                                <Settings className="h-4 w-4" />
+                              </button>
+                              <button
+                                onClick={() => showNotification(`Ver detalles de ${cliente.nombres || cliente.razon_social}`, 'info')}
+                                className="text-gray-600 hover:text-gray-900 transition-colors"
+                                title="Ver detalles"
+                              >
+                                <Eye className="h-4 w-4" />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -753,14 +1177,6 @@ const VentasPage = () => {
         />
       )}
 
-      {showClienteForm && (
-        <ClienteForm
-          cliente={clienteSeleccionado}
-          mode={clienteSeleccionado ? 'edit' : 'create'}
-          onClose={handleClienteFormClose}
-          onSave={handleClienteFormSave}
-        />
-      )}
 
       {showVentaDetails && ventaDetalles && (
         <VentaDetailsView

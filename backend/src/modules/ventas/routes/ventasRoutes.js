@@ -8,6 +8,7 @@ const router = express.Router();
 
 // Controllers
 const VentasController = require('../controllers/VentasController');
+const ClientesController = require('../controllers/clientesController');
 const ConversionService = require('../services/ConversionService');
 const VentasService = require('../services/VentasService');
 
@@ -1218,10 +1219,85 @@ router.post('/conversion-masiva', authenticateToken, async (req, res) => {
 });
 
 // ============================================
+// RUTAS DE CLIENTES INTEGRADAS - DEBEN IR ANTES DE RUTAS CON PARÁMETROS
+// ============================================
+
+/**
+ * GET /api/ventas/clientes
+ * Obtener todos los clientes con filtros
+ */
+router.get('/clientes', (req, res, next) => {
+  console.log('🔍 DEBUGGING: Ruta /clientes interceptada correctamente');
+  console.log('🔍 Method:', req.method);
+  console.log('🔍 Path:', req.path);
+  console.log('🔍 Params:', req.params);
+  next();
+}, authenticateToken, ClientesController.obtenerTodos);
+
+/**
+ * POST /api/ventas/clientes
+ * Crear nuevo cliente
+ */
+router.post('/clientes', authenticateToken, ClientesController.crear);
+
+/**
+ * GET /api/ventas/clientes/estadisticas
+ * Obtener estadísticas de clientes
+ */
+router.get('/clientes/estadisticas', authenticateToken, ClientesController.obtenerEstadisticas);
+
+/**
+ * GET /api/ventas/clientes/health
+ * Health check del servicio de clientes
+ */
+router.get('/clientes/health', authenticateToken, ClientesController.healthCheck);
+
+/**
+ * GET /api/ventas/clientes/autocomplete
+ * Autocompletado para formularios
+ */
+router.get('/clientes/autocomplete', authenticateToken, ClientesController.autocomplete);
+
+/**
+ * GET /api/ventas/clientes/buscar/:documento
+ * Buscar cliente por documento
+ */
+router.get('/clientes/buscar/:documento', authenticateToken, ClientesController.buscarPorDocumento);
+
+/**
+ * GET /api/ventas/clientes/:id
+ * Obtener cliente por ID
+ */
+router.get('/clientes/:id', authenticateToken, ClientesController.obtenerPorId);
+
+/**
+ * PUT /api/ventas/clientes/:id
+ * Actualizar cliente
+ */
+router.put('/clientes/:id', authenticateToken, ClientesController.actualizar);
+
+/**
+ * DELETE /api/ventas/clientes/:id
+ * Eliminar cliente (soft delete)
+ */
+router.delete('/clientes/:id', authenticateToken, ClientesController.eliminar);
+
+
+// ============================================
+// RUTAS ESPECÍFICAS (SIN PARÁMETROS) - DEBEN IR PRIMERO
+// ============================================
+
+// 👥 Obtener lista de asesores para filtros
+router.get('/asesores', authenticateToken, VentasController.obtenerAsesores);
+
+// 📊 Exportar ventas con filtros
+router.get('/exportar', authenticateToken, VentasController.exportarVentas);
+
+// ============================================
 // RUTAS PRINCIPALES DE VENTAS (CON PARÁMETROS)
 // ============================================
 
-// CRUD Básico - ESTAS DEBEN IR AL FINAL
+// CRUD Básico - ESTAS DEBEN IR DESPUÉS DE RUTAS ESPECÍFICAS
 router.get('/', authenticateToken, VentasController.listarVentas);
 router.post('/', authenticateToken, VentasController.crearVenta);
 router.get('/:id', authenticateToken, VentasController.obtenerVenta);
@@ -1520,6 +1596,7 @@ router.post('/:id/productos', authenticateToken, async (req, res) => {
 // ============================================
 // EXPORTAR EL ROUTER - LÍNEA CRÍTICA
 // ============================================
+
 module.exports = router;
 
 console.log('✅ VentasRoutes loaded successfully - Enterprise version with CORRELATIVO SYSTEM ready');

@@ -1,11 +1,6 @@
-const { createClient } = require('@supabase/supabase-js');
+const { query } = require('../../../config/database');
 const winston = require('winston');
 const cron = require('node-cron');
-
-// Configuración de Supabase
-const supabaseUrl = process.env.SUPABASE_URL;
-const supabaseKey = process.env.SUPABASE_ANON_KEY;
-const supabase = createClient(supabaseUrl, supabaseKey);
 
 // CONFIGURACIÓN DE LOGGING
 const logger = winston.createLogger({
@@ -81,49 +76,36 @@ class SeguimientosController {
             
             const asesor_id = req.user?.id || 1;
             
-            // Calcular fecha límite usando la función de BD (18 horas laborales)
-            const { data: fechaLimiteResult } = await supabase
-                .rpc('calcular_fecha_limite_laboral', {
-                    fecha_inicio: fecha_programada
-                });
-            
-            const fecha_limite = fechaLimiteResult;
+            // Calcular fecha límite (18 horas laborales después)
+            const fechaBase = new Date(fecha_programada);
+            const fecha_limite = new Date(fechaBase.getTime() + (18 * 60 * 60 * 1000)); // 18 horas después
             
             // Crear seguimiento
-            const { data: seguimiento, error: errorSeguimiento } = await supabase
-                .from('seguimientos')
-                .insert([{
-                    prospecto_id: parseInt(id),
-                    asesor_id: asesor_id,
-                    fecha_programada: fecha_programada,
-                    fecha_limite: fecha_limite,
-                    tipo: tipo,
-                    descripcion: descripcion
-                }])
-                .select()
-                .single();
+            const insertQuery = `
+                INSERT INTO seguimientos (
+                    prospecto_id, asesor_id, fecha_programada, fecha_limite, tipo, descripcion
+                ) VALUES ($1, $2, $3, $4, $5, $6)
+                RETURNING *
+            `;
+
+            const result = await query(insertQuery, [
+                parseInt(id), asesor_id, fecha_programada, fecha_limite.toISOString(), tipo, descripcion
+            ]);
             
-            if (errorSeguimiento) {
-                logger.error('Error al crear seguimiento:', errorSeguimiento);
-                throw errorSeguimiento;
+            if (!result.rows || result.rows.length === 0) {
+                throw new Error('Seguimiento no creado');
             }
+
+            const seguimiento = result.rows[0];
             
             // Actualizar prospecto con seguimiento obligatorio
-            const { error: errorProspecto } = await supabase
-                .from('prospectos')
-                .update({
-                    seguimiento_obligatorio: fecha_programada,
-                    seguimiento_completado: false,
-                    fecha_seguimiento: fecha_programada
-                })
-                .eq('id', id);
+            await query(`
+                UPDATE prospectos 
+                SET seguimiento_obligatorio = $1, seguimiento_completado = $2, fecha_seguimiento = $3
+                WHERE id = $4
+            `, [fecha_programada, false, fecha_programada, id]);
             
-            if (errorProspecto) {
-                logger.error('Error al actualizar prospecto con seguimiento:', errorProspecto);
-                throw errorProspecto;
-            }
-            
-            logger.info(`Seguimiento creado: Prospecto ${id}, fecha límite: ${fecha_limite}`);
+            logger.info(`Seguimiento creado: Prospecto ${id}, fecha límite: ${fecha_limite.toISOString()}`);
             
             res.status(201).json({
                 success: true,
@@ -156,38 +138,30 @@ class SeguimientosController {
                 });
             }
             
-            // Actualizar seguimiento
-            const { data, error } = await supabase
-                .from('seguimientos')
-                .update({
-                    completado: true,
-                    fecha_completado: new Date().toISOString(),
-                    resultado: resultado,
-                    notas: notas,
-                    calificacion: calificacion,
-                    completed_by: req.user?.id
-                })
-                .eq('id', id)
-                .select('prospecto_id')
-                .single();
+            // Actualizar seguimiento con nuevos campos
+            const updateResult = await query(`
+                UPDATE seguimientos
+                SET completado = $1, fecha_completado = $2, resultado = $3, notas = $4,
+                    calificacion = $5, completado_por = $6, resultado_seguimiento = $7
+                WHERE id = $8
+                RETURNING prospecto_id, asesor_id
+            `, [true, new Date().toISOString(), resultado, notas, calificacion, req.user?.id, resultado, id]);
             
-            if (error) {
-                logger.error('Error al completar seguimiento:', error);
-                throw error;
-            }
-            
-            if (!data) {
+            if (!updateResult.rows || updateResult.rows.length === 0) {
                 return res.status(404).json({
                     success: false,
                     error: 'Seguimiento no encontrado'
                 });
             }
+
+            const data = updateResult.rows[0];
             
-            // Actualizar prospecto
-            await supabase
-                .from('prospectos')
-                .update({ seguimiento_completado: true })
-                .eq('id', data.prospecto_id);
+            // Actualizar prospecto con nuevo estado
+            await query(`
+                UPDATE prospectos
+                SET seguimiento_completado = $1, estado_seguimiento = $2, fecha_ultimo_seguimiento = $3
+                WHERE id = $4
+            `, [true, 'realizado', new Date(), data.prospecto_id]);
             
             logger.info(`Seguimiento completado: ${id} con resultado: ${resultado}`);
             
@@ -309,37 +283,26 @@ class SeguimientosController {
             }
             
             // Calcular nueva fecha límite
-            const { data: nuevaFechaLimite } = await supabase
-                .rpc('calcular_fecha_limite_laboral', {
-                    fecha_inicio: nueva_fecha
-                });
+            const nuevaFechaLimite = new Date(fechaNueva.getTime() + (18 * 60 * 60 * 1000));
             
             // Actualizar seguimiento
-            const { data, error } = await supabase
-                .from('seguimientos')
-                .update({
-                    pospuesto: true,
-                    fecha_posposicion: new Date().toISOString(),
-                    motivo_posposicion: motivo,
-                    nueva_fecha_programada: nueva_fecha,
-                    fecha_programada: nueva_fecha,
-                    fecha_limite: nuevaFechaLimite
-                })
-                .eq('id', id)
-                .select()
-                .single();
+            const result = await query(`
+                UPDATE seguimientos 
+                SET pospuesto = $1, fecha_posposicion = $2, motivo_posposicion = $3, 
+                    nueva_fecha_programada = $4, fecha_programada = $5, fecha_limite = $6
+                WHERE id = $7
+                RETURNING *
+            `, [true, new Date().toISOString(), motivo, nueva_fecha, nueva_fecha, 
+                nuevaFechaLimite.toISOString(), id]);
             
-            if (error) {
-                logger.error('Error al posponer seguimiento:', error);
-                throw error;
-            }
-            
-            if (!data) {
+            if (!result.rows || result.rows.length === 0) {
                 return res.status(404).json({
                     success: false,
                     error: 'Seguimiento no encontrado'
                 });
             }
+
+            const data = result.rows[0];
             
             logger.info(`Seguimiento pospuesto: ${id} hasta ${nueva_fecha}`);
             
@@ -373,16 +336,16 @@ class SeguimientosController {
      * Ejecutar conversión automática de prospecto a venta
      */
     static async ejecutarConversionAutomatica(config) {
-    const ConversionService = require('../../ventas/services/ConversionService');
-    
-    return await ConversionService.convertirDesdeSeguimiento(
-        config.prospecto_id,
-        config.asesor_id, 
-        config.seguimiento_id,
-        config.resultado,
-        config.notas
-    );
-}
+        const ConversionService = require('../../ventas/services/ConversionService');
+        
+        return await ConversionService.convertirDesdeSeguimiento(
+            config.prospecto_id,
+            config.asesor_id, 
+            config.seguimiento_id,
+            config.resultado,
+            config.notas
+        );
+    }
     
     /**
      * POST /api/prospectos/:prospecto_id/convertir
@@ -435,22 +398,16 @@ class SeguimientosController {
         try {
             const asesor_id = req.user?.id;
             
-            const { data: prospectos, error } = await supabase
-                .from('prospectos')
-                .select(`
-                    *,
-                    seguimientos!inner(resultado, fecha_completado, completado)
-                `)
-                .eq('asesor_id', asesor_id)
-                .eq('activo', true)
-                .eq('convertido', false)
-                .eq('seguimientos.completado', true)
-                .in('seguimientos.resultado', RESULTADOS_QUE_CONVIERTEN)
-                .order('seguimientos.fecha_completado', { ascending: false });
+            const result = await query(`
+                SELECT p.*, s.resultado, s.fecha_completado, s.completado
+                FROM prospectos p
+                INNER JOIN seguimientos s ON p.id = s.prospecto_id
+                WHERE p.asesor_id = $1 AND p.activo = $2 AND p.convertido = $3 
+                AND s.completado = $4 AND s.resultado = ANY($5::text[])
+                ORDER BY s.fecha_completado DESC
+            `, [asesor_id, true, false, true, RESULTADOS_QUE_CONVIERTEN]);
             
-            if (error) {
-                throw error;
-            }
+            const prospectos = result.rows;
             
             res.json({
                 success: true,
@@ -482,17 +439,17 @@ class SeguimientosController {
         const mes = (fecha.getMonth() + 1).toString().padStart(2, '0');
         
         // Obtener siguiente número secuencial
-        const { data, error } = await supabase
-            .from('ventas')
-            .select('codigo')
-            .like('codigo', `${prefijo}${año}${mes}%`)
-            .order('codigo', { ascending: false })
-            .limit(1);
+        const result = await query(`
+            SELECT codigo FROM ventas 
+            WHERE codigo LIKE $1 
+            ORDER BY codigo DESC 
+            LIMIT 1
+        `, [`${prefijo}${año}${mes}%`]);
         
         let siguienteNumero = 1;
         
-        if (data && data.length > 0) {
-            const ultimoCodigo = data[0].codigo;
+        if (result.rows && result.rows.length > 0) {
+            const ultimoCodigo = result.rows[0].codigo;
             const numeroActual = parseInt(ultimoCodigo.slice(-4)) || 0;
             siguienteNumero = numeroActual + 1;
         }
@@ -538,27 +495,20 @@ class SeguimientosController {
                 });
             }
             
-            // Obtener seguimientos vencidos
-            const { data, error } = await supabase
-                .from('seguimientos')
-                .select(`
-                    *,
-                    prospectos!inner(
-                        id, codigo, nombre_cliente, estado, numero_reasignaciones,
-                        asesor_id, asesor_nombre, modo_libre, activo
-                    )
-                `)
-                .eq('completado', false)
-                .eq('vencido', false)
-                .lt('fecha_limite', ahora)
-                .eq('prospectos.activo', true)
-                .not('prospectos.estado', 'in', '(Cerrado,Perdido)')
-                .eq('prospectos.modo_libre', false);
+            // Obtener seguimientos vencidos con nuevos campos
+            const result = await query(`
+                SELECT s.*,
+                       p.id as prospecto_id, p.codigo, p.nombre_cliente, p.estado,
+                       p.numero_reasignaciones, p.asesor_id, p.asesor_nombre,
+                       p.modo_libre, p.activo, p.estado_seguimiento
+                FROM seguimientos s
+                INNER JOIN prospectos p ON s.prospecto_id = p.id
+                WHERE s.completado = $1 AND s.vencido = $2 AND s.fecha_limite < $3
+                AND p.activo = $4 AND p.estado NOT IN ('Cerrado', 'Perdido')
+                AND p.modo_libre = $5 AND s.visible_para_asesor = $6
+            `, [false, false, ahora, true, false, true]);
             
-            if (error) {
-                logger.error('Error al obtener seguimientos vencidos:', error);
-                throw error;
-            }
+            const data = result.rows;
             
             res.json({
                 success: true,
@@ -606,26 +556,19 @@ class SeguimientosController {
             const ahora = new Date().toISOString();
             
             // Obtener seguimientos vencidos
-            const { data: vencidos, error } = await supabase
-                .from('seguimientos')
-                .select(`
-                    *,
-                    prospectos!inner(
-                        id, codigo, nombre_cliente, estado, numero_reasignaciones,
-                        asesor_id, asesor_nombre, modo_libre, activo
-                    )
-                `)
-                .eq('completado', false)
-                .eq('vencido', false)
-                .lt('fecha_limite', ahora)
-                .eq('prospectos.activo', true)
-                .not('prospectos.estado', 'in', '(Cerrado,Perdido)')
-                .eq('prospectos.modo_libre', false);
+            const result = await query(`
+                SELECT s.*, 
+                       p.id as prospecto_id, p.codigo, p.nombre_cliente, p.estado, 
+                       p.numero_reasignaciones, p.asesor_id, p.asesor_nombre, 
+                       p.modo_libre, p.activo
+                FROM seguimientos s
+                INNER JOIN prospectos p ON s.prospecto_id = p.id
+                WHERE s.completado = $1 AND s.fecha_limite < $2
+                AND p.activo = $3 AND p.estado NOT IN ('Cerrado', 'Perdido')
+                AND p.modo_libre = $4 AND p.numero_reasignaciones < 3
+            `, [false, ahora, true, false]);
             
-            if (error) {
-                logger.error('Error al obtener seguimientos para procesamiento:', error);
-                throw error;
-            }
+            const vencidos = result.rows;
             
             const resultado = {
                 procesados: 0,
@@ -638,23 +581,65 @@ class SeguimientosController {
             
             for (const seguimiento of vencidos || []) {
                 try {
-                    // Marcar seguimiento como vencido
-                    await supabase
-                        .from('seguimientos')
-                        .update({ vencido: true })
-                        .eq('id', seguimiento.id);
-                    
-                    const prospecto = seguimiento.prospectos;
-                    const nuevasReasignaciones = prospecto.numero_reasignaciones + 1;
-                    
+                    // Verificar si el seguimiento lleva más de 18 horas vencido
+                    const horasVencidas = (new Date() - new Date(seguimiento.fecha_limite)) / (1000 * 60 * 60);
+
+                    // Marcar seguimiento como vencido y no visible para el asesor actual
+                    await query(`
+                        UPDATE seguimientos
+                        SET vencido = $1, visible_para_asesor = $2
+                        WHERE id = $3
+                    `, [true, false, seguimiento.id]);
+
+                    // Si lleva más de 18 horas vencido, cambiar prospecto a "Perdido"
+                    if (horasVencidas >= 18) {
+                        await query(`
+                            UPDATE prospectos
+                            SET estado = $1, tipo_cierre = $2, motivo_perdida = $3, fecha_cierre = $4
+                            WHERE id = $5 AND estado NOT IN ('Cerrado', 'Perdido')
+                        `, ['Perdido', 'automatico', 'Sin respuesta - seguimiento vencido más de 18 horas', new Date(), seguimiento.prospecto_id]);
+
+                        logger.info(`🔄 Prospecto ${seguimiento.codigo} cambiado a PERDIDO (vencido ${Math.round(horasVencidas)}h)`, {
+                            service: 'seguimientos-avanzado',
+                            prospecto_id: seguimiento.prospecto_id,
+                            horas_vencidas: Math.round(horasVencidas)
+                        });
+
+                        resultado.procesados++;
+                        continue; // No reasignar si ya está perdido
+                    }
+
+                    const nuevasReasignaciones = seguimiento.numero_reasignaciones + 1;
+
                     if (nuevasReasignaciones <= 2) {
                         // REASIGNACIÓN NORMAL (1er o 2do rebote)
-                        await this.reasignarProspecto(prospecto.id, 'seguimiento_vencido');
-                        resultado.reasignados++;
+                        const resultadoReasignacion = await this.reasignarProspecto(seguimiento.prospecto_id, 'seguimiento_vencido');
+
+                        if (resultadoReasignacion && resultadoReasignacion.action === 'modo_libre') {
+                            resultado.modo_libre_activado++;
+                        } else {
+                            resultado.reasignados++;
+                        }
+
+                        // Actualizar estado del prospecto
+                        await query(`
+                            UPDATE prospectos
+                            SET estado_seguimiento = $1, traspasado_por_vencimiento = $2,
+                                fecha_traspaso = $3, asesor_anterior_id = $4, motivo_traspaso = $5
+                            WHERE id = $6
+                        `, ['traspasado', true, new Date(), seguimiento.asesor_id, 'seguimiento_vencido', seguimiento.prospecto_id]);
+
                     } else {
                         // ACTIVAR MODO LIBRE (3er strike)
-                        await this.activarModoLibre(prospecto.id);
+                        await this.activarModoLibre(seguimiento.prospecto_id);
                         resultado.modo_libre_activado++;
+
+                        // Actualizar estado del prospecto a modo libre
+                        await query(`
+                            UPDATE prospectos
+                            SET estado_seguimiento = $1, fecha_ultimo_seguimiento = $2
+                            WHERE id = $3
+                        `, ['modo_libre', new Date(), seguimiento.prospecto_id]);
                     }
                     
                     resultado.procesados++;
@@ -680,50 +665,73 @@ class SeguimientosController {
     static async reasignarProspecto(prospecto_id, motivo = 'manual') {
         try {
             // Obtener prospecto actual
-            const { data: prospecto, error: errorProspecto } = await supabase
-                .from('prospectos')
-                .select('*')
-                .eq('id', prospecto_id)
-                .eq('activo', true)
-                .single();
+            const prospectoResult = await query(
+                'SELECT * FROM prospectos WHERE id = $1 AND activo = $2',
+                [prospecto_id, true]
+            );
             
-            if (errorProspecto || !prospecto) {
+            if (!prospectoResult.rows || prospectoResult.rows.length === 0) {
                 throw new Error('Prospecto no encontrado');
             }
+
+            const prospecto = prospectoResult.rows[0];
             
-            // Obtener asesores disponibles (excluyendo el actual)
-            const { data: asesores, error: errorAsesores } = await supabase
-                .from('usuarios')
-                .select(`
-                    id, nombre, apellido,
-                    prospectos_count:prospectos(count)
-                `)
-                .eq('area_id', 2) // Asumiendo que área VENTAS tiene ID 2
-                .eq('activo', true)
-                .neq('id', prospecto.asesor_id);
+            // ============================================
+            // SISTEMA DE REASIGNACIÓN INTELIGENTE v2.0
+            // ============================================
+            // LÓGICA: Buscar solo VENDEDOREs (rol_id = 7) disponibles
+            // - Prospectos de SUPER_ADMIN/ADMIN/JEFE_VENTAS → van a VENDEDOREs
+            // - Prospectos de VENDEDOREs → van a otros VENDEDOREs
+            // - Si no hay VENDEDOREs disponibles → MODO LIBRE automático
+            // ============================================
+            const asesoresResult = await query(`
+                SELECT u.id, u.nombre, u.apellido,
+                       COUNT(p.id) as prospectos_count
+                FROM usuarios u
+                LEFT JOIN prospectos p ON u.id = p.asesor_id AND p.activo = true
+                WHERE u.rol_id = $1 AND u.activo = $2 AND u.id != $3
+                GROUP BY u.id, u.nombre, u.apellido
+                ORDER BY prospectos_count ASC
+            `, [7, true, prospecto.asesor_id]); // rol_id = 7 (VENDEDOR)
             
-            if (errorAsesores || !asesores || asesores.length === 0) {
-                throw new Error('No hay asesores disponibles para reasignación');
+            if (!asesoresResult.rows || asesoresResult.rows.length === 0) {
+                // Si no hay VENDEDOREs disponibles, activar MODO LIBRE
+                await query(`
+                    UPDATE prospectos
+                    SET modo_libre = $1, fecha_modo_libre = CURRENT_TIMESTAMP,
+                        numero_reasignaciones = $2
+                    WHERE id = $3
+                `, [true, prospecto.numero_reasignaciones + 1, prospecto.id]);
+
+                logger.info(`🔄 Prospecto ${prospecto.codigo} activado en MODO LIBRE (sin vendedores disponibles)`, {
+                    service: 'seguimientos-avanzado',
+                    prospecto_id: prospecto.id,
+                    asesor_original: prospecto.asesor_id
+                });
+
+                return {
+                    success: true,
+                    action: 'modo_libre',
+                    prospecto_id: prospecto.id,
+                    message: 'Prospecto activado en modo libre por falta de vendedores'
+                };
             }
             
-            // Seleccionar asesor con menos carga (o aleatorio si empate)
-            const asesorSeleccionado = asesores
-                .sort((a, b) => a.prospectos_count - b.prospectos_count)[0];
+            // Seleccionar asesor con menos carga
+            const asesorSeleccionado = asesoresResult.rows[0];
             
             // Actualizar prospecto
-            const { error: errorUpdate } = await supabase
-                .from('prospectos')
-                .update({
-                    asesor_id: asesorSeleccionado.id,
-                    asesor_nombre: `${asesorSeleccionado.nombre} ${asesorSeleccionado.apellido}`,
-                    numero_reasignaciones: prospecto.numero_reasignaciones + 1,
-                    seguimiento_vencido: true
-                })
-                .eq('id', prospecto_id);
-            
-            if (errorUpdate) {
-                throw errorUpdate;
-            }
+            await query(`
+                UPDATE prospectos 
+                SET asesor_id = $1, asesor_nombre = $2, numero_reasignaciones = $3, seguimiento_vencido = $4
+                WHERE id = $5
+            `, [
+                asesorSeleccionado.id, 
+                `${asesorSeleccionado.nombre} ${asesorSeleccionado.apellido}`,
+                prospecto.numero_reasignaciones + 1,
+                true,
+                prospecto_id
+            ]);
             
             // Crear notificaciones
             await this.crearNotificacionesReasignacion(
@@ -753,38 +761,29 @@ class SeguimientosController {
     static async activarModoLibre(prospecto_id) {
         try {
             // Obtener todos los asesores de ventas
-            const { data: asesores } = await supabase
-                .from('usuarios')
-                .select('id')
-                .eq('area_id', 2) // Área VENTAS
-                .eq('activo', true);
+            const asesoresResult = await query(`
+                SELECT id FROM usuarios 
+                WHERE area_id = $1 AND activo = $2
+            `, [2, true]); // Área VENTAS
             
-            const asesor_ids = asesores?.map(a => a.id) || [];
+            const asesor_ids = asesoresResult.rows?.map(a => a.id) || [];
             
             // Activar modo libre en prospecto
-            const { error: errorProspecto } = await supabase
-                .from('prospectos')
-                .update({
-                    modo_libre: true,
-                    fecha_modo_libre: new Date().toISOString(),
-                    numero_reasignaciones: supabase.sql`numero_reasignaciones + 1`
-                })
-                .eq('id', prospecto_id);
+            await query(`
+                UPDATE prospectos 
+                SET modo_libre = $1, fecha_modo_libre = $2, numero_reasignaciones = numero_reasignaciones + 1
+                WHERE id = $3
+            `, [true, new Date().toISOString(), prospecto_id]);
             
-            if (errorProspecto) {
-                throw errorProspecto;
-            }
-            
-            // Crear registro en tabla modo_libre
-            const { error: errorModoLibre } = await supabase
-                .from('prospecto_modo_libre')
-                .insert([{
-                    prospecto_id: prospecto_id,
-                    asesores_con_acceso: asesor_ids
-                }]);
-            
-            if (errorModoLibre) {
-                throw errorModoLibre;
+            // Crear registro en tabla modo_libre (si existe la tabla)
+            try {
+                await query(`
+                    INSERT INTO prospecto_modo_libre (prospecto_id, asesores_con_acceso)
+                    VALUES ($1, $2)
+                `, [prospecto_id, JSON.stringify(asesor_ids)]);
+            } catch (modoLibreError) {
+                // Tabla modo_libre puede no existir, continuar sin error
+                logger.warn('Tabla prospecto_modo_libre no existe, continuando...');
             }
             
             // Notificar a todos los asesores
@@ -806,35 +805,36 @@ class SeguimientosController {
     static async crearNotificacionesReasignacion(prospecto_id, asesor_perdio_id, asesor_gano_id, motivo) {
         try {
             // Obtener datos del prospecto
-            const { data: prospecto } = await supabase
-                .from('prospectos')
-                .select('codigo, nombre_cliente, empresa')
-                .eq('id', prospecto_id)
-                .single();
+            const result = await query(
+                'SELECT codigo, nombre_cliente, empresa FROM prospectos WHERE id = $1',
+                [prospecto_id]
+            );
+            
+            if (!result.rows || result.rows.length === 0) return;
+            
+            const prospecto = result.rows[0];
             
             // Crear notificación de pérdida
-            await supabase
-                .from('notificaciones_reasignacion')
-                .insert([{
-                    prospecto_id: prospecto_id,
-                    asesor_perdio_id: asesor_perdio_id,
-                    tipo: 'perdida',
-                    motivo: motivo,
-                    titulo: `Prospecto reasignado: ${prospecto?.codigo}`,
-                    mensaje: `El prospecto ${prospecto?.nombre_cliente} ha sido reasignado por ${motivo}`
-                }]);
+            await query(`
+                INSERT INTO notificaciones_reasignacion (
+                    prospecto_id, asesor_perdio_id, tipo, motivo, titulo, mensaje
+                ) VALUES ($1, $2, $3, $4, $5, $6)
+            `, [
+                prospecto_id, asesor_perdio_id, 'perdida', motivo,
+                `Prospecto reasignado: ${prospecto?.codigo}`,
+                `El prospecto ${prospecto?.nombre_cliente} ha sido reasignado por ${motivo}`
+            ]);
             
             // Crear notificación de ganancia
-            await supabase
-                .from('notificaciones_reasignacion')
-                .insert([{
-                    prospecto_id: prospecto_id,
-                    asesor_gano_id: asesor_gano_id,
-                    tipo: 'ganancia',
-                    motivo: motivo,
-                    titulo: `Nuevo prospecto asignado: ${prospecto?.codigo}`,
-                    mensaje: `Te ha sido asignado el prospecto ${prospecto?.nombre_cliente} de ${prospecto?.empresa || 'empresa no especificada'}`
-                }]);
+            await query(`
+                INSERT INTO notificaciones_reasignacion (
+                    prospecto_id, asesor_gano_id, tipo, motivo, titulo, mensaje
+                ) VALUES ($1, $2, $3, $4, $5, $6)
+            `, [
+                prospecto_id, asesor_gano_id, 'ganancia', motivo,
+                `Nuevo prospecto asignado: ${prospecto?.codigo}`,
+                `Te ha sido asignado el prospecto ${prospecto?.nombre_cliente} de ${prospecto?.empresa || 'empresa no especificada'}`
+            ]);
             
         } catch (error) {
             logger.error('Error al crear notificaciones de reasignación:', error);
@@ -847,25 +847,27 @@ class SeguimientosController {
     static async crearNotificacionModoLibre(prospecto_id, asesor_ids) {
         try {
             // Obtener datos del prospecto
-            const { data: prospecto } = await supabase
-                .from('prospectos')
-                .select('codigo, nombre_cliente, empresa, valor_estimado')
-                .eq('id', prospecto_id)
-                .single();
+            const result = await query(
+                'SELECT codigo, nombre_cliente, empresa, valor_estimado FROM prospectos WHERE id = $1',
+                [prospecto_id]
+            );
+            
+            if (!result.rows || result.rows.length === 0) return;
+            
+            const prospecto = result.rows[0];
             
             // Crear notificación para cada asesor
-            const notificaciones = asesor_ids.map(asesor_id => ({
-                prospecto_id: prospecto_id,
-                asesor_gano_id: asesor_id,
-                tipo: 'modo_libre',
-                motivo: 'libre_competencia',
-                titulo: `🏁 MODO LIBRE: ${prospecto?.codigo}`,
-                mensaje: `¡COMPETENCIA ABIERTA! El prospecto ${prospecto?.nombre_cliente} (${prospecto?.codigo}) valor estimado $${prospecto?.valor_estimado || 0} está ahora disponible para todos. ¡El primero en cerrar la venta se lo queda!`
-            }));
-            
-            await supabase
-                .from('notificaciones_reasignacion')
-                .insert(notificaciones);
+            for (const asesor_id of asesor_ids) {
+                await query(`
+                    INSERT INTO notificaciones_reasignacion (
+                        prospecto_id, asesor_gano_id, tipo, motivo, titulo, mensaje
+                    ) VALUES ($1, $2, $3, $4, $5, $6)
+                `, [
+                    prospecto_id, asesor_id, 'modo_libre', 'libre_competencia',
+                    `🏁 MODO LIBRE: ${prospecto?.codigo}`,
+                    `¡COMPETENCIA ABIERTA! El prospecto ${prospecto?.nombre_cliente} (${prospecto?.codigo}) valor estimado $${prospecto?.valor_estimado || 0} está ahora disponible para todos. ¡El primero en cerrar la venta se lo queda!`
+                ]);
+            }
             
         } catch (error) {
             logger.error('Error al crear notificaciones de modo libre:', error);
@@ -920,37 +922,53 @@ class SeguimientosController {
             const { asesorId } = req.params;
             const asesor_id = asesorId && !isNaN(asesorId) ? parseInt(asesorId) : (req.user?.id || 1);
             
-            // Obtener seguimientos pendientes
-            const { data: seguimientos } = await supabase
-                .from('seguimientos')
-                .select(`
-                    *,
-                    prospectos!inner(codigo, nombre_cliente, empresa, telefono, estado, valor_estimado)
-                `)
-                .eq('asesor_id', asesor_id)
-                .eq('completado', false)
-                .eq('prospectos.activo', true)
-                .order('fecha_programada', { ascending: true });
-            
+            // Obtener seguimientos pendientes (visibles para el asesor)
+            const seguimientosResult = await query(`
+                SELECT s.*,
+                       p.codigo, p.nombre_cliente, p.empresa, p.telefono, p.estado, p.valor_estimado
+                FROM seguimientos s
+                INNER JOIN prospectos p ON s.prospecto_id = p.id
+                WHERE s.asesor_id = $1 AND s.completado = $2 AND p.activo = $3
+                AND s.visible_para_asesor = $4
+                ORDER BY s.fecha_programada ASC
+            `, [asesor_id, false, true, true]);
+
+            const seguimientos = seguimientosResult.rows;
+
+            // Obtener seguimientos realizados (último mes)
+            const unMesAtras = new Date();
+            unMesAtras.setMonth(unMesAtras.getMonth() - 1);
+
+            const realizadosResult = await query(`
+                SELECT s.*,
+                       p.codigo, p.nombre_cliente, p.empresa, p.telefono, p.estado, p.valor_estimado
+                FROM seguimientos s
+                INNER JOIN prospectos p ON s.prospecto_id = p.id
+                WHERE s.completado_por = $1 AND s.completado = $2
+                AND s.fecha_completado >= $3
+                ORDER BY s.fecha_completado DESC
+            `, [asesor_id, true, unMesAtras.toISOString()]);
+
+            const seguimientosRealizados = realizadosResult.rows;
+
             // Obtener prospectos en modo libre
-            const { data: modoLibre } = await supabase
-                .from('prospectos')
-                .select('*')
-                .eq('modo_libre', true)
-                .eq('activo', true);
+            const modoLibreResult = await query(
+                'SELECT * FROM prospectos WHERE modo_libre = $1 AND activo = $2',
+                [true, true]
+            );
+
+            const modoLibre = modoLibreResult.rows;
             
             // Obtener prospectos listos para conversión
-            const { data: listosConversion } = await supabase
-                .from('prospectos')
-                .select(`
-                    *,
-                    seguimientos!inner(resultado, fecha_completado, completado)
-                `)
-                .eq('asesor_id', asesor_id)
-                .eq('activo', true)
-                .eq('convertido', false)
-                .eq('seguimientos.completado', true)
-                .in('seguimientos.resultado', RESULTADOS_QUE_CONVIERTEN);
+            const listosConversionResult = await query(`
+                SELECT p.*, s.resultado, s.fecha_completado, s.completado
+                FROM prospectos p
+                INNER JOIN seguimientos s ON p.id = s.prospecto_id
+                WHERE p.asesor_id = $1 AND p.activo = $2 AND p.convertido = $3
+                AND s.completado = $4 AND s.resultado = ANY($5::text[])
+            `, [asesor_id, true, false, true, RESULTADOS_QUE_CONVIERTEN]);
+
+            const listosConversion = listosConversionResult.rows;
             
             // Categorizar seguimientos
             const ahora = new Date();
@@ -966,12 +984,14 @@ class SeguimientosController {
                 }) || []
             };
             
-            // Obtener métricas del asesor
-            const { data: metricas } = await supabase
-                .from('seguimientos')
-                .select('completado, vencido, pospuesto')
-                .eq('asesor_id', asesor_id)
-                .gte('created_at', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()); // Últimos 30 días
+            // Obtener métricas del asesor (últimos 30 días)
+            const fechaLimite = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+            const metricasResult = await query(`
+                SELECT completado, vencido, pospuesto FROM seguimientos
+                WHERE asesor_id = $1 AND created_at >= $2
+            `, [asesor_id, fechaLimite]);
+
+            const metricas = metricasResult.rows;
             
             const totalSeguimientos = metricas?.length || 0;
             const completados = metricas?.filter(m => m.completado).length || 0;
@@ -980,11 +1000,19 @@ class SeguimientosController {
             const resultado = {
                 seguimientos: {
                     ...seguimientosCategorias,
+                    pendientes: seguimientos || [],
+                    realizados: seguimientosRealizados || [],
                     conteos: {
                         total: seguimientos?.length || 0,
+                        pendientes: seguimientos?.length || 0,
                         vencidos: seguimientosCategorias.vencidos.length,
                         hoy: seguimientosCategorias.hoy.length,
-                        proximos: seguimientosCategorias.proximos.length
+                        proximos: seguimientosCategorias.proximos.length,
+                        realizados_mes: seguimientosRealizados?.length || 0,
+                        completados_hoy: seguimientosRealizados?.filter(s => {
+                            const fechaComp = new Date(s.fecha_completado);
+                            return fechaComp.toDateString() === new Date().toDateString();
+                        }).length || 0
                     }
                 },
                 modo_libre: {
@@ -1000,7 +1028,52 @@ class SeguimientosController {
                     completados_30d: completados,
                     vencidos_30d: vencidos,
                     porcentaje_completados: totalSeguimientos > 0 ? ((completados / totalSeguimientos) * 100).toFixed(2) : 0,
-                    porcentaje_vencidos: totalSeguimientos > 0 ? ((vencidos / totalSeguimientos) * 100).toFixed(2) : 0
+                    porcentaje_vencidos: totalSeguimientos > 0 ? ((vencidos / totalSeguimientos) * 100).toFixed(2) : 0,
+                    // 📊 PERFORMANCE SCORE para la balanza (0-100)
+                    score_productividad: await (async () => {
+                        try {
+                            // Obtener datos para el score de los últimos 30 días
+                            const scoreQuery = `
+                                SELECT
+                                    COUNT(*) as total_actividades,
+                                    COUNT(CASE WHEN v.id IS NOT NULL THEN 1 END) as conversiones,
+                                    AVG(COALESCE(
+                                        EXTRACT(EPOCH FROM (v.fecha_venta - p.created_at))/86400,
+                                        EXTRACT(EPOCH FROM (s.fecha_completado - p.created_at))/86400,
+                                        30
+                                    )) as dias_promedio_proceso,
+                                    AVG(p.probabilidad_cierre) as probabilidad_promedio
+                                FROM seguimientos s
+                                INNER JOIN prospectos p ON s.prospecto_id = p.id
+                                LEFT JOIN ventas v ON p.id = v.prospecto_id
+                                WHERE p.asesor_id = $1 AND s.created_at >= $2
+                            `;
+
+                            const fechaLimiteScore = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+                            const scoreResult = await query(scoreQuery, [asesor_id, fechaLimiteScore]);
+                            const scoreData = scoreResult.rows[0];
+
+                            const totalActividades = parseInt(scoreData.total_actividades || 0);
+                            if (totalActividades === 0) return 0;
+
+                            // Componente 1: Tasa de conversión (40% del score)
+                            const tasaConversion = (scoreData.conversiones / totalActividades) * 100;
+                            const scoreConversion = Math.min((tasaConversion / 20) * 40, 40); // 20% = 40pts máximo
+
+                            // Componente 2: Velocidad de proceso (30% del score)
+                            const diasPromedio = parseFloat(scoreData.dias_promedio_proceso || 30);
+                            const scoreVelocidad = Math.max(30 - (diasPromedio / 2), 0); // Menos días = mejor score
+
+                            // Componente 3: Probabilidad promedio (30% del score)
+                            const probabilidadPromedio = parseFloat(scoreData.probabilidad_promedio || 50);
+                            const scoreProbabilidad = (probabilidadPromedio / 100) * 30;
+
+                            return Math.round(scoreConversion + scoreVelocidad + scoreProbabilidad);
+                        } catch (error) {
+                            logger.error('Error calculando score_productividad:', error);
+                            return 0;
+                        }
+                    })()
                 },
                 alertas: {
                     seguimientos_vencidos: seguimientosCategorias.vencidos.length > 0,
@@ -1031,20 +1104,21 @@ class SeguimientosController {
     static async healthCheck(req, res) {
         try {
             // Verificar conectividad con base de datos
-            const { count: seguimientosVencidos } = await supabase
-                .from('seguimientos')
-                .select('*', { count: 'exact', head: true })
-                .eq('completado', false)
-                .lt('fecha_limite', new Date().toISOString());
+            const result = await query(`
+                SELECT COUNT(*) as total FROM seguimientos 
+                WHERE completado = $1 AND fecha_limite < $2
+            `, [false, new Date().toISOString()]);
+            
+            const seguimientosVencidos = parseInt(result.rows[0]?.total) || 0;
             
             res.json({
                 success: true,
                 module: 'Seguimientos',
                 status: 'Operativo',
                 timestamp: new Date().toISOString(),
-                version: '2.0.0',
+                version: '2.0.0 (PostgreSQL)',
                 data: {
-                    seguimientos_vencidos: seguimientosVencidos || 0,
+                    seguimientos_vencidos: seguimientosVencidos,
                     horario_laboral: 'L-V 8am-6pm, Sáb 9am-12pm',
                     tiempo_vencimiento: '18 horas laborales',
                     conversion_automatica: true,
@@ -1070,6 +1144,262 @@ class SeguimientosController {
                 status: 'Error',
                 timestamp: new Date().toISOString(),
                 error: error.message
+            });
+        }
+    }
+
+    /**
+     * GET /api/prospectos/seguimientos/historial-completo/:asesor_id
+     * Obtener historial completo empresarial con contexto de negocio
+     */
+    static async obtenerHistorialCompleto(req, res) {
+        try {
+            const { asesor_id } = req.params;
+            const {
+                page = 1,
+                limit = 50,
+                fecha_desde = null,
+                fecha_hasta = null,
+                tipo_actividad = 'todos', // seguimiento, conversion, perdida, reasignacion
+                estado = 'todos'
+            } = req.query;
+
+            const offset = (page - 1) * limit;
+
+            // 🔐 CONTROL DE ACCESO: Solo admins/supervisores pueden ver otros asesores
+            const userRole = req.user?.rol || 'asesor';
+            const requestUserId = req.user?.id;
+
+            let asesorIdFinal = asesor_id;
+            if (userRole === 'asesor' && parseInt(asesor_id) !== requestUserId) {
+                return res.status(403).json({
+                    success: false,
+                    error: 'No tienes permisos para ver el historial de otros asesores'
+                });
+            }
+
+            // 📊 CONSULTA SIMPLE Y DIRECTA - Solo seguimientos existentes
+            let baseQuery = `
+                SELECT
+                    s.id as seguimiento_id,
+                    s.fecha_programada,
+                    s.fecha_completado,
+                    s.created_at as fecha_creacion,
+                    s.tipo as tipo_seguimiento,
+                    s.descripcion,
+                    s.resultado,
+                    s.resultado_seguimiento as notas,
+                    s.completado,
+                    s.vencido,
+                    p.id as prospecto_id,
+                    p.codigo as prospecto_codigo,
+                    p.nombre_cliente,
+                    p.telefono,
+                    p.email,
+                    p.estado as estado_prospecto,
+                    p.estado_anterior,
+                    p.valor_estimado,
+                    p.probabilidad_cierre,
+                    p.canal_contacto,
+                    p.motivo_perdida,
+                    p.created_at as fecha_creacion_prospecto,
+                    u.nombre as asesor_nombre,
+                    u.apellido as asesor_apellido,
+                    v.codigo as venta_codigo,
+                    v.valor_final as venta_total,
+                    v.fecha_venta,
+                    -- Tipo de actividad simplificado
+                    CASE
+                        WHEN v.id IS NOT NULL THEN 'conversion'
+                        WHEN p.estado = 'Perdido' THEN 'perdida'
+                        WHEN s.completado = true THEN 'seguimiento_completado'
+                        WHEN s.vencido = true THEN 'seguimiento_vencido'
+                        ELSE 'seguimiento_pendiente'
+                    END as tipo_actividad,
+                    -- Días proceso
+                    COALESCE(
+                        EXTRACT(EPOCH FROM (s.fecha_completado - p.created_at))/86400,
+                        EXTRACT(EPOCH FROM (v.fecha_venta - p.created_at))/86400,
+                        EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - p.created_at))/86400
+                    ) as dias_proceso,
+                    (p.valor_estimado * p.probabilidad_cierre / 100) as impacto_economico
+                FROM seguimientos s
+                INNER JOIN prospectos p ON s.prospecto_id = p.id
+                LEFT JOIN usuarios u ON p.asesor_id = u.id
+                LEFT JOIN ventas v ON p.id = v.prospecto_id
+                WHERE p.asesor_id = $1
+            `;
+
+            let queryParams = [asesorIdFinal];
+            let paramIndex = 2;
+
+            // Filtro por fechas
+            if (fecha_desde) {
+                baseQuery += ` AND s.fecha_completado >= $${paramIndex}`;
+                queryParams.push(fecha_desde);
+                paramIndex++;
+            }
+
+            if (fecha_hasta) {
+                baseQuery += ` AND s.fecha_completado <= $${paramIndex}`;
+                queryParams.push(fecha_hasta);
+                paramIndex++;
+            }
+
+            // Filtro por tipo de actividad
+            if (tipo_actividad !== 'todos') {
+                if (tipo_actividad === 'conversion') {
+                    baseQuery += ` AND v.id IS NOT NULL`;
+                } else if (tipo_actividad === 'perdida') {
+                    baseQuery += ` AND p.estado = 'Perdido'`;
+                } else if (tipo_actividad === 'seguimiento_completado') {
+                    baseQuery += ` AND s.completado = true AND v.id IS NULL AND p.estado != 'Perdido'`;
+                }
+            }
+
+            // Ordenar por fecha real de actividad (conversión primero, completado segundo, programado último)
+            baseQuery += ` ORDER BY COALESCE(v.fecha_venta, s.fecha_completado, s.fecha_programada) DESC`;
+
+            // Paginación
+            baseQuery += ` LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
+            queryParams.push(limit, offset);
+
+            const result = await query(baseQuery, queryParams);
+
+            // 📈 CONSULTA SIMPLE PARA MÉTRICAS
+            const metricsQuery = `
+                SELECT
+                    COUNT(*) as total_actividades,
+                    COUNT(CASE WHEN s.completado = true THEN 1 END) as seguimientos_completados,
+                    COUNT(CASE WHEN v.id IS NOT NULL THEN 1 END) as conversiones,
+                    COUNT(CASE WHEN p.estado = 'Perdido' THEN 1 END) as perdidas,
+                    COALESCE(SUM(v.valor_final), 0) as valor_total_ventas,
+                    AVG(COALESCE(
+                        EXTRACT(EPOCH FROM (s.fecha_completado - p.created_at))/86400,
+                        EXTRACT(EPOCH FROM (v.fecha_venta - p.created_at))/86400,
+                        0
+                    )) as dias_promedio_proceso,
+                    CASE WHEN COUNT(*) > 0 THEN
+                        ROUND((COUNT(CASE WHEN v.id IS NOT NULL THEN 1 END) * 100.0 / COUNT(*)), 2)
+                        ELSE 0
+                    END as tasa_conversion
+                FROM seguimientos s
+                INNER JOIN prospectos p ON s.prospecto_id = p.id
+                LEFT JOIN ventas v ON p.id = v.prospecto_id
+                WHERE p.asesor_id = $1
+            `;
+
+            const metricsResult = await query(metricsQuery, [asesorIdFinal]);
+            const metricas = metricsResult.rows[0];
+
+            // 📊 FORMATEAR DATOS PARA LA UI
+            const historial = result.rows.map(row => ({
+                id: row.seguimiento_id,
+                fecha_actividad: row.fecha_venta || row.fecha_completado || row.fecha_programada,
+                tipo_actividad: row.tipo_actividad,
+
+                // Información del prospecto
+                prospecto: {
+                    id: row.prospecto_id,
+                    codigo: row.prospecto_codigo,
+                    nombre: row.nombre_cliente,
+                    telefono: row.telefono,
+                    email: row.email,
+                    canal_contacto: row.canal_contacto,
+                    valor_estimado: parseFloat(row.valor_estimado || 0),
+                    probabilidad_cierre: row.probabilidad_cierre
+                },
+
+                // Detalles de la actividad
+                actividad: {
+                    tipo: row.tipo_seguimiento,
+                    tipo_contexto: row.tipo_actividad === 'conversion' ? 'Venta Cerrada' :
+                                  row.tipo_actividad === 'perdida' ? 'Prospecto Perdido' :
+                                  row.tipo_actividad === 'seguimiento_completado' ? 'Seguimiento Realizado' :
+                                  row.tipo_actividad === 'seguimiento_vencido' ? 'Seguimiento Vencido' :
+                                  row.tipo_seguimiento,
+                    descripcion: row.descripcion,
+                    resultado: row.resultado,
+                    notas: row.notas,
+                    calificacion: row.calificacion,
+                    estado_prospecto: row.estado_prospecto,
+                    motivo_perdida: row.motivo_perdida
+                },
+
+                // Información de conversión (si aplica)
+                conversion: row.venta_codigo ? {
+                    codigo: row.venta_codigo,
+                    total: parseFloat(row.venta_total || 0),
+                    fecha: row.fecha_venta
+                } : null,
+
+                // Métricas calculadas
+                metricas: {
+                    dias_proceso: parseFloat(row.dias_proceso || 0),
+                    impacto_economico: parseFloat(row.impacto_economico || 0)
+                },
+
+                // Metadatos
+                asesor_nombre: `${row.asesor_nombre} ${row.asesor_apellido || ''}`.trim()
+            }));
+
+            res.json({
+                success: true,
+                data: {
+                    historial,
+                    paginacion: {
+                        page: parseInt(page),
+                        limit: parseInt(limit),
+                        total: result.rows.length,
+                        has_next: result.rows.length === parseInt(limit)
+                    },
+                    metricas_resumen: {
+                        total_actividades: parseInt(metricas.total_actividades),
+                        seguimientos_completados: parseInt(metricas.seguimientos_completados),
+                        conversiones: parseInt(metricas.conversiones),
+                        perdidas: parseInt(metricas.perdidas),
+                        valor_total_ventas: parseFloat(metricas.valor_total_ventas || 0),
+                        calificacion_promedio: parseFloat(metricas.calificacion_promedio || 0).toFixed(1),
+                        dias_promedio_proceso: parseFloat(metricas.dias_promedio_proceso || 0).toFixed(1),
+                        tasa_conversion: metricas.total_actividades > 0 ?
+                            ((metricas.conversiones / metricas.total_actividades) * 100).toFixed(1) : 0,
+                        // 📊 PERFORMANCE SCORE (0-100)
+                        score_productividad: (() => {
+                            const totalActividades = parseInt(metricas.total_actividades);
+                            if (totalActividades === 0) return 0;
+
+                            // Componente 1: Tasa de conversión (40% del score)
+                            const tasaConversion = parseFloat(metricas.tasa_conversion || 0);
+                            const scoreConversion = Math.min((tasaConversion / 20) * 40, 40); // 20% = 40pts máximo
+
+                            // Componente 2: Velocidad de proceso (30% del score)
+                            const diasPromedio = parseFloat(metricas.dias_promedio_proceso || 30);
+                            const scoreVelocidad = Math.max(30 - (diasPromedio / 2), 0); // Menos días = mejor score
+
+                            // Componente 3: Probabilidad promedio (30% del score)
+                            const avgProbabilidad = historial.reduce((acc, item) =>
+                                acc + (item.prospecto.probabilidad_cierre || 50), 0) / historial.length;
+                            const scoreProbabilidad = (avgProbabilidad / 100) * 30;
+
+                            return Math.round(scoreConversion + scoreVelocidad + scoreProbabilidad);
+                        })()
+                    },
+                    filtros_aplicados: {
+                        asesor_id: asesorIdFinal,
+                        fecha_desde,
+                        fecha_hasta,
+                        tipo_actividad,
+                        estado
+                    }
+                },
+                message: `Historial obtenido: ${historial.length} actividades encontradas`
+            });
+
+        } catch (error) {
+            logger.error('Error en obtenerHistorialCompleto:', error);
+            res.status(500).json({
+                success: false,
+                error: 'Error al obtener historial completo: ' + error.message
             });
         }
     }

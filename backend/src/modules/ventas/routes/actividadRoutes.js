@@ -14,15 +14,12 @@ const ActividadDiariaController = require('../controllers/ActividadDiariaControl
 // const ActividadDiariaService = require('../services/ActividadDiariaService');
 // const ActividadDiariaModel = require('../models/ActividadDiariaModel');
 
-// MIDDLEWARE DE AUTENTICACIÓN (IGUAL QUE VENTAS)
-const { authenticateToken } = require('../../../middleware/auth');
+// MIDDLEWARE DE AUTENTICACIÓN EMPRESARIAL UNIFICADO
+const { authenticateToken, requireRole, requireOwnership } = require('../../../middleware/auth');
 
-// Middleware de seguridad (usando el sistema existente)
-const { 
-    requireSalesAccess, 
-    requireManager, 
-    requireOwnershipOrRole 
-} = require('../../../middleware/roleMiddleware');
+// Definir permisos específicos para actividad de ventas
+const requireVentasAccess = requireRole(['VENDEDOR', 'JEFE_VENTAS', 'GERENTE', 'ADMIN', 'SUPER_ADMIN']);
+const requireVentasManager = requireRole(['JEFE_VENTAS', 'GERENTE', 'ADMIN', 'SUPER_ADMIN']);
 
 // ============================================
 // MIDDLEWARE DE VALIDACIÓN ESPECÍFICO
@@ -210,7 +207,7 @@ const logActivityEndpoint = (endpoint) => {
  */
 router.post('/check-in', 
     authenticateToken,
-    requireSalesAccess,
+    requireVentasAccess,
     logActivityEndpoint('CHECK-IN'),
     validateCheckInData,
     ActividadDiariaController.checkIn
@@ -223,7 +220,7 @@ router.post('/check-in',
  */
 router.post('/check-out',
     authenticateToken,
-    requireSalesAccess,
+    requireVentasAccess,
     logActivityEndpoint('CHECK-OUT'),
     validateCheckOutData,
     ActividadDiariaController.checkOut
@@ -236,7 +233,7 @@ router.post('/check-out',
  */
 router.get('/estado-hoy',
     authenticateToken,
-    requireSalesAccess,
+    requireVentasAccess,
     logActivityEndpoint('ESTADO-HOY'),
     ActividadDiariaController.getEstadoHoy
 );
@@ -248,7 +245,7 @@ router.get('/estado-hoy',
  */
 router.get('/',
     authenticateToken,
-    requireSalesAccess,
+    requireVentasAccess,
     logActivityEndpoint('LISTAR-ACTIVIDAD'),
     validateQueryParams,
     ActividadDiariaController.getActividad
@@ -261,7 +258,7 @@ router.get('/',
  */
 router.get('/dashboard',
     authenticateToken,
-    requireSalesAccess,
+    requireVentasAccess,
     logActivityEndpoint('DASHBOARD'),
     validateQueryParams,
     ActividadDiariaController.getDashboard
@@ -274,7 +271,7 @@ router.get('/dashboard',
  */
 router.get('/historial',
     authenticateToken,
-    requireSalesAccess,
+    requireVentasAccess,
     logActivityEndpoint('HISTORIAL'),
     validateQueryParams,
     ActividadDiariaController.getHistorial
@@ -287,7 +284,7 @@ router.get('/historial',
  */
 router.get('/estadisticas-rapidas',
     authenticateToken,
-    requireSalesAccess,
+    requireVentasAccess,
     logActivityEndpoint('ESTADISTICAS-RAPIDAS'),
     ActividadDiariaController.getEstadisticasRapidas
 );
@@ -299,9 +296,22 @@ router.get('/estadisticas-rapidas',
  */
 router.get('/resumen-semanal',
     authenticateToken,
-    requireSalesAccess,
+    requireVentasAccess,
     logActivityEndpoint('RESUMEN-SEMANAL'),
     ActividadDiariaController.getResumenSemanal
+);
+
+/**
+ * @route GET /api/actividad/datos-graficos
+ * @desc Obtener datos para gráficos temporales (semanal, mensual, trimestral, anual)
+ * @access Vendedores (solo propia), Jefes (equipo), Admins (todos)
+ */
+router.get('/datos-graficos',
+    authenticateToken,
+    requireVentasAccess,
+    logActivityEndpoint('DATOS-GRAFICOS'),
+    validateQueryParams,
+    ActividadDiariaController.getDatosGraficos
 );
 
 // ============================================
@@ -315,7 +325,7 @@ router.get('/resumen-semanal',
  */
 router.get('/validar-checkin',
     authenticateToken,
-    requireSalesAccess,
+    requireVentasAccess,
     logActivityEndpoint('VALIDAR-CHECKIN'),
     async (req, res) => {
         try {
@@ -350,7 +360,7 @@ router.get('/validar-checkin',
  */
 router.get('/validar-checkout',
     authenticateToken,
-    requireSalesAccess,
+    requireVentasAccess,
     logActivityEndpoint('VALIDAR-CHECKOUT'),
     async (req, res) => {
         try {
@@ -385,7 +395,7 @@ router.get('/validar-checkout',
  */
 router.get('/configuracion',
     authenticateToken,
-    requireSalesAccess,
+    requireVentasAccess,
     logActivityEndpoint('CONFIGURACION'),
     (req, res) => {
         try {
@@ -439,7 +449,7 @@ router.get('/configuracion',
  */
 router.get('/actividad-completa/:usuario_id',
     authenticateToken,
-    requireManager,
+    requireVentasManager,
     logActivityEndpoint('ACTIVIDAD-COMPLETA'),
     async (req, res) => {
         try {
@@ -480,7 +490,7 @@ router.get('/actividad-completa/:usuario_id',
  */
 router.get('/metricas-empresariales/:usuario_id',
     authenticateToken,
-    requireManager,
+    requireVentasManager,
     logActivityEndpoint('METRICAS-EMPRESARIALES'),
     validateQueryParams,
     async (req, res) => {
@@ -526,7 +536,7 @@ router.get('/metricas-empresariales/:usuario_id',
  */
 router.post('/dashboard-equipo',
     authenticateToken,
-    requireManager,
+    requireVentasManager,
     logActivityEndpoint('DASHBOARD-EQUIPO'),
     validateQueryParams,
     async (req, res) => {
@@ -585,7 +595,7 @@ router.post('/dashboard-equipo',
  */
 router.get('/info',
     authenticateToken,
-    requireSalesAccess,
+    requireVentasAccess,
     (req, res) => {
         res.json({
             success: true,

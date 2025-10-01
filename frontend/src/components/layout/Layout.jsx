@@ -26,15 +26,15 @@ const Layout = () => {
       icon: '📦',
       description: 'Gestión de productos y catálogo'
     },
-    { 
-      name: 'Ventas', 
-      path: '/ventas', 
+    {
+      name: 'Ventas',
+      path: '/ventas',
       icon: '💰',
       description: 'Gestión de ventas cerradas'
     },
-    { 
-      name: 'Soporte', 
-      path: '/soporte', 
+    {
+      name: 'Soporte',
+      path: '/soporte',
       icon: '🛠️',
       description: 'Tickets y soporte técnico'
     },
@@ -169,7 +169,7 @@ const Layout = () => {
       </div>
 
       {/* Contenido principal */}
-      <div className="flex-1 flex flex-col overflow-hidden">
+      <div className="flex-1 flex flex-col">
         {/* Header superior */}
         <header className="bg-white shadow-sm border-b h-16 px-6 flex items-center justify-between">
           <div className="flex items-center">
@@ -207,7 +207,7 @@ const Layout = () => {
         </header>
 
         {/* Área de contenido principal */}
-        <main className="flex-1 overflow-hidden bg-gray-50">
+        <main className="flex-1 overflow-auto bg-gray-50">
           <Outlet />
         </main>
       </div>

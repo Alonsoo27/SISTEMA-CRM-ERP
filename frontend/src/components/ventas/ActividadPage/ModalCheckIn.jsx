@@ -1,8 +1,8 @@
 // src/components/ventas/ActividadWidget/ModalCheckIn.jsx
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
-  X, MessageSquare, Phone, Instagram, Mic, 
-  Save, AlertCircle, CheckCircle
+  X, MessageSquare, Phone, Instagram, Mic,
+  Save, AlertCircle, CheckCircle, Target, ChevronDown
 } from 'lucide-react';
 
 const ModalCheckIn = ({ 
@@ -16,10 +16,44 @@ const ModalCheckIn = ({
     mensajes_whatsapp: 0,
     mensajes_instagram: 0,
     mensajes_tiktok: 0,
-    notas_check_in: ''
+    notas_check_in: '',
+    en_campana: false,
+    producto_campana: ''
   });
 
   const [errors, setErrors] = useState({});
+  const [lineasProductos, setLineasProductos] = useState([]);
+  const [loadingLineas, setLoadingLineas] = useState(false);
+
+  // Cargar líneas de productos cuando se abre el modal
+  useEffect(() => {
+    if (isOpen) {
+      cargarLineasProductos();
+    }
+  }, [isOpen]);
+
+  const cargarLineasProductos = async () => {
+    try {
+      setLoadingLineas(true);
+      const response = await fetch('/api/productos/lineas', {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success) {
+          setLineasProductos(data.data || []);
+        }
+      }
+    } catch (error) {
+      console.error('Error cargando líneas:', error);
+    } finally {
+      setLoadingLineas(false);
+    }
+  };
 
   // Manejar cambios en inputs
   const handleInputChange = (field, value) => {
@@ -56,6 +90,15 @@ const ModalCheckIn = ({
     // Validar notas
     if (formData.notas_check_in && formData.notas_check_in.length > 500) {
       newErrors.notas_check_in = 'No puede exceder 500 caracteres';
+    }
+
+    // Validar línea de producto si está en campaña
+    if (formData.en_campana && !formData.producto_campana.trim()) {
+      newErrors.producto_campana = 'Debes especificar la línea de producto';
+    }
+
+    if (formData.producto_campana && formData.producto_campana.length > 100) {
+      newErrors.producto_campana = 'No puede exceder 100 caracteres';
     }
 
     setErrors(newErrors);
@@ -215,6 +258,71 @@ const ModalCheckIn = ({
               />
               {errors.mensajes_tiktok && (
                 <p className="text-red-600 text-xs mt-1">{errors.mensajes_tiktok}</p>
+              )}
+            </div>
+
+            {/* Sección de Campaña */}
+            <div className="border-t pt-4 mt-6">
+              <h4 className="text-sm font-semibold text-gray-800 mb-3 flex items-center space-x-2">
+                <Target className="h-4 w-4 text-purple-600" />
+                <span>Tracking de Campaña</span>
+              </h4>
+
+              {/* Checkbox de campaña */}
+              <div className="mb-4">
+                <label className="flex items-center space-x-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={formData.en_campana}
+                    onChange={(e) => handleInputChange('en_campana', e.target.checked)}
+                    className="w-4 h-4 text-purple-600 bg-gray-100 border-gray-300 rounded focus:ring-purple-500 focus:ring-2"
+                    disabled={loading}
+                  />
+                  <span className="text-sm font-medium text-gray-700">
+                    Estoy trabajando en una campaña específica
+                  </span>
+                </label>
+              </div>
+
+              {/* Campo condicional de línea de producto */}
+              {formData.en_campana && (
+                <div className="ml-6 bg-purple-50 border border-purple-200 rounded-lg p-3">
+                  <label className="block text-sm font-medium text-purple-800 mb-2">
+                    Línea de producto de la campaña
+                  </label>
+                  <div className="relative">
+                    <select
+                      value={formData.producto_campana}
+                      onChange={(e) => handleInputChange('producto_campana', e.target.value)}
+                      className={`w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-purple-500 focus:border-transparent appearance-none bg-white ${
+                        errors.producto_campana ? 'border-red-300' : 'border-purple-300'
+                      }`}
+                      disabled={loading || loadingLineas}
+                    >
+                      <option value="">Selecciona una línea de producto...</option>
+                      {lineasProductos.map((linea) => (
+                        <option key={linea.value} value={linea.value}>
+                          {linea.label} ({linea.productos_count} productos)
+                        </option>
+                      ))}
+                    </select>
+                    <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-purple-400 pointer-events-none" />
+                  </div>
+                  {loadingLineas && (
+                    <p className="text-purple-600 text-xs mt-1 flex items-center">
+                      <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-purple-600 mr-1"></div>
+                      Cargando líneas...
+                    </p>
+                  )}
+                  {errors.producto_campana && (
+                    <p className="text-red-600 text-xs mt-1">{errors.producto_campana}</p>
+                  )}
+                  {!loadingLineas && lineasProductos.length === 0 && (
+                    <p className="text-amber-600 text-xs mt-1">
+                      ⚠️ No se pudieron cargar las líneas de productos
+                    </p>
+                  )}
+                </div>
               )}
             </div>
 

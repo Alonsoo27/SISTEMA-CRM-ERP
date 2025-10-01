@@ -114,11 +114,11 @@ const ReportesAvanzados = ({ almacenesDisponibles, onExport }) => {
         }
     };
 
-    // REPORTE 1: PERFORMANCE COMPARATIVA DE ALMACENES - USANDO SERVICIOS REALES
+    // REPORTE 1: PERFORMANCE COMPARATIVA - USANDO ENDPOINT CONSOLIDADO OPTIMIZADO
     const cargarReportePerformance = async () => {
         try {
-            const response = await almacenService.getPerformanceComparativa(rangoFecha);
-            
+            const response = await almacenService.getReportesConsolidado('performance', rangoFecha);
+
             if (response.success) {
                 setPerformanceData(response.data);
             } else {
@@ -148,7 +148,7 @@ const ReportesAvanzados = ({ almacenesDisponibles, onExport }) => {
     // REPORTE 2: ANÁLISIS PREDICTIVO DE ALERTAS - USANDO SERVICIOS REALES
     const cargarReporteAlertas = async () => {
         try {
-            const response = await almacenService.getAnalisisPredictivoAlertas(rangoFecha);
+            const response = await almacenService.getReportesConsolidado('alertas', rangoFecha);
             
             if (response.success) {
                 setAlertasData(response.data);
@@ -176,7 +176,7 @@ const ReportesAvanzados = ({ almacenesDisponibles, onExport }) => {
     // REPORTE 3: VALORIZACIÓN EVOLUTIVA - USANDO SERVICIOS REALES
     const cargarReporteValorizacion = async () => {
         try {
-            const response = await almacenService.getValorizacionEvolutiva(rangoFecha);
+            const response = await almacenService.getReportesConsolidado('valorizacion', rangoFecha);
             
             if (response.success) {
                 setValorizacionData(response.data);
@@ -209,7 +209,7 @@ const ReportesAvanzados = ({ almacenesDisponibles, onExport }) => {
     // REPORTE 4: KARDEX INTELIGENTE - USANDO SERVICIOS REALES
     const cargarReporteKardex = async () => {
         try {
-            const response = await almacenService.getKardexInteligente(rangoFecha);
+            const response = await almacenService.getReportesConsolidado('kardex', rangoFecha);
             
             if (response.success) {
                 setKardexData(response.data);
@@ -241,7 +241,7 @@ const ReportesAvanzados = ({ almacenesDisponibles, onExport }) => {
     // REPORTE 5: EFICIENCIA DE DESPACHOS - USANDO SERVICIOS REALES
     const cargarReporteDespachos = async () => {
         try {
-            const response = await almacenService.getEficienciaDespachos(rangoFecha);
+            const response = await almacenService.getReportesConsolidado('despachos', rangoFecha);
             
             if (response.success) {
                 setDespachoData(response.data);

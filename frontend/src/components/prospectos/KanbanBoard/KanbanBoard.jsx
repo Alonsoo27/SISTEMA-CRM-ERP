@@ -725,7 +725,9 @@ const KanbanBoard = ({
   const ProspectoCard = ({ prospecto }) => {
     if (!prospecto) return null;
     
-    const tieneUrgencia = prospecto.seguimiento_vencido || prospecto.seguimiento_obligatorio;
+    // No mostrar seguimientos en prospectos cerrados o perdidos
+    const tieneUrgencia = (prospecto.estado !== 'Cerrado' && prospecto.estado !== 'Perdido') &&
+                          (prospecto.seguimiento_vencido || prospecto.seguimiento_obligatorio);
     const isMenuOpen = menuAbierto === prospecto.id;
     
     return (

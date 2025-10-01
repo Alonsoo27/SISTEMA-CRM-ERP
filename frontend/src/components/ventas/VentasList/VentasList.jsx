@@ -1,5 +1,5 @@
 // src/components/ventas/VentasList/VentasList.jsx - CORREGIDO
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, memo } from 'react';
 import {
   Eye, Edit, Trash2, MoreVertical, DollarSign, User,
   Calendar, Phone, Mail, Building, AlertCircle, CheckCircle,
@@ -9,13 +9,240 @@ import {
 import ConfirmDialog from '../../common/ConfirmDialog';
 import ventasService from '../../../services/ventasService';
 
+// ⚡ COMPONENTES MEMOIZADOS FUERA DEL RENDER PRINCIPAL
+const NotificationComponent = memo(({ notification }) => {
+  if (!notification) return null;
+
+  const iconos = {
+    success: CheckCircle,
+    error: XCircle,
+    info: AlertCircle
+  };
+
+  const colores = {
+    success: 'bg-green-100 border-green-200 text-green-800',
+    error: 'bg-red-100 border-red-200 text-red-800',
+    info: 'bg-blue-100 border-blue-200 text-blue-800'
+  };
+
+  const IconComponent = iconos[notification.tipo];
+
+  return (
+    <div className={`fixed top-4 right-4 z-50 p-4 rounded-lg border shadow-lg ${colores[notification.tipo]} max-w-sm`}>
+      <div className="flex items-center">
+        <IconComponent className="h-5 w-5 mr-2" />
+        <span className="text-sm font-medium whitespace-pre-line">{notification.mensaje}</span>
+      </div>
+    </div>
+  );
+});
+
+// ⚡ MODAL DE CONFIRMACIÓN DE RECEPCIÓN MEMOIZADO
+const ModalConfirmRecepcion = memo(({
+  showConfirmRecepcion,
+  ventaParaRecepcion,
+  onConfirm,
+  onCancel,
+  obtenerNombreCompleto
+}) => {
+  if (!showConfirmRecepcion || !ventaParaRecepcion) return null;
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4">
+        <div className="px-6 py-4 border-b border-gray-200">
+          <h3 className="text-lg font-semibold text-gray-900">
+            Confirmar Recepción del Producto
+          </h3>
+        </div>
+
+        <div className="p-6">
+          <div className="mb-4">
+            <div className="flex items-center mb-3">
+              <div className="flex-shrink-0 h-10 w-10">
+                <div className="h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center">
+                  <User className="h-5 w-5 text-blue-600" />
+                </div>
+              </div>
+              <div className="ml-3">
+                <div className="text-sm font-medium text-gray-900">
+                  {obtenerNombreCompleto(ventaParaRecepcion)}
+                </div>
+                <div className="text-sm text-gray-500">
+                  {ventaParaRecepcion.codigo || `V-${ventaParaRecepcion.id?.substring(0, 8)}`}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+            <div className="flex items-center">
+              <CheckCircle className="h-5 w-5 text-blue-600 mr-2" />
+              <div>
+                <p className="text-sm font-medium text-blue-900">
+                  ¿El cliente confirmó haber recibido el producto?
+                </p>
+                <p className="text-xs text-blue-700 mt-1">
+                  Al confirmar, el sistema creará automáticamente un ticket de capacitación.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="px-6 py-4 border-t border-gray-200 bg-gray-50 flex justify-end space-x-3">
+          <button
+            onClick={onCancel}
+            className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
+          >
+            Cancelar
+          </button>
+          <button
+            onClick={onConfirm}
+            className="px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-md hover:bg-blue-700 transition-colors"
+          >
+            Confirmar Recepción
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+});
+
+// ⚡ MODAL DE PRODUCTOS MEMOIZADO
+const ProductosModal = memo(({
+  modalProductos,
+  onClose,
+  obtenerNombreCompleto,
+  formatearMonto
+}) => {
+  if (!modalProductos.isOpen) return null;
+
+  const { venta, productos } = modalProductos;
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full mx-4 max-h-[80vh] overflow-hidden">
+        {/* Header */}
+        <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+          <div>
+            <h3 className="text-lg font-semibold text-gray-900">
+              Productos de la Venta
+            </h3>
+            <p className="text-sm text-gray-600">
+              {venta?.codigo || `V-${venta?.id?.substring(0, 8)}`} - {obtenerNombreCompleto(venta)}
+            </p>
+          </div>
+          <button
+            onClick={onClose}
+            className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+          >
+            <X className="h-5 w-5 text-gray-500" />
+          </button>
+        </div>
+
+        {/* Content */}
+        <div className="p-6 overflow-y-auto max-h-[60vh]">
+          {productos.length === 0 ? (
+            <div className="text-center py-8">
+              <Package className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+              <p className="text-gray-600">Cargando productos...</p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {productos.map((producto, index) => (
+                <div key={index} className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50 transition-colors">
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                    <div>
+                      <label className="text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Código
+                      </label>
+                      <p className="text-sm font-medium text-gray-900 mt-1">
+                        {producto.producto_codigo || producto.producto_id || 'N/A'}
+                      </p>
+                    </div>
+                    <div>
+                      <label className="text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Descripción
+                      </label>
+                      <p className="text-sm text-gray-900 mt-1">
+                        {producto.descripcion_personalizada || producto.producto_nombre || 'Sin descripción'}
+                      </p>
+                    </div>
+                    <div>
+                      <label className="text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Cantidad
+                      </label>
+                      <p className="text-sm font-medium text-gray-900 mt-1">
+                        {producto.cantidad} {producto.unidad_medida || 'und'}
+                      </p>
+                    </div>
+                    <div>
+                      <label className="text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Subtotal
+                      </label>
+                      <p className="text-sm font-bold text-green-600 mt-1">
+                        {formatearMonto(producto.total_linea || producto.subtotal)}
+                      </p>
+                    </div>
+                  </div>
+                  {producto.precio_unitario && (
+                    <div className="mt-2 pt-2 border-t border-gray-100">
+                      <span className="text-xs text-gray-500">
+                        Precio unitario: {formatearMonto(producto.precio_unitario)}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              ))}
+
+              {/* Resumen */}
+              <div className="mt-6 bg-gray-50 rounded-lg p-4 border-t-2 border-blue-200">
+                <div className="flex justify-between items-center">
+                  <div>
+                    <p className="text-sm font-medium text-gray-900">
+                      Total: {productos.length} producto{productos.length !== 1 ? 's' : ''}
+                    </p>
+                    <p className="text-sm text-gray-600">
+                      {productos.reduce((sum, p) => sum + parseFloat(p.cantidad || 0), 0)} unidades
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-lg font-bold text-gray-900">
+                      {formatearMonto(venta?.valor_final)}
+                    </p>
+                    <p className="text-sm text-gray-600">Valor final</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="px-6 py-4 border-t border-gray-200 bg-gray-50">
+          <div className="flex justify-end">
+            <button
+              onClick={onClose}
+              className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
+            >
+              Cerrar
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+});
+
 const VentasList = ({
   refreshTrigger = 0,
   onEdit,
   onView,
   onEditCliente,
   filtros = {},
-  onFiltrosChange
+  onFiltrosChange,
+  usuarioActual
 }) => {
   const [ventas, setVentas] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -30,6 +257,11 @@ const VentasList = ({
   const [showConfirmRecepcion, setShowConfirmRecepcion] = useState(false);
   const [ventaParaRecepcion, setVentaParaRecepcion] = useState(null);
   const [modalProductos, setModalProductos] = useState({ isOpen: false, venta: null, productos: [] });
+
+  // 🔐 NUEVOS ESTADOS PARA CONTROL POR ROLES
+  const [asesorSeleccionado, setAsesorSeleccionado] = useState(null);
+  const [asesoresDisponibles, setAsesoresDisponibles] = useState([]);
+  const [vistaActual, setVistaActual] = useState('mis_ventas'); // 'mis_ventas', 'todas_ventas', 'asesor_especifico'
 
   // ✅ CORREGIDO: Solo estados detallados (flujo logístico)
   const estadosDetallados = [
@@ -49,6 +281,21 @@ const VentasList = ({
     { value: 'boleta', label: 'Boleta', color: 'blue' },
     { value: 'nota_venta', label: 'Nota de Venta', color: 'green' }
   ];
+
+  // 🔐 FUNCIONES DE CONTROL POR ROLES
+  const esRolAlto = useCallback(() => {
+    if (!usuarioActual?.rol) return false;
+    const rolesAltos = ['SUPER_ADMIN', 'ADMIN', 'GERENTE', 'SUPERVISOR'];
+    return rolesAltos.includes(usuarioActual.rol.toUpperCase());
+  }, [usuarioActual]);
+
+  const puedeVerTodasLasVentas = useCallback(() => {
+    return esRolAlto() || usuarioActual?.es_jefe;
+  }, [esRolAlto, usuarioActual]);
+
+  const puedeVerVentasDeOtros = useCallback(() => {
+    return puedeVerTodasLasVentas();
+  }, [puedeVerTodasLasVentas]);
 
   // ✅ NUEVA FUNCIÓN HELPER: Obtener nombre completo del cliente
   const obtenerNombreCompleto = useCallback((venta) => {
@@ -92,9 +339,19 @@ const VentasList = ({
     return colorMap[info.color] || colorMap.blue;
   }, [obtenerTipoVenta]);
 
-  const formatearMonto = useCallback((valor) => {
-    if (!valor || isNaN(valor)) return '$0.00';
-    return `$${parseFloat(valor).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  // ✅ MEJORADO: Formateo de moneda más robusto
+  const formatearMonto = useCallback((valor, moneda = 'USD') => {
+    if (!valor || isNaN(valor)) {
+      return moneda === 'PEN' ? 'S/ 0.00' : '$0.00';
+    }
+
+    const valorNumerico = parseFloat(valor);
+    const simbolo = moneda === 'PEN' ? 'S/ ' : '$';
+
+    return `${simbolo}${valorNumerico.toLocaleString('es-PE', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    })}`;
   }, []);
 
   // FUNCIÓN PARA OBTENER PRODUCTOS DE UNA VENTA
@@ -121,19 +378,43 @@ const VentasList = ({
     setModalProductos(prev => ({ ...prev, productos }));
   }, [cargarProductosVenta]);
 
-  // Cargar ventas
+  // Cargar ventas con control por roles
   const cargarVentas = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
 
-      const filtrosCompletos = {
+      // 🔐 APLICAR FILTROS POR ROL
+      let filtrosCompletos = {
         ...filtros,
         busqueda: busquedaLocal,
         orden: `${ordenamiento.campo}_${ordenamiento.direccion}`,
         pagina: paginacion.pagina,
         limite: paginacion.porPagina
       };
+
+      // Aplicar filtros según el rol y la vista actual
+      if (!puedeVerTodasLasVentas()) {
+        // ASESOR: Solo ve sus propias ventas
+        filtrosCompletos.asesor_id = usuarioActual?.id;
+      } else {
+        // JEFE+: Aplicar filtro según la vista seleccionada
+        switch (vistaActual) {
+          case 'mis_ventas':
+            filtrosCompletos.asesor_id = usuarioActual?.id;
+            break;
+          case 'asesor_especifico':
+            if (asesorSeleccionado) {
+              filtrosCompletos.asesor_id = asesorSeleccionado;
+            }
+            break;
+          case 'todas_ventas':
+            // No agregar filtro de asesor - ver todas
+            break;
+          default:
+            filtrosCompletos.asesor_id = usuarioActual?.id;
+        }
+      }
 
       const response = await ventasService.obtenerVentas(filtrosCompletos);
       
@@ -157,12 +438,39 @@ const VentasList = ({
     } finally {
       setLoading(false);
     }
-  }, [filtros, busquedaLocal, ordenamiento, paginacion.pagina, paginacion.porPagina]);
+  }, [
+    filtros, busquedaLocal, ordenamiento, paginacion.pagina, paginacion.porPagina,
+    usuarioActual, vistaActual, asesorSeleccionado, puedeVerTodasLasVentas
+  ]);
+
+  // 🔐 FUNCIÓN PARA CARGAR ASESORES DISPONIBLES
+  const cargarAsesores = useCallback(async () => {
+    if (!puedeVerVentasDeOtros()) return;
+
+    try {
+      const response = await ventasService.obtenerAsesores();
+      if (response.success) {
+        setAsesoresDisponibles(response.data || []);
+      }
+    } catch (err) {
+      console.error('Error cargando asesores:', err);
+      setAsesoresDisponibles([]);
+    }
+  }, [puedeVerVentasDeOtros]);
 
   // Effects
   useEffect(() => {
-    cargarVentas();
-  }, [cargarVentas, refreshTrigger]);
+    if (usuarioActual) {
+      cargarAsesores();
+    }
+  }, [cargarAsesores, usuarioActual]);
+
+  // Effect para cargar/recargar ventas cuando cambien los filtros
+  useEffect(() => {
+    if (usuarioActual) {
+      cargarVentas();
+    }
+  }, [cargarVentas, refreshTrigger, usuarioActual, busquedaLocal, vistaActual, asesorSeleccionado]);
 
   // Event handlers
   const handleBusqueda = useCallback((valor) => {
@@ -175,6 +483,23 @@ const VentasList = ({
       campo,
       direccion: prev.campo === campo && prev.direccion === 'asc' ? 'desc' : 'asc'
     }));
+    setPaginacion(prev => ({ ...prev, pagina: 1 }));
+  }, []);
+
+  // 🔐 HANDLERS PARA CONTROL POR ROLES
+  const handleCambioVista = useCallback((e) => {
+    const nuevaVista = e.target.value;
+    setVistaActual(nuevaVista);
+    setPaginacion(prev => ({ ...prev, pagina: 1 }));
+
+    if (nuevaVista !== 'asesor_especifico') {
+      setAsesorSeleccionado(null);
+    }
+  }, []);
+
+  const handleCambioAsesor = useCallback((e) => {
+    const asesorId = e.target.value;
+    setAsesorSeleccionado(asesorId || null);
     setPaginacion(prev => ({ ...prev, pagina: 1 }));
   }, []);
 
@@ -260,7 +585,69 @@ const VentasList = ({
     return venta.estado_detallado === 'vendido/enviado';
   }, []);
 
-  // Sistema de notificaciones
+  // ✅ IMPLEMENTACIÓN DE EXPORTACIÓN FUNCIONAL
+  const handleExportar = useCallback(async () => {
+    try {
+      setLoading(true);
+      showNotification('Generando archivo de exportación...', 'info');
+
+      // Construir filtros actuales para exportación
+      let filtrosExportacion = {
+        ...filtros,
+        busqueda: busquedaLocal,
+        orden: `${ordenamiento.campo}_${ordenamiento.direccion}`,
+        formato: 'excel' // Podría ser 'csv', 'pdf', etc.
+      };
+
+      // Aplicar mismos filtros por rol que usa cargarVentas
+      if (!puedeVerTodasLasVentas()) {
+        filtrosExportacion.asesor_id = usuarioActual?.id;
+      } else {
+        switch (vistaActual) {
+          case 'mis_ventas':
+            filtrosExportacion.asesor_id = usuarioActual?.id;
+            break;
+          case 'asesor_especifico':
+            if (asesorSeleccionado) {
+              filtrosExportacion.asesor_id = asesorSeleccionado.id;
+            }
+            break;
+          case 'todas_ventas':
+            // No filtrar por asesor
+            break;
+        }
+      }
+
+      const response = await ventasService.exportarVentas(filtrosExportacion);
+
+      if (response.success) {
+        // Crear link de descarga
+        const blob = new Blob([response.data], {
+          type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        });
+        const url = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `ventas_${new Date().toISOString().split('T')[0]}.xlsx`;
+        link.click();
+        window.URL.revokeObjectURL(url);
+
+        showNotification('Archivo descargado exitosamente', 'success');
+      } else {
+        throw new Error(response.error);
+      }
+    } catch (err) {
+      console.error('Error exportando:', err);
+      showNotification('Error al exportar datos: ' + err.message, 'error');
+    } finally {
+      setLoading(false);
+    }
+  }, [
+    filtros, busquedaLocal, ordenamiento, usuarioActual, vistaActual,
+    asesorSeleccionado, puedeVerTodasLasVentas
+  ]);
+
+  // ✅ CORREGIDO: Sistema de notificaciones con dependencies correctas
   const showNotification = useCallback((mensaje, tipo = 'info') => {
     setNotification({ mensaje, tipo, id: Date.now() });
     setTimeout(() => setNotification(null), 3000);
@@ -290,223 +677,7 @@ const VentasList = ({
     return transiciones[estadoActual] || [];
   }, []);
 
-  // COMPONENTE: Modal de confirmación de recepción
-  const ModalConfirmRecepcion = () => {
-    if (!showConfirmRecepcion || !ventaParaRecepcion) return null;
 
-    return (
-      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-        <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4">
-          <div className="px-6 py-4 border-b border-gray-200">
-            <h3 className="text-lg font-semibold text-gray-900">
-              Confirmar Recepción del Producto
-            </h3>
-          </div>
-
-          <div className="p-6">
-            <div className="mb-4">
-              <div className="flex items-center mb-3">
-                <div className="flex-shrink-0 h-10 w-10">
-                  <div className="h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center">
-                    <User className="h-5 w-5 text-blue-600" />
-                  </div>
-                </div>
-                <div className="ml-3">
-                  <div className="text-sm font-medium text-gray-900">
-                    {obtenerNombreCompleto(ventaParaRecepcion)}
-                  </div>
-                  <div className="text-sm text-gray-500">
-                    {ventaParaRecepcion.codigo || `V-${ventaParaRecepcion.id?.substring(0, 8)}`}
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
-              <div className="flex items-center">
-                <CheckCircle className="h-5 w-5 text-blue-600 mr-2" />
-                <div>
-                  <p className="text-sm font-medium text-blue-900">
-                    ¿El cliente confirmó haber recibido el producto?
-                  </p>
-                  <p className="text-xs text-blue-700 mt-1">
-                    Al confirmar, el sistema creará automáticamente un ticket de capacitación.
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="px-6 py-4 border-t border-gray-200 bg-gray-50 flex justify-end space-x-3">
-            <button
-              onClick={() => {
-                setShowConfirmRecepcion(false);
-                setVentaParaRecepcion(null);
-              }}
-              className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
-            >
-              Cancelar
-            </button>
-            <button
-              onClick={handleConfirmarRecepcion}
-              className="px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-md hover:bg-blue-700 transition-colors"
-            >
-              Confirmar Recepción
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  };
-
-  // COMPONENTE MODAL DE PRODUCTOS
-  const ProductosModal = () => {
-    if (!modalProductos.isOpen) return null;
-
-    const { venta, productos } = modalProductos;
-
-    return (
-      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-        <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full mx-4 max-h-[80vh] overflow-hidden">
-          {/* Header */}
-          <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
-            <div>
-              <h3 className="text-lg font-semibold text-gray-900">
-                Productos de la Venta
-              </h3>
-              <p className="text-sm text-gray-600">
-                {venta?.codigo || `V-${venta?.id?.substring(0, 8)}`} - {obtenerNombreCompleto(venta)}
-              </p>
-            </div>
-            <button
-              onClick={() => setModalProductos({ isOpen: false, venta: null, productos: [] })}
-              className="p-2 hover:bg-gray-100 rounded-full transition-colors"
-            >
-              <X className="h-5 w-5 text-gray-500" />
-            </button>
-          </div>
-
-          {/* Content */}
-          <div className="p-6 overflow-y-auto max-h-[60vh]">
-            {productos.length === 0 ? (
-              <div className="text-center py-8">
-                <Package className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                <p className="text-gray-600">Cargando productos...</p>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {productos.map((producto, index) => (
-                  <div key={index} className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50 transition-colors">
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                      <div>
-                        <label className="text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Código
-                        </label>
-                        <p className="text-sm font-medium text-gray-900 mt-1">
-                          {producto.producto_codigo || producto.producto_id || 'N/A'}
-                        </p>
-                      </div>
-                      <div>
-                        <label className="text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Descripción
-                        </label>
-                        <p className="text-sm text-gray-900 mt-1">
-                          {producto.descripcion_personalizada || producto.producto_nombre || 'Sin descripción'}
-                        </p>
-                      </div>
-                      <div>
-                        <label className="text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Cantidad
-                        </label>
-                        <p className="text-sm font-medium text-gray-900 mt-1">
-                          {producto.cantidad} {producto.unidad_medida || 'und'}
-                        </p>
-                      </div>
-                      <div>
-                        <label className="text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Subtotal
-                        </label>
-                        <p className="text-sm font-bold text-green-600 mt-1">
-                          {formatearMonto(producto.total_linea || producto.subtotal)}
-                        </p>
-                      </div>
-                    </div>
-                    {producto.precio_unitario && (
-                      <div className="mt-2 pt-2 border-t border-gray-100">
-                        <span className="text-xs text-gray-500">
-                          Precio unitario: {formatearMonto(producto.precio_unitario)}
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                ))}
-                
-                {/* Resumen */}
-                <div className="mt-6 bg-gray-50 rounded-lg p-4 border-t-2 border-blue-200">
-                  <div className="flex justify-between items-center">
-                    <div>
-                      <p className="text-sm font-medium text-gray-900">
-                        Total: {productos.length} producto{productos.length !== 1 ? 's' : ''}
-                      </p>
-                      <p className="text-sm text-gray-600">
-                        {productos.reduce((sum, p) => sum + parseFloat(p.cantidad || 0), 0)} unidades
-                      </p>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-lg font-bold text-gray-900">
-                        {formatearMonto(venta?.valor_final)}
-                      </p>
-                      <p className="text-sm text-gray-600">Valor final</p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Footer */}
-          <div className="px-6 py-4 border-t border-gray-200 bg-gray-50">
-            <div className="flex justify-end">
-              <button
-                onClick={() => setModalProductos({ isOpen: false, venta: null, productos: [] })}
-                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
-              >
-                Cerrar
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  };
-
-  // Componente de notificación
-  const NotificationComponent = () => {
-    if (!notification) return null;
-
-    const iconos = {
-      success: CheckCircle,
-      error: XCircle,
-      info: AlertCircle
-    };
-
-    const colores = {
-      success: 'bg-green-100 border-green-200 text-green-800',
-      error: 'bg-red-100 border-red-200 text-red-800',
-      info: 'bg-blue-100 border-blue-200 text-blue-800'
-    };
-
-    const IconComponent = iconos[notification.tipo];
-
-    return (
-      <div className={`fixed top-4 right-4 z-50 p-4 rounded-lg border shadow-lg ${colores[notification.tipo]} max-w-sm`}>
-        <div className="flex items-center">
-          <IconComponent className="h-5 w-5 mr-2" />
-          <span className="text-sm font-medium whitespace-pre-line">{notification.mensaje}</span>
-        </div>
-      </div>
-    );
-  };
 
   if (loading && ventas.length === 0) {
     return (
@@ -546,7 +717,7 @@ const VentasList = ({
 
   return (
     <div className="bg-white rounded-lg shadow">
-      {/* Header con búsqueda */}
+      {/* Header con búsqueda y selector de vistas */}
       <div className="p-6 border-b border-gray-200">
         <div className="flex items-center justify-between mb-4">
           <div>
@@ -555,11 +726,50 @@ const VentasList = ({
               {paginacion.total} venta{paginacion.total !== 1 ? 's' : ''} encontrada{paginacion.total !== 1 ? 's' : ''}
             </p>
           </div>
-          
-          <div className="flex items-center space-x-3">
+
+          <div className="flex items-center space-x-4">
+            {/* 🔐 SELECTOR DE VISTA POR ROL - Solo para roles altos */}
+            {usuarioActual && esRolAlto() && (
+              <div className="flex items-center space-x-3">
+                {/* Selector de tipo de vista */}
+                <div className="flex items-center space-x-2">
+                  <label className="text-sm font-medium text-gray-700">Vista:</label>
+                  <select
+                    value={vistaActual}
+                    onChange={handleCambioVista}
+                    className="border border-gray-300 rounded-md px-3 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="mis_ventas">Mis Ventas</option>
+                    <option value="todas_ventas">Todas las Ventas</option>
+                    <option value="asesor_especifico">Por Asesor</option>
+                  </select>
+                </div>
+
+                {/* Selector de asesor específico */}
+                {vistaActual === 'asesor_especifico' && (
+                  <div className="flex items-center space-x-2">
+                    <label className="text-sm font-medium text-gray-700">Asesor:</label>
+                    <select
+                      value={asesorSeleccionado || ''}
+                      onChange={handleCambioAsesor}
+                      className="border border-gray-300 rounded-md px-3 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="">Seleccionar asesor...</option>
+                      {asesoresDisponibles.map((asesor) => (
+                        <option key={asesor.id} value={asesor.id}>
+                          {asesor.nombre} {asesor.apellido}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+              </div>
+            )}
+
             <button
-              onClick={() => showNotification('Función de exportación próximamente', 'info')}
-              className="inline-flex items-center px-3 py-2 border border-gray-300 rounded-md text-gray-700 bg-white hover:bg-gray-50 transition-colors"
+              onClick={handleExportar}
+              disabled={loading}
+              className="inline-flex items-center px-3 py-2 border border-gray-300 rounded-md text-gray-700 bg-white hover:bg-gray-50 transition-colors disabled:opacity-50"
             >
               <Download className="h-4 w-4 mr-2" />
               Exportar
@@ -957,30 +1167,44 @@ const VentasList = ({
         </div>
       )}
 
-      {/* Modal de Productos */}
-      <ModalConfirmRecepcion />
+      {/* ✅ MODALES OPTIMIZADOS */}
+      <ModalConfirmRecepcion
+        showConfirmRecepcion={showConfirmRecepcion}
+        ventaParaRecepcion={ventaParaRecepcion}
+        onConfirm={handleConfirmarRecepcion}
+        onCancel={() => {
+          setShowConfirmRecepcion(false);
+          setVentaParaRecepcion(null);
+        }}
+        obtenerNombreCompleto={obtenerNombreCompleto}
+      />
+
+      <ProductosModal
+        modalProductos={modalProductos}
+        onClose={() => setModalProductos({ isOpen: false, venta: null, productos: [] })}
+        obtenerNombreCompleto={obtenerNombreCompleto}
+        formatearMonto={formatearMonto}
+      />
 
       {/* Diálogo de confirmación */}
-      {typeof ConfirmDialog !== 'undefined' && (
-        <ConfirmDialog
-          isOpen={showConfirmDelete}
-          onClose={() => setShowConfirmDelete(false)}
-          onConfirm={handleEliminar}
-          title="Eliminar Venta"
-          message={`¿Estás seguro de que deseas eliminar la venta ${ventaAEliminar?.codigo || ventaAEliminar?.id}? Esta acción no se puede deshacer.`}
-          confirmText="Eliminar"
-          cancelText="Cancelar"
-          type="danger"
-        />
-      )}
+      <ConfirmDialog
+        isOpen={showConfirmDelete}
+        onClose={() => setShowConfirmDelete(false)}
+        onConfirm={handleEliminar}
+        title="Eliminar Venta"
+        message={`¿Estás seguro de que deseas eliminar la venta ${ventaAEliminar?.codigo || ventaAEliminar?.id}? Esta acción no se puede deshacer.`}
+        confirmText="Eliminar"
+        cancelText="Cancelar"
+        type="danger"
+      />
 
       {/* Notificaciones */}
-      <NotificationComponent />
+      <NotificationComponent notification={notification} />
 
-      {/* Click outside para cerrar menús */}
+      {/* ✅ CORREGIDO: Click outside para cerrar menús */}
       {menuAbierto && (
         <div
-          className="fixed inset-0 z-5"
+          className="fixed inset-0 z-10"
           onClick={() => setMenuAbierto(null)}
         />
       )}

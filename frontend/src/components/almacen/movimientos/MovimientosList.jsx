@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { 
-    Search, 
-    Filter, 
-    Calendar, 
-    TrendingUp, 
-    TrendingDown, 
+import {
+    Search,
+    Filter,
+    Calendar,
+    TrendingUp,
+    TrendingDown,
     RotateCcw,
     ArrowRight,
     Eye,
@@ -15,9 +15,14 @@ import {
     Package,
     User,
     FileText,
-    X
+    X,
+    ExternalLink,
+    Building2,
+    Clock,
+    Settings
 } from 'lucide-react';
 import almacenService from "../../../services/almacenService";
+import KardexModal from '../kardex/KardexModal';
 
 const MovimientosList = () => {
     const [movimientos, setMovimientos] = useState([]);
@@ -25,7 +30,7 @@ const MovimientosList = () => {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
 
-    // Filtros
+    // Filtros con debouncing
     const [filtros, setFiltros] = useState({
         busqueda: '',
         tipo_movimiento: '',
@@ -36,12 +41,25 @@ const MovimientosList = () => {
         direccion: 'desc'
     });
 
+    // Estados para debouncing
+    const [busquedaInput, setBusquedaInput] = useState('');
+    const [debounceTimer, setDebounceTimer] = useState(null);
+
     const [paginacion, setPaginacion] = useState({
         page: 1,
-        limit: 20,
+        limit: 25,
         total: 0,
         totalPages: 0
     });
+
+    // Estados para kardex
+    const [showKardexModal, setShowKardexModal] = useState(false);
+    const [selectedProductoKardex, setSelectedProductoKardex] = useState(null);
+    const [almacenesData, setAlmacenesData] = useState([]);
+
+    // Estado para configuración de límite
+    const [showConfigLimit, setShowConfigLimit] = useState(false);
+    const limitesDisponibles = [10, 25, 50, 100];
 
     const [showFiltros, setShowFiltros] = useState(false);
     const [movimientoDetalle, setMovimientoDetalle] = useState(null);
@@ -60,7 +78,7 @@ const MovimientosList = () => {
     const formatearFecha = (fecha) => {
         if (!fecha) return '-';
         try {
-            return new Date(fecha).toLocaleDateString('es-PE', {
+            return new Date(fecha).toLocaleDateString('es-ES', {
                 year: 'numeric',
                 month: '2-digit',
                 day: '2-digit'
@@ -70,29 +88,74 @@ const MovimientosList = () => {
         }
     };
 
+    const formatearFechaHora = (fecha) => {
+        if (!fecha) return '-';
+        try {
+            return new Date(fecha).toLocaleDateString('es-ES', {
+                day: '2-digit',
+                month: '2-digit',
+                year: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+        } catch (error) {
+            return '-';
+        }
+    };
+
     const formatearNumero = (numero, decimales = 2) => {
         if (numero === null || numero === undefined || isNaN(numero)) return '0';
-        return Number(numero).toLocaleString('es-PE', {
+        return Number(numero).toLocaleString('es-ES', {
             minimumFractionDigits: decimales,
             maximumFractionDigits: decimales
         });
     };
 
     const formatearMoneda = (monto) => {
-        if (monto === null || monto === undefined || isNaN(monto)) return 'S/ 0.00';
-        return new Intl.NumberFormat('es-PE', {
-            style: 'currency',
-            currency: 'PEN'
-        }).format(monto);
+        if (monto === null || monto === undefined || isNaN(monto)) return '$0.00';
+        return '$' + Number(monto).toLocaleString('es-ES', {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2
+        });
     };
 
     useEffect(() => {
         cargarDatos();
+        cargarAlmacenes();
     }, []);
+
+    // Cerrar dropdown al hacer clic fuera
+    useEffect(() => {
+        const handleClickOutside = (event) => {
+            if (showConfigLimit && !event.target.closest('.config-limit-dropdown')) {
+                setShowConfigLimit(false);
+            }
+        };
+
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, [showConfigLimit]);
 
     useEffect(() => {
         cargarMovimientos();
-    }, [filtros, paginacion.page]);
+    }, [filtros, paginacion.page, paginacion.limit]);
+
+    // Debouncing para búsqueda
+    useEffect(() => {
+        if (debounceTimer) {
+            clearTimeout(debounceTimer);
+        }
+
+        const timer = setTimeout(() => {
+            setFiltros(prev => ({ ...prev, busqueda: busquedaInput }));
+        }, 500);
+
+        setDebounceTimer(timer);
+
+        return () => {
+            if (timer) clearTimeout(timer);
+        };
+    }, [busquedaInput]);
 
     const cargarDatos = async () => {
         try {
@@ -202,6 +265,45 @@ const MovimientosList = () => {
         }
     };
 
+    // Función para cargar almacenes
+    const cargarAlmacenes = async () => {
+        try {
+            const response = await almacenService.obtenerAlmacenes();
+            if (response.success) {
+                setAlmacenesData(response.data || []);
+            }
+        } catch (error) {
+            console.error('Error cargando almacenes:', error);
+        }
+    };
+
+    // Handler para abrir kardex de producto
+    const handleVerKardex = (producto) => {
+        const productoKardex = {
+            id: producto.producto_id,
+            codigo: producto.producto_codigo,
+            nombre: producto.producto_descripcion
+        };
+        setSelectedProductoKardex(productoKardex);
+        setShowKardexModal(true);
+    };
+
+    // Handler para cerrar modal de kardex
+    const handleCloseKardexModal = () => {
+        setShowKardexModal(false);
+        setSelectedProductoKardex(null);
+    };
+
+    // Cambiar límite de paginación
+    const cambiarLimite = (nuevoLimite) => {
+        setPaginacion(prev => ({
+            ...prev,
+            limit: nuevoLimite,
+            page: 1
+        }));
+        setShowConfigLimit(false);
+    };
+
     const TipoMovimientoBadge = ({ tipo }) => {
         const config = obtenerConfigTipoMovimiento(tipo);
         const Icono = config.icono;
@@ -264,10 +366,9 @@ const MovimientosList = () => {
                                             {formatearFecha(movimientoDetalle.fecha_movimiento)}
                                         </p>
                                         <p className="text-xs text-gray-500">
-                                            {new Date(movimientoDetalle.fecha_movimiento).toLocaleTimeString('es-PE', {
+                                            {new Date(movimientoDetalle.fecha_movimiento).toLocaleTimeString('es-ES', {
                                                 hour: '2-digit',
-                                                minute: '2-digit',
-                                                second: '2-digit'
+                                                minute: '2-digit'
                                             })}
                                         </p>
                                     </div>
@@ -375,12 +476,22 @@ const MovimientosList = () => {
                             </div>
                         </div>
 
-                        <div className="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
+                        <div className="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse space-x-3">
                             <button
                                 onClick={cerrarModalDetalle}
                                 className="w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 sm:ml-3 sm:w-auto sm:text-sm transition-colors"
                             >
                                 Cerrar
+                            </button>
+                            <button
+                                onClick={() => {
+                                    handleVerKardex(movimientoDetalle);
+                                    cerrarModalDetalle();
+                                }}
+                                className="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-purple-600 text-base font-medium text-white hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500 sm:ml-3 sm:w-auto sm:text-sm transition-colors"
+                            >
+                                <FileText className="h-4 w-4 mr-2" />
+                                Ver Kardex
                             </button>
                         </div>
                     </div>
@@ -425,9 +536,9 @@ const MovimientosList = () => {
                                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
                                 <input
                                     type="text"
-                                    placeholder="Buscar por producto, motivo o referencia..."
-                                    value={filtros.busqueda}
-                                    onChange={(e) => handleFiltroChange('busqueda', e.target.value)}
+                                    placeholder="Buscar por producto, motivo, cliente o venta..."
+                                    value={busquedaInput}
+                                    onChange={(e) => setBusquedaInput(e.target.value)}
                                     className="pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent w-full"
                                 />
                             </div>
@@ -571,17 +682,41 @@ const MovimientosList = () => {
                         </thead>
                         <tbody className="bg-white divide-y divide-gray-200">
                             {loading ? (
-                                [...Array(5)].map((_, i) => (
+                                [...Array(Math.min(8, paginacion.limit))].map((_, i) => (
                                     <tr key={i} className="animate-pulse">
-                                        <td className="px-6 py-4"><div className="h-4 bg-gray-200 rounded w-24"></div></td>
-                                        <td className="px-6 py-4"><div className="h-4 bg-gray-200 rounded w-16"></div></td>
-                                        <td className="px-6 py-4"><div className="h-4 bg-gray-200 rounded w-32"></div></td>
+                                        <td className="px-6 py-4">
+                                            <div className="space-y-2">
+                                                <div className="h-4 bg-gray-200 rounded w-24"></div>
+                                                <div className="h-3 bg-gray-200 rounded w-16"></div>
+                                            </div>
+                                        </td>
+                                        <td className="px-6 py-4"><div className="h-6 bg-gray-200 rounded-full w-20"></div></td>
+                                        <td className="px-6 py-4">
+                                            <div className="space-y-2">
+                                                <div className="h-4 bg-gray-200 rounded w-20"></div>
+                                                <div className="h-3 bg-gray-200 rounded w-32"></div>
+                                                <div className="h-3 bg-gray-200 rounded w-16"></div>
+                                            </div>
+                                        </td>
                                         <td className="px-6 py-4"><div className="h-4 bg-gray-200 rounded w-16 mx-auto"></div></td>
                                         <td className="px-6 py-4"><div className="h-4 bg-gray-200 rounded w-16 mx-auto"></div></td>
                                         <td className="px-6 py-4"><div className="h-4 bg-gray-200 rounded w-16 mx-auto"></div></td>
-                                        <td className="px-6 py-4"><div className="h-4 bg-gray-200 rounded w-32"></div></td>
+                                        <td className="px-6 py-4">
+                                            <div className="space-y-2">
+                                                <div className="h-4 bg-gray-200 rounded w-32"></div>
+                                                <div className="flex space-x-2">
+                                                    <div className="h-5 bg-gray-200 rounded-full w-14"></div>
+                                                    <div className="h-5 bg-gray-200 rounded-full w-16"></div>
+                                                </div>
+                                            </div>
+                                        </td>
                                         <td className="px-6 py-4"><div className="h-4 bg-gray-200 rounded w-20"></div></td>
-                                        <td className="px-6 py-4"><div className="h-4 bg-gray-200 rounded w-8 ml-auto"></div></td>
+                                        <td className="px-6 py-4">
+                                            <div className="flex justify-end space-x-2">
+                                                <div className="h-6 w-6 bg-gray-200 rounded"></div>
+                                                <div className="h-6 w-6 bg-gray-200 rounded"></div>
+                                            </div>
+                                        </td>
                                     </tr>
                                 ))
                             ) : error ? (
@@ -618,7 +753,7 @@ const MovimientosList = () => {
                                                 {formatearFecha(movimiento.fecha_movimiento)}
                                             </div>
                                             <div className="text-xs text-gray-500">
-                                                {new Date(movimiento.fecha_movimiento).toLocaleTimeString('es-PE', {
+                                                {new Date(movimiento.fecha_movimiento).toLocaleTimeString('es-ES', {
                                                     hour: '2-digit',
                                                     minute: '2-digit'
                                                 })}
@@ -628,10 +763,15 @@ const MovimientosList = () => {
                                             <TipoMovimientoBadge tipo={movimiento.tipo_movimiento} />
                                         </td>
                                         <td className="px-6 py-4 text-sm text-gray-900">
-                                            <div className="font-medium">{movimiento.productos?.codigo || '-'}</div>
-                                            <div className="text-xs text-gray-500 truncate max-w-xs" title={movimiento.productos?.descripcion}>
-                                                {movimiento.productos?.descripcion || '-'}
+                                            <div className="font-medium">{movimiento.producto_codigo || '-'}</div>
+                                            <div className="text-xs text-gray-500 truncate max-w-xs" title={movimiento.producto_descripcion}>
+                                                {movimiento.producto_descripcion || '-'}
                                             </div>
+                                            {movimiento.producto_marca && (
+                                                <div className="text-xs text-gray-400">
+                                                    {movimiento.producto_marca}
+                                                </div>
+                                            )}
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-center">
                                             <span className="font-medium">
@@ -647,11 +787,31 @@ const MovimientosList = () => {
                                             </span>
                                         </td>
                                         <td className="px-6 py-4 text-sm text-gray-900">
-                                            <div className="max-w-xs truncate" title={movimiento.motivo}>
-                                                {movimiento.motivo}
+                                            <div className="max-w-xs" title={movimiento.motivo_enriquecido || movimiento.motivo}>
+                                                {movimiento.motivo_enriquecido || movimiento.motivo}
                                             </div>
-                                            {movimiento.referencia_tipo && (
-                                                <div className="text-xs text-gray-500">
+                                            <div className="flex flex-wrap items-center gap-2 mt-2">
+                                                {movimiento.venta_codigo && (
+                                                    <div className="inline-flex items-center px-2 py-1 bg-blue-100 text-blue-800 text-xs font-medium rounded-full">
+                                                        <FileText className="h-3 w-3 mr-1" />
+                                                        Venta #{movimiento.venta_codigo}
+                                                    </div>
+                                                )}
+                                                {movimiento.cliente_completo && (
+                                                    <div className="inline-flex items-center px-2 py-1 bg-green-100 text-green-800 text-xs font-medium rounded-full">
+                                                        <User className="h-3 w-3 mr-1" />
+                                                        {movimiento.cliente_completo}
+                                                    </div>
+                                                )}
+                                                {movimiento.almacen_nombre && (
+                                                    <div className="inline-flex items-center px-2 py-1 bg-gray-100 text-gray-700 text-xs font-medium rounded-full">
+                                                        <Building2 className="h-3 w-3 mr-1" />
+                                                        {movimiento.almacen_nombre}
+                                                    </div>
+                                                )}
+                                            </div>
+                                            {movimiento.referencia_tipo && !movimiento.venta_codigo && (
+                                                <div className="text-xs text-gray-500 mt-1">
                                                     {movimiento.referencia_tipo}: {movimiento.referencia_id}
                                                 </div>
                                             )}
@@ -659,19 +819,28 @@ const MovimientosList = () => {
                                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                                             <div className="flex items-center">
                                                 <User className="h-4 w-4 text-gray-400 mr-1" />
-                                                <span className="truncate max-w-24" title={`${movimiento.usuarios?.nombre || ''} ${movimiento.usuarios?.apellido || ''}`}>
-                                                    {movimiento.usuarios?.nombre || 'Usuario'} {movimiento.usuarios?.apellido || ''}
+                                                <span className="truncate max-w-24" title={movimiento.usuario_nombre || 'Usuario'}>
+                                                    {movimiento.usuario_nombre || 'Usuario'}
                                                 </span>
                                             </div>
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                                            <button
-                                                onClick={() => abrirDetalleMovimiento(movimiento)}
-                                                className="text-blue-600 hover:text-blue-900 focus:outline-none focus:ring-2 focus:ring-blue-500 rounded-md p-1 transition-colors"
-                                                title="Ver detalle"
-                                            >
-                                                <Eye className="h-4 w-4" />
-                                            </button>
+                                            <div className="flex items-center justify-end space-x-2">
+                                                <button
+                                                    onClick={() => handleVerKardex(movimiento)}
+                                                    className="text-purple-600 hover:text-purple-900 focus:outline-none focus:ring-2 focus:ring-purple-500 rounded-md p-1 transition-colors"
+                                                    title="Ver kardex del producto"
+                                                >
+                                                    <FileText className="h-4 w-4" />
+                                                </button>
+                                                <button
+                                                    onClick={() => abrirDetalleMovimiento(movimiento)}
+                                                    className="text-blue-600 hover:text-blue-900 focus:outline-none focus:ring-2 focus:ring-blue-500 rounded-md p-1 transition-colors"
+                                                    title="Ver detalle del movimiento"
+                                                >
+                                                    <Eye className="h-4 w-4" />
+                                                </button>
+                                            </div>
                                         </td>
                                     </tr>
                                 ))
@@ -680,15 +849,49 @@ const MovimientosList = () => {
                     </table>
                 </div>
 
-                {/* Paginación */}
-                {!loading && !error && paginacion.totalPages > 1 && (
-                    <div className="px-6 py-3 border-t border-gray-200 flex items-center justify-between">
-                        <div className="flex-1 flex items-center justify-between">
-                            <div>
-                                <p className="text-sm text-gray-700">
-                                    Página {paginacion.page} de {paginacion.totalPages}
-                                    {paginacion.total > 0 && ` - ${paginacion.total} registros total`}
-                                </p>
+                {/* Paginación y controles */}
+                {!loading && !error && (
+                    <div className="px-6 py-3 border-t border-gray-200">
+                        <div className="flex items-center justify-between">
+                            <div className="flex items-center space-x-4">
+                                <div className="text-sm text-gray-700">
+                                    {paginacion.totalPages > 1 ? (
+                                        <>
+                                            Página {paginacion.page} de {paginacion.totalPages}
+                                            {paginacion.total > 0 && ` - ${paginacion.total} registros total`}
+                                        </>
+                                    ) : (
+                                        <>
+                                            {movimientos.length} de {paginacion.total} registros
+                                        </>
+                                    )}
+                                </div>
+                                <div className="relative config-limit-dropdown">
+                                    <button
+                                        onClick={() => setShowConfigLimit(!showConfigLimit)}
+                                        className="flex items-center text-sm text-gray-600 hover:text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 rounded px-2 py-1"
+                                    >
+                                        <Settings className="h-4 w-4 mr-1" />
+                                        {paginacion.limit} por página
+                                    </button>
+                                    {showConfigLimit && (
+                                        <div className="absolute bottom-full left-0 mb-2 bg-white border border-gray-200 rounded-md shadow-lg z-20 min-w-40">
+                                            <div className="py-1">
+                                                {limitesDisponibles.map(limite => (
+                                                    <button
+                                                        key={limite}
+                                                        onClick={() => cambiarLimite(limite)}
+                                                        className={`block w-full px-4 py-2 text-sm text-left hover:bg-gray-100 transition-colors ${
+                                                            paginacion.limit === limite ? 'bg-blue-50 text-blue-700 font-medium' : 'text-gray-700'
+                                                        }`}
+                                                    >
+                                                        {limite} por página
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
                             </div>
                             <div className="flex space-x-2">
                                 <button
@@ -713,6 +916,14 @@ const MovimientosList = () => {
 
             {/* Modal de detalle */}
             <ModalDetalle />
+
+            {/* Modal de Kardex */}
+            <KardexModal
+                isOpen={showKardexModal}
+                onClose={handleCloseKardexModal}
+                producto={selectedProductoKardex}
+                almacenes={almacenesData}
+            />
         </div>
     );
 };

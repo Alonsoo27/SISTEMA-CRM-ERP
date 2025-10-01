@@ -1,27 +1,35 @@
 const express = require('express');
 const router = express.Router();
+const multer = require('multer');
 const almacenController = require('../controllers/almacenController');
 const almacenValidations = require('../utils/almacenValidations');
 
-// Middleware de autenticación y autorización
-const authMiddleware = require('../../../middleware/authMiddleware');
-const { requireRole } = require('../../../middleware/roleMiddleware');
+// Middleware de autenticación y autorización empresarial unificado
+const { authenticateToken, requireRole } = require('../../../middleware/auth');
+
+// Configuración de multer para upload de archivos
+const upload = multer({
+    storage: multer.memoryStorage(), // Almacenar en memoria para procesar directo
+    limits: {
+        fileSize: 10 * 1024 * 1024 // 10MB máximo
+    }
+});
 
 // ==================== NIVELES DE AUTORIZACIÓN ====================
 
 // Acceso básico al módulo de almacén
-const requireAlmacenAccess = requireRole(['ALMACENERO', 'JEFE_ALMACEN', 'GERENTE', 'SUPER_ADMIN']);
+const requireAlmacenAccess = requireRole(['ALMACENERO', 'JEFE_ALMACEN', 'GERENTE', 'SUPER_ADMIN', 'ADMIN']);
 
 // Operaciones críticas (transferencias, ajustes de stock)
-const requireAlmacenOperations = requireRole(['JEFE_ALMACEN', 'GERENTE', 'SUPER_ADMIN']);
+const requireAlmacenOperations = requireRole(['JEFE_ALMACEN', 'GERENTE', 'SUPER_ADMIN', 'ADMIN']);
 
-// Administración del módulo (uploads masivos, configuración)
-const requireAlmacenAdmin = requireRole(['GERENTE', 'SUPER_ADMIN']);
+// Administración del módulo (uploads masivos, configuración) - Solo SUPER_ADMIN
+const requireAlmacenAdmin = requireRole(['SUPER_ADMIN']);
 
 // ==================== DASHBOARD PRINCIPAL ====================
 
 router.get('/dashboard', 
-    authMiddleware, 
+    authenticateToken, 
     requireAlmacenAccess,
     almacenController.obtenerDashboard
 );
@@ -30,7 +38,7 @@ router.get('/dashboard',
 
 // Listar inventario con filtros
 router.get('/inventario', 
-    authMiddleware, 
+    authenticateToken, 
     requireAlmacenAccess,
     almacenValidations.validarFiltrosInventario,
     almacenController.obtenerInventario
@@ -38,7 +46,7 @@ router.get('/inventario',
 
 // Obtener inventario por producto específico
 router.get('/inventario/producto/:producto_id', 
-    authMiddleware, 
+    authenticateToken, 
     requireAlmacenAccess,
     almacenValidations.validarUUID('producto_id'),
     almacenController.obtenerInventarioPorProducto
@@ -46,7 +54,7 @@ router.get('/inventario/producto/:producto_id',
 
 // Actualizar stock de producto en almacén específico
 router.put('/inventario/:producto_id/almacen/:almacen_id', 
-    authMiddleware, 
+    authenticateToken, 
     requireAlmacenOperations, // Operación crítica
     almacenValidations.validarUUID('producto_id'),
     almacenValidations.validarUUID('almacen_id'),
@@ -57,16 +65,24 @@ router.put('/inventario/:producto_id/almacen/:almacen_id',
 // ==================== GESTIÓN DE MOVIMIENTOS ====================
 
 // Listar movimientos de inventario
-router.get('/movimientos', 
-    authMiddleware, 
+router.get('/movimientos',
+    authenticateToken,
     requireAlmacenAccess,
     almacenValidations.validarFiltrosMovimientos,
     almacenController.obtenerMovimientos
 );
 
+// Obtener kardex de un producto específico
+router.get('/kardex/:producto_id',
+    authenticateToken,
+    requireAlmacenAccess,
+    almacenValidations.validarUUID('producto_id'),
+    almacenController.obtenerKardexProducto
+);
+
 // Realizar transferencia entre almacenes
 router.post('/transferencias', 
-    authMiddleware, 
+    authenticateToken, 
     requireAlmacenOperations, // Operación crítica
     almacenValidations.validarTransferencia,
     almacenController.transferirStock
@@ -76,7 +92,7 @@ router.post('/transferencias',
 
 // Listar almacenes disponibles
 router.get('/almacenes', 
-    authMiddleware, 
+    authenticateToken, 
     requireAlmacenAccess,
     almacenController.obtenerAlmacenes
 );
@@ -85,7 +101,7 @@ router.get('/almacenes',
 
 // Listar alertas de inventario
 router.get('/alertas', 
-    authMiddleware, 
+    authenticateToken, 
     requireAlmacenAccess,
     almacenValidations.validarFiltrosAlertas,
     almacenController.obtenerAlertas
@@ -93,7 +109,7 @@ router.get('/alertas',
 
 // Resolver alerta específica
 router.put('/alertas/:id/resolver', 
-    authMiddleware, 
+    authenticateToken, 
     requireAlmacenAccess,
     almacenValidations.validarUUID('id'),
     almacenValidations.validarResolucionAlerta,
@@ -104,7 +120,7 @@ router.put('/alertas/:id/resolver',
 
 // Obtener despachos pendientes/programados
 router.get('/despachos', 
-    authMiddleware, 
+    authenticateToken, 
     requireAlmacenAccess,
     almacenValidations.validarFiltrosDespachos,
     almacenController.obtenerDespachos
@@ -112,7 +128,7 @@ router.get('/despachos',
 
 // Actualizar estado de despacho
 router.put('/despachos/:id/estado', 
-    authMiddleware, 
+    authenticateToken, 
     requireAlmacenAccess, // Almaceneros pueden cambiar estados
     almacenValidations.validarUUID('id'),
     almacenValidations.validarCambioEstadoDespacho,
@@ -121,7 +137,7 @@ router.put('/despachos/:id/estado',
 
 // Obtener despacho específico con detalles
 router.get('/despachos/:id', 
-    authMiddleware, 
+    authenticateToken, 
     requireAlmacenAccess,
     almacenValidations.validarUUID('id'),
     almacenController.obtenerDespachoPorId
@@ -131,7 +147,7 @@ router.get('/despachos/:id',
 
 // Análisis de rotación de inventario
 router.get('/analisis/rotacion', 
-    authMiddleware, 
+    authenticateToken, 
     requireAlmacenAccess,
     almacenValidations.validarParametrosPeriodo, // ✅ Usando tu validación existente
     almacenController.obtenerRotacionInventario
@@ -139,7 +155,7 @@ router.get('/analisis/rotacion',
 
 // Análisis de eficiencia operativa
 router.get('/analisis/eficiencia', 
-    authMiddleware, 
+    authenticateToken, 
     requireAlmacenAccess,
     almacenValidations.validarParametrosPeriodo, // ✅ Usando tu validación existente
     almacenController.obtenerEficienciaOperativa
@@ -147,32 +163,48 @@ router.get('/analisis/eficiencia',
 
 // Análisis de stock de seguridad
 router.get('/analisis/stock-seguridad', 
-    authMiddleware, 
+    authenticateToken, 
     requireAlmacenAccess,
     almacenController.obtenerAnalisisStockSeguridad
 );
 
 // Mapa de calor de almacenes
 router.get('/analisis/mapa-calor', 
-    authMiddleware, 
+    authenticateToken, 
     requireAlmacenAccess,
     almacenValidations.validarParametrosPeriodo, // ✅ Usando tu validación existente
     almacenController.obtenerMapaCalorAlmacenes
 );
 
 // Tendencias de inventario
-router.get('/analisis/tendencias', 
-    authMiddleware, 
+router.get('/analisis/tendencias',
+    authenticateToken,
     requireAlmacenAccess,
     almacenValidations.validarParametrosPeriodo, // ✅ Usando tu validación existente
     almacenController.obtenerTendenciasInventario
+);
+
+// ✅ ANÁLISIS CONSOLIDADO OPTIMIZADO - REEMPLAZA 5 LLAMADAS CON 1 SOLA
+router.get('/analisis/consolidado',
+    authenticateToken,
+    requireAlmacenAccess,
+    almacenValidations.validarParametrosPeriodo,
+    almacenController.obtenerAnalisisConsolidado
+);
+
+// ✅ REPORTES CONSOLIDADO - UNA SOLA LLAMADA PARA CUALQUIER REPORTE
+router.get('/reportes/consolidado/:tipo_reporte',
+    authenticateToken,
+    requireAlmacenAccess,
+    almacenValidations.validarParametrosPeriodo,
+    almacenController.obtenerReportesConsolidado
 );
 
 // ==================== REPORTES BÁSICOS ====================
 
 // Generar kardex de producto
 router.get('/reportes/kardex/:producto_id', 
-    authMiddleware, 
+    authenticateToken, 
     requireAlmacenAccess,
     almacenValidations.validarUUID('producto_id'),
     almacenValidations.validarParametrosKardex,
@@ -181,7 +213,7 @@ router.get('/reportes/kardex/:producto_id',
 
 // Reporte de valorización de inventario
 router.get('/reportes/valorizacion', 
-    authMiddleware, 
+    authenticateToken, 
     requireAlmacenOperations, // Info sensible financiera
     almacenValidations.validarParametrosValorizacion,
     almacenController.generarReporteValorizacion
@@ -189,7 +221,7 @@ router.get('/reportes/valorizacion',
 
 // Resumen de stock consolidado
 router.get('/reportes/stock-consolidado', 
-    authMiddleware, 
+    authenticateToken, 
     requireAlmacenAccess,
     almacenController.obtenerStockConsolidado
 );
@@ -198,7 +230,7 @@ router.get('/reportes/stock-consolidado',
 
 // Performance comparativa entre almacenes
 router.get('/reportes/performance-comparativa', 
-    authMiddleware, 
+    authenticateToken, 
     requireAlmacenAccess,
     almacenValidations.validarParametrosPeriodo, // ✅ Validación de período
     almacenController.getPerformanceComparativa
@@ -206,7 +238,7 @@ router.get('/reportes/performance-comparativa',
 
 // Análisis predictivo de alertas
 router.get('/reportes/analisis-predictivo', 
-    authMiddleware, 
+    authenticateToken, 
     requireAlmacenOperations, // Info más sensible para toma de decisiones
     almacenValidations.validarParametrosPeriodo, // ✅ Validación de período
     almacenController.getAnalisisPredictivoAlertas
@@ -214,7 +246,7 @@ router.get('/reportes/analisis-predictivo',
 
 // Evolución de valorización temporal
 router.get('/reportes/valorizacion-evolutiva', 
-    authMiddleware, 
+    authenticateToken, 
     requireAlmacenOperations, // Info financiera sensible
     almacenValidations.validarParametrosPeriodo, // ✅ Validación de período
     almacenController.getValorizacionEvolutiva
@@ -222,7 +254,7 @@ router.get('/reportes/valorizacion-evolutiva',
 
 // Kardex inteligente con insights
 router.get('/reportes/kardex-inteligente', 
-    authMiddleware, 
+    authenticateToken, 
     requireAlmacenAccess,
     almacenValidations.validarParametrosPeriodo, // ✅ Validación de período
     almacenController.getKardexInteligente
@@ -230,7 +262,7 @@ router.get('/reportes/kardex-inteligente',
 
 // Eficiencia de despachos
 router.get('/reportes/eficiencia-despachos', 
-    authMiddleware, 
+    authenticateToken, 
     requireAlmacenAccess,
     almacenValidations.validarParametrosPeriodo, // ✅ Validación de período
     almacenController.getEficienciaDespachos
@@ -240,7 +272,7 @@ router.get('/reportes/eficiencia-despachos',
 
 // Endpoint genérico para queries personalizadas (uso administrativo restringido)
 router.post('/query/ejecutar', 
-    authMiddleware,
+    authenticateToken,
     requireAlmacenAdmin, // Solo administradores por seguridad
     (req, res, next) => {
         // Validación específica para queries personalizadas
@@ -284,24 +316,26 @@ router.post('/query/ejecutar',
 
 // Descargar plantilla Excel para upload
 router.get('/upload/plantilla', 
-    authMiddleware,
+    authenticateToken,
     requireAlmacenAccess,
     almacenController.generarPlantillaStock
 );
 
 // Preview de upload masivo de stock
-router.post('/upload/preview', 
-    authMiddleware,
+router.post('/upload/preview',
+    authenticateToken,
     requireAlmacenAdmin, // Solo administradores
-    almacenValidations.validarUploadMasivo,
+    upload.single('archivo'), // Middleware de multer para procesar archivo
+    almacenValidations.validarUploadExcel,
     almacenController.previewUploadStock
 );
 
 // Ejecutar upload masivo de stock
-router.post('/upload/ejecutar', 
-    authMiddleware,
+router.post('/upload/ejecutar',
+    authenticateToken,
     requireAlmacenAdmin, // Solo administradores
-    almacenValidations.validarUploadMasivo,
+    upload.single('archivo'), // Middleware de multer para procesar archivo
+    almacenValidations.validarUploadExcel,
     almacenController.ejecutarUploadStock
 );
 
@@ -309,21 +343,21 @@ router.post('/upload/ejecutar',
 
 // Verificar stock disponible para venta (usado desde módulo ventas)
 router.post('/verificar-stock', 
-    authMiddleware, // Sin restricción de rol - usado por ventas
+    authenticateToken, // Sin restricción de rol - usado por ventas
     almacenValidations.validarVerificacionStock,
     almacenController.verificarStockParaVenta
 );
 
 // Descontar stock automáticamente (trigger desde ventas)
 router.post('/descontar-stock', 
-    authMiddleware, // Sin restricción de rol - usado por ventas  
+    authenticateToken, // Sin restricción de rol - usado por ventas  
     almacenValidations.validarDescuentoStock,
     almacenController.descontarStockVenta
 );
 
 // Crear despacho desde venta
 router.post('/despachos/desde-venta', 
-    authMiddleware, // Sin restricción de rol - usado por ventas
+    authenticateToken, // Sin restricción de rol - usado por ventas
     almacenValidations.validarCreacionDespacho,
     almacenController.crearDespachoDesdeVenta
 );
@@ -332,14 +366,14 @@ router.post('/despachos/desde-venta',
 
 // Health check completo del módulo
 router.get('/health', 
-    authMiddleware, 
+    authenticateToken, 
     requireAlmacenAccess,
     almacenController.healthCheck
 );
 
 // Health check básico (acceso amplio para monitoreo)
 router.get('/health/basic', 
-    authMiddleware, 
+    authenticateToken, 
     (req, res) => {
         res.json({
             success: true,
@@ -358,14 +392,14 @@ router.get('/health/basic',
 
 // Generar alertas automáticas (tarea programada o manual)
 router.post('/mantenimiento/generar-alertas', 
-    authMiddleware,
+    authenticateToken,
     requireAlmacenAdmin,
     almacenController.generarAlertasAutomaticas
 );
 
 // Limpiar alertas resueltas antiguas
 router.delete('/mantenimiento/limpiar-alertas', 
-    authMiddleware,
+    authenticateToken,
     requireAlmacenAdmin,
     almacenController.limpiarAlertasAntiguas
 );
@@ -374,7 +408,7 @@ router.delete('/mantenimiento/limpiar-alertas',
 
 // Obtener configuración y capacidades del módulo
 router.get('/config', 
-    authMiddleware, 
+    authenticateToken, 
     requireAlmacenAccess,
     (req, res) => {
         res.json({

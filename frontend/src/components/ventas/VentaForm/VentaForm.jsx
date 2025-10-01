@@ -1,5 +1,5 @@
 // src/components/ventas/VentaForm/VentaForm.jsx
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, memo } from 'react';
 import {
   X, Save, AlertCircle, CheckCircle, DollarSign, User,
   Calendar, Phone, Mail, Building, Package, Plus, Trash2,
@@ -8,6 +8,138 @@ import {
 } from 'lucide-react';
 import ventasService from '../../../services/ventasService';
 import productosService from '../../../services/productosService';
+import prospectosService from '../../../services/prospectosService';
+import clientesService from '../../../services/clientesService';
+import UbicacionesSelector from '../../ui/UbicacionesSelector';
+import DocumentoInteligente from '../../ui/DocumentoInteligente';
+
+// ⚡ COMPONENTE MEMOIZADO FUERA DEL COMPONENTE PRINCIPAL
+const BuscadorProductos = memo(({ busqueda, onBusquedaChange, productos, onAgregar, loading, showDropdown }) => (
+  <div className="relative mb-4">
+    <div className="relative">
+      <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
+      <input
+        type="text"
+        placeholder="Buscar productos por nombre o código..."
+        value={busqueda}
+        onChange={(e) => onBusquedaChange(e.target.value)}
+        className="w-full pl-10 pr-10 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 shadow-sm text-sm"
+      />
+      {loading && (
+        <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-500"></div>
+        </div>
+      )}
+    </div>
+
+    {showDropdown && productos.length > 0 && (
+      <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-64 overflow-y-auto">
+        {productos.map(producto => (
+          <button
+            key={producto.id}
+            type="button"
+            onClick={() => onAgregar(producto)}
+            className="w-full px-4 py-3 text-left hover:bg-blue-50 border-b border-gray-100 last:border-b-0 transition-colors"
+          >
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="font-medium text-gray-900">{producto.nombre}</div>
+                <div className="text-sm text-gray-500">{producto.codigo}</div>
+              </div>
+              <div className="text-right">
+                <div className="text-sm font-medium text-green-600">${producto.precio}</div>
+                <div className="text-xs text-gray-500">Stock: {producto.stock || 'N/A'}</div>
+              </div>
+            </div>
+          </button>
+        ))}
+      </div>
+    )}
+  </div>
+));
+
+// ⚡ COMPONENTE PRODUCTO ITEM MEMOIZADO
+const ProductoItem = memo(({ producto, onActualizar, onEliminar }) => {
+  const subtotal = useMemo(() => {
+    const cantidad = parseFloat(producto.cantidad) || 0;
+    const precio = parseFloat(producto.precio_unitario) || 0;
+    const descuento = parseFloat(producto.descuento_porcentaje) || 0;
+    const subtotalBase = cantidad * precio;
+    const descuentoMonto = subtotalBase * (descuento / 100);
+    return subtotalBase - descuentoMonto;
+  }, [producto.cantidad, producto.precio_unitario, producto.descuento_porcentaje]);
+
+  return (
+    <div className="grid grid-cols-12 gap-3 items-center border border-gray-200 p-4 rounded-lg bg-white shadow-sm">
+      <div className="col-span-3">
+        <div className="flex items-start">
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center mb-1">
+              <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800 mr-2">
+                {producto.codigo}
+              </span>
+              {producto.categoria && (
+                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-800">
+                  {producto.categoria}
+                </span>
+              )}
+            </div>
+            <div className="font-medium text-gray-900 truncate text-sm mb-1">
+              {producto.nombre}
+            </div>
+            <div className="text-xs text-gray-500 flex items-center">
+              <Building className="h-3 w-3 mr-1" />
+              <span className="mr-2">{producto.marca}</span>
+              <Package className="h-3 w-3 mr-1" />
+              <span>{producto.unidad}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div className="col-span-2">
+        <input
+          type="number"
+          min="0.01"
+          step="0.01"
+          value={producto.cantidad}
+          onChange={(e) => onActualizar(producto.id, 'cantidad', e.target.value)}
+          className="w-full px-3 py-2 border border-gray-300 rounded-md text-center focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+        />
+      </div>
+      <div className="col-span-2">
+        <input
+          type="number"
+          min="0"
+          step="0.01"
+          value={producto.precio_unitario}
+          onChange={(e) => onActualizar(producto.id, 'precio_unitario', e.target.value)}
+          className="w-full px-3 py-2 border border-gray-300 rounded-md text-right focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+        />
+      </div>
+      <div className="col-span-2">
+        <div className="text-right font-medium text-gray-900">
+          ${parseFloat(producto.subtotal || 0).toFixed(2)}
+        </div>
+      </div>
+      <div className="col-span-2">
+        <div className="text-right font-bold text-green-600">
+          ${parseFloat(producto.total_linea || 0).toFixed(2)}
+        </div>
+      </div>
+      <div className="col-span-1">
+        <button
+          type="button"
+          onClick={() => onEliminar(producto.id)}
+          className="p-2 text-red-600 hover:bg-red-50 rounded-full transition-colors"
+          title="Eliminar producto"
+        >
+          <Trash2 className="h-4 w-4" />
+        </button>
+      </div>
+    </div>
+  );
+});
+
 const obtenerFechaLima = () => {
   // Método más robusto usando Intl API
   const fechaLima = new Intl.DateTimeFormat('en-CA', {
@@ -17,7 +149,6 @@ const obtenerFechaLima = () => {
     day: '2-digit'
   }).format(new Date());
   
-  console.log('🇵🇪 Fecha Lima generada:', fechaLima);
   return fechaLima; // Ya retorna formato YYYY-MM-DD
 };
 const VentaForm = ({
@@ -33,11 +164,19 @@ const VentaForm = ({
     prospecto_id: null,
     asesor_id: null,
     correlativo_asesor: null,
+    // Nuevos campos para integración con clientes
+    cliente_documento: '', // DNI/RUC/PASAPORTE/CE
+    tipo_documento: '', // DNI, RUC, PASAPORTE, CE
+    cliente_id: null, // ID del cliente si existe
+
     nombre_cliente: '', // ✅ CAMBIADO de cliente_nombre
     apellido_cliente: '', // ✅ AGREGADO - Campo nuevo
     cliente_empresa: '',
     cliente_email: '',
     cliente_telefono: '',
+
+    // Campo para empresa de depósito (Olecrammi/Mundipacci)
+    empresa_deposito: 'Olecrammi', // Olecrammi, Mundipacci
     
     // Campos geográficos
     ciudad: '',
@@ -51,7 +190,7 @@ const VentaForm = ({
     descuento_porcentaje: '',
     descuento_monto: '',
     valor_final: '',
-    moneda: 'PEN',
+    moneda: 'USD',
     estado: 'vendido',
     estado_detallado: 'vendido',
     fecha_entrega_estimada: '',
@@ -81,6 +220,11 @@ const VentaForm = ({
   const [busquedaCliente, setBusquedaCliente] = useState('');
   const [loadingClientes, setLoadingClientes] = useState(false);
 
+  // Nuevos estados para búsqueda por documento
+  const [busquedaDocumento, setBusquedaDocumento] = useState('');
+  const [loadingDocumento, setLoadingDocumento] = useState(false);
+  const [clienteEncontrado, setClienteEncontrado] = useState(null);
+
   // Estados para productos
   const [busquedaProducto, setBusquedaProducto] = useState('');
   const [productosEncontrados, setProductosEncontrados] = useState([]);
@@ -97,15 +241,20 @@ const VentaForm = ({
     nombre: 'Usuario Actual'
   };
 
-  // ✅ AGREGADO - Canales de contacto predefinidos (igual que prospectos)
+  // ⚡ FUNCIONES MEMOIZADAS PARA EVITAR RE-RENDERS
+  const handleBusquedaProductoChange = useCallback((value) => {
+    setBusquedaProducto(value);
+  }, []);
+
+  // ✅ MEJORADO - Canales de contacto con colores y tooltips
   const canalesPredefinidos = [
-    { codigo: 'WhatsApp', nombre: 'WhatsApp', icono: '📱' },
-    { codigo: 'Messenger', nombre: 'Facebook Messenger', icono: '💬' },
-    { codigo: 'Facebook', nombre: 'Facebook', icono: '📘' },
-    { codigo: 'TikTok', nombre: 'TikTok', icono: '🎵' },
-    { codigo: 'Llamada', nombre: 'Llamada Telefónica', icono: '📞' },
-    { codigo: 'Presencial', nombre: 'Visita Presencial', icono: '🏢' },
-    { codigo: 'Email', nombre: 'Correo Electrónico', icono: '📧' }
+    { codigo: 'WhatsApp', nombre: 'WhatsApp', icono: '📱', color: 'green', tooltip: 'Contacto vía WhatsApp Business' },
+    { codigo: 'Messenger', nombre: 'Facebook Messenger', icono: '💬', color: 'blue', tooltip: 'Chat de Facebook Messenger' },
+    { codigo: 'Facebook', nombre: 'Facebook', icono: '📘', color: 'blue', tooltip: 'Publicación o comentario en Facebook' },
+    { codigo: 'TikTok', nombre: 'TikTok', icono: '🎵', color: 'pink', tooltip: 'Contacto desde TikTok' },
+    { codigo: 'Llamada', nombre: 'Llamada Telefónica', icono: '📞', color: 'yellow', tooltip: 'Llamada directa al teléfono' },
+    { codigo: 'Presencial', nombre: 'Visita Presencial', icono: '🏢', color: 'purple', tooltip: 'Cliente visitó la oficina' },
+    { codigo: 'Email', nombre: 'Correo Electrónico', icono: '📧', color: 'gray', tooltip: 'Contacto vía email' }
   ];
 
   // Tipos de venta
@@ -139,6 +288,20 @@ const VentaForm = ({
     { value: 'pipeline-convertido', label: 'Pipeline Convertido', descripcion: 'Convertido desde prospecto' }
   ];
 
+  // Tipos de documento
+  const tiposDocumento = [
+    { value: 'DNI', label: 'DNI', descripcion: 'Documento Nacional de Identidad' },
+    { value: 'RUC', label: 'RUC', descripcion: 'Registro Único de Contribuyentes' },
+    { value: 'PASAPORTE', label: 'Pasaporte', descripcion: 'Pasaporte extranjero' },
+    { value: 'CE', label: 'Carné de Extranjería', descripcion: 'Carné de Extranjería' }
+  ];
+
+  // Empresas de depósito
+  const empresasDeposito = [
+    { value: 'Olecrammi', label: 'Olecrammi', descripcion: 'Depósito en cuenta Olecrammi' },
+    { value: 'Mundipacci', label: 'Mundipacci', descripcion: 'Depósito en cuenta Mundipacci' }
+  ];
+
   // ✅ USEEFFECT CORREGIDO - Inicializar formulario
 useEffect(() => {
   if (mode === 'edit' && venta) {
@@ -160,7 +323,7 @@ useEffect(() => {
       descuento_porcentaje: venta.descuento_porcentaje || '',
       descuento_monto: venta.descuento_monto || '',
       valor_final: venta.valor_final || '',
-      moneda: venta.moneda || 'PEN',
+      moneda: venta.moneda || 'USD',
       estado: 'vendido',
       estado_detallado: venta.estado_detallado || 'vendido',
       fecha_entrega_estimada: venta.fecha_entrega_estimada ? 
@@ -186,46 +349,49 @@ useEffect(() => {
     cargarProductosVenta(venta.id);
     
   } else if (mode === 'conversion' && datosIniciales?.prospecto_id) {
-    // MODO CONVERSION: Cargar datos del prospecto
-    console.log('🔄 Productos en datosIniciales:', datosIniciales.productos);
+  // MODO CONVERSION: Cargar datos del prospecto + SUS PRODUCTOS
+  console.log('🔄 Iniciando conversión desde prospecto:', datosIniciales.prospecto_id);
+  
+  const fechaEntregaDefault = new Date();
+  fechaEntregaDefault.setDate(fechaEntregaDefault.getDate() + 7);
+  
+  setFormData({
+    prospecto_id: datosIniciales.prospecto_id || null,
+    nombre_cliente: datosIniciales.nombre_cliente || '',
+    apellido_cliente: datosIniciales.apellido_cliente || '',
+    cliente_empresa: datosIniciales.cliente_empresa || '',
+    cliente_email: datosIniciales.cliente_email || '',
+    cliente_telefono: datosIniciales.cliente_telefono || '',
+    ciudad: datosIniciales.ciudad || '',
+    departamento: datosIniciales.departamento || '',
+    distrito: datosIniciales.distrito || '',
+    canal_contacto: datosIniciales.canal_contacto || 'WhatsApp',
     
-    const fechaEntregaDefault = new Date();
-    fechaEntregaDefault.setDate(fechaEntregaDefault.getDate() + 7);
+    valor_total: datosIniciales.valor_total || '',
+    valor_final: datosIniciales.valor_final || '',
+    descuento_porcentaje: '',
+    descuento_monto: '',
+    moneda: 'USD',
     
-    setFormData({
-      prospecto_id: datosIniciales.prospecto_id || null,
-      nombre_cliente: datosIniciales.nombre_cliente || '',
-      apellido_cliente: datosIniciales.apellido_cliente || '',
-      cliente_empresa: datosIniciales.cliente_empresa || '',
-      cliente_email: datosIniciales.cliente_email || '',
-      cliente_telefono: datosIniciales.cliente_telefono || '',
-      ciudad: datosIniciales.ciudad || '',
-      departamento: datosIniciales.departamento || '',
-      distrito: datosIniciales.distrito || '',
-      canal_contacto: datosIniciales.canal_contacto || 'WhatsApp',
-      
-      valor_total: datosIniciales.valor_total || '',
-      valor_final: datosIniciales.valor_final || '',
-      descuento_porcentaje: '',
-      descuento_monto: '',
-      moneda: 'PEN',
-      
-      canal_origen: 'pipeline-convertido',
-      estado: 'vendido',
-      estado_detallado: 'vendido',
-      fecha_venta: datosIniciales.fecha_venta || obtenerFechaLima(),
-      fecha_entrega_estimada: fechaEntregaDefault.toISOString().split('T')[0],
-      
-      tipo_venta: 'boleta',
-      es_venta_presencial: false,
-      recibio_capacitacion_inmediata: false,
-      se_lo_llevo_directamente: false,
-      notas_internas: `Conversión automática desde prospecto ${datosIniciales.prospecto_id || ''}`,
-      observaciones_almacen: '',
-      observaciones_soporte: '',
-      condiciones_especiales: '',
-      productos: datosIniciales.productos || []
-    });
+    canal_origen: 'pipeline-convertido',
+    estado: 'vendido',
+    estado_detallado: 'vendido',
+    fecha_venta: datosIniciales.fecha_venta || obtenerFechaLima(),
+    fecha_entrega_estimada: fechaEntregaDefault.toISOString().split('T')[0],
+    
+    tipo_venta: 'boleta',
+    es_venta_presencial: false,
+    recibio_capacitacion_inmediata: false,
+    se_lo_llevo_directamente: false,
+    notas_internas: `Conversión automática desde prospecto ${datosIniciales.prospecto_id || ''}`,
+    observaciones_almacen: '',
+    observaciones_soporte: '',
+    condiciones_especiales: '',
+    productos: [] // ✅ Se cargará con cargarProductosProspecto
+  });
+  
+  // ✅ CARGAR PRODUCTOS DEL PROSPECTO
+  cargarProductosProspecto(datosIniciales.prospecto_id);
     
   } else if (mode === 'create') {
     // MODO CREATE: Formulario vacío con valores por defecto
@@ -344,6 +510,49 @@ const cargarProductosVenta = async (ventaId) => {
   }
 };
 
+// Cargar productos de un prospecto para conversión
+const cargarProductosProspecto = async (prospectoId) => {
+  try {
+    console.log('🔄 Cargando productos del prospecto:', prospectoId);
+    
+    // Llamar al backend para obtener productos del prospecto
+    const response = await prospectosService.obtenerProductosInteres(prospectoId);
+    
+    if (response.success && Array.isArray(response.data)) {
+      const productosFormateados = response.data.map((producto, index) => ({
+        id: Date.now() + index, // ID temporal para React
+        producto_id: producto.producto_id || null,
+        codigo: producto.codigo_producto || 'PERSONALIZADO',
+        nombre: producto.descripcion_producto || 'Producto sin nombre',
+        marca: producto.marca || '',
+        categoria: producto.categoria || '', 
+        unidad: producto.unidad_medida || 'UND',
+        cantidad: producto.cantidad_estimada || 1,
+        precio_unitario: parseFloat(producto.precio_sin_igv || 0),
+        subtotal: parseFloat(producto.precio_sin_igv || 0) * (producto.cantidad_estimada || 1),
+        total_linea: parseFloat(producto.valor_linea || 0),
+        descuento_porcentaje: 0,
+        descuento_monto: 0,
+        descripcion_personalizada: producto.descripcion_personalizada || '',
+        notas: producto.notas || '',
+        orden_linea: index + 1
+      }));
+      
+      console.log('✅ Productos del prospecto formateados:', productosFormateados);
+      
+      setFormData(prev => ({ ...prev, productos: productosFormateados }));
+      
+      return productosFormateados;
+    } else {
+      console.warn('⚠️ No se encontraron productos para el prospecto:', prospectoId);
+      return [];
+    }
+  } catch (error) {
+    console.error('❌ Error cargando productos del prospecto:', error);
+    return [];
+  }
+};
+
   // Búsqueda de productos con debounce
   useEffect(() => {
     const timeoutId = setTimeout(() => {
@@ -437,7 +646,7 @@ const cargarProductosVenta = async (ventaId) => {
     try {
       setLoadingClientes(true);
       const response = await ventasService.obtenerClientes({ busqueda });
-      
+
       if (response.success) {
         setClientesBusqueda(response.data.clientes || []);
       }
@@ -445,6 +654,60 @@ const cargarProductosVenta = async (ventaId) => {
       console.error('Error buscando clientes:', err);
     } finally {
       setLoadingClientes(false);
+    }
+  }, []);
+
+  // Buscar cliente por documento (DNI/RUC)
+  const buscarPorDocumento = useCallback(async (documento) => {
+    if (!documento || documento.trim().length < 3) {
+      setClienteEncontrado(null);
+      return;
+    }
+
+    try {
+      setLoadingDocumento(true);
+      const response = await clientesService.buscarPorDocumento(documento.trim());
+
+      if (response.success && response.data) {
+        const cliente = response.data;
+        setClienteEncontrado(cliente);
+
+        // Auto-llenar el formulario con los datos del cliente
+        setFormData(prev => ({
+          ...prev,
+          cliente_id: cliente.id,
+          cliente_documento: cliente.numero_documento,
+          tipo_documento: cliente.tipo_documento,
+          nombre_cliente: cliente.tipo_cliente === 'persona' ? cliente.nombres : cliente.razon_social,
+          apellido_cliente: cliente.tipo_cliente === 'persona' ? cliente.apellidos : '',
+          cliente_empresa: cliente.tipo_cliente === 'empresa' ? cliente.razon_social : (cliente.cliente_empresa || ''),
+          cliente_email: cliente.email || '',
+          cliente_telefono: cliente.telefono || '',
+          ciudad: cliente.ciudad || '',
+          departamento: cliente.departamento || '',
+          distrito: cliente.distrito || ''
+        }));
+
+        setNotification({
+          type: 'success',
+          message: `Cliente encontrado: ${cliente.nombre_completo || cliente.razon_social}`
+        });
+      } else {
+        setClienteEncontrado(null);
+        setNotification({
+          type: 'info',
+          message: 'Cliente no encontrado. Puedes crear uno nuevo.'
+        });
+      }
+    } catch (err) {
+      console.error('Error buscando cliente por documento:', err);
+      setClienteEncontrado(null);
+      setNotification({
+        type: 'error',
+        message: 'Error al buscar cliente: ' + err.message
+      });
+    } finally {
+      setLoadingDocumento(false);
     }
   }, []);
 
@@ -584,11 +847,6 @@ const cargarProductosVenta = async (ventaId) => {
     });
   }, [calcularTotalesConProductos]);
 
-  // Calcular totales (función de compatibilidad)
-  const calcularTotales = useCallback(() => {
-    return calcularTotalesConProductos(formData.productos, formData.descuento_porcentaje, formData.descuento_monto);
-  }, [formData.productos, formData.descuento_porcentaje, formData.descuento_monto, calcularTotalesConProductos]);
-
   // Función para limpiar formulario después de crear venta
   const limpiarFormulario = useCallback(() => {
     setFormData({
@@ -608,7 +866,7 @@ const cargarProductosVenta = async (ventaId) => {
       descuento_porcentaje: '',
       descuento_monto: '',
       valor_final: '',
-      moneda: 'PEN',
+      moneda: 'USD',
       estado: 'vendido',
       estado_detallado: 'vendido',
       fecha_entrega_estimada: '',
@@ -719,14 +977,17 @@ const cargarProductosVenta = async (ventaId) => {
         
         const { codigo_global, correlativo_asesor } = correlativos.data;
         
-        const totales = calcularTotales();
+        const totales = totalesMemoizados;
         
         const datosVenta = {
           // === CORRELATIVOS AUTOMÁTICOS ===
           codigo: codigo_global,
           correlativo_asesor: correlativo_asesor,
           asesor_id: asesorId,
-          
+
+          // === PROSPECTO VINCULADO (SI APLICA) ===
+          prospecto_id: formData.prospecto_id || null,
+
           // === DATOS DEL CLIENTE - ✅ ESTRUCTURA CORREGIDA ===
           nombre_cliente: formData.nombre_cliente?.trim() || '', // ✅ CORREGIDO
           apellido_cliente: formData.apellido_cliente?.trim() || '', // ✅ AGREGADO
@@ -737,6 +998,11 @@ const cargarProductosVenta = async (ventaId) => {
           departamento: formData.departamento?.trim() || '',
           distrito: formData.distrito?.trim() || '',
           canal_contacto: formData.canal_contacto, // ✅ AGREGADO
+
+          // 🆕 CAMPOS PARA CREACIÓN AUTOMÁTICA DE CLIENTES
+          tipo_documento: formData.tipo_documento || 'DNI',
+          numero_documento: formData.cliente_documento?.trim() || '',
+          direccion: formData.direccion?.trim() || '',
           
           productos: formData.productos.map(p => ({
             producto_id: p.producto_id,
@@ -755,8 +1021,9 @@ const cargarProductosVenta = async (ventaId) => {
           descuento_porcentaje: parseFloat(formData.descuento_porcentaje) || 0,
           descuento_monto: parseFloat(formData.descuento_monto) || 0,
           valor_final: parseFloat(formData.valor_final) || totales.total,
-          moneda: formData.moneda || 'PEN',
-          
+          moneda: formData.moneda || 'USD',
+          empresa_deposito: formData.empresa_deposito || 'Olecrammi',
+
           tipo_venta: formData.tipo_venta || 'boleta',
           estado: 'vendido',
           estado_detallado: formData.estado_detallado || 'vendido',
@@ -804,37 +1071,9 @@ const cargarProductosVenta = async (ventaId) => {
           departamento: datosVenta.departamento,
           distrito: datosVenta.distrito
         });
-        console.log('🕐 DEBUG CRÍTICO:');
-console.log('Hora UTC actual:', new Date().toISOString());
-console.log('Fecha Lima calculada:', obtenerFechaLima());
-console.log('formData.fecha_venta:', formData.fecha_venta);
-console.log('Fecha que se enviará:', datosVenta.fecha_venta);
-        // 📦 NUEVO LOG: PAYLOAD COMPLETO ENVIADO
-        console.log('\n📦 FRONTEND: PAYLOAD COMPLETO ENVIADO:');
-        console.log(JSON.stringify(datosVenta, null, 2));
-        console.log('📦 Número de productos:', datosVenta.productos?.length || 0);
-        console.log('📦 Valor final:', datosVenta.valor_final);
-        console.log('📦 END PAYLOAD DEBUG\n');
-        console.log('🔑 TOKEN ACTUAL:', ventasService.getAuthToken());
-console.log('🔑 HEADERS QUE SE ENVIARÁN:', {
-  'Authorization': `Bearer ${ventasService.getAuthToken()}`,
-  'Content-Type': 'application/json'
-});
-console.log('🚨 DEBUG SIMPLE - FECHA ANTES DE ENVIAR:');
-console.log('datosVenta.fecha_venta:', datosVenta.fecha_venta);
-console.log('Hora actual UTC:', new Date().toISOString());
-console.log('🚨 END DEBUG')
 const response = await ventasService.crearVentaCompleta(datosVenta);
-console.log('✅ RESPUESTA RECIBIDA:', response);
-if (response.details?.errores) {
-  console.log('🚨 ERRORES DE VALIDACIÓN ESPECÍFICOS:');
-  response.details.errores.forEach((error, index) => {
-    console.log(`Error ${index + 1}:`, error);
-  });
-}        
+        
         if (response.success) {
-          console.log('✅ FRONTEND: Creación reportada como exitosa');
-          console.log('✅ DATOS DEVUELTOS:', response.data);
           
           limpiarFormulario();
           showNotification(`✅ Venta ${codigo_global} (#${correlativo_asesor}) creada exitosamente`, 'success');
@@ -863,7 +1102,7 @@ if (response.details?.errores) {
   // Sistema de notificaciones
   const showNotification = useCallback((mensaje, tipo = 'info') => {
     setNotification({ mensaje, tipo, id: Date.now() });
-    setTimeout(() => setNotification(null), 5000);
+    // El timeout se maneja en NotificationComponent
   }, []);
 
   // Buscar clientes cuando cambia la búsqueda
@@ -875,15 +1114,160 @@ if (response.details?.errores) {
     return () => clearTimeout(timeoutId);
   }, [busquedaCliente, buscarClientes]);
 
-  const totales = calcularTotales();
+  // ⚡ CÁLCULO MEMOIZADO DE TOTALES - OPTIMIZACIÓN CRÍTICA
+  const totalesMemoizados = useMemo(() => {
+    return calcularTotalesConProductos(formData.productos, formData.descuento_porcentaje, formData.descuento_monto);
+  }, [formData.productos, formData.descuento_porcentaje, formData.descuento_monto, calcularTotalesConProductos]);
+
+  // ⚡ OPCIONES MEMOIZADAS - EVITA RE-RENDERS INNECESARIOS
+  const opcionesTipoVenta = useMemo(() => tiposVenta, []);
+  const opcionesEstadosDetallados = useMemo(() => estadosDetallados, []);
+  const opcionesCanales = useMemo(() => canalesPredefinidos, []);
+  const opcionesMonedas = useMemo(() => monedasDisponibles, []);
+
+  // ⚡ ESTADO DETALLADO MEMOIZADO
+  const estadoDetalladoInfo = useMemo(() => {
+    return estadosDetallados.find(e => e.value === formData.estado_detallado) || estadosDetallados[0];
+  }, [formData.estado_detallado]);
+
+  // ⚡ VALIDACIONES MEMOIZADAS
+  const erroresActuales = useMemo(() => {
+    return Object.keys(errors).length > 0;
+  }, [errors]);
+
+
+
+  // ⚡ COMPONENTES MEMOIZADOS PARA OPTIMIZACIÓN
+  const SeccionProductos = memo(({ productos, onAgregarProducto, onActualizarProducto, onEliminarProducto }) => (
+    <div className="border border-gray-200 rounded-lg p-4">
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="text-lg font-semibold text-gray-900 flex items-center">
+          <Package className="h-5 w-5 mr-2 text-blue-600" />
+          Productos de la Venta
+        </h3>
+        <span className="text-sm text-gray-500">
+          {productos.length} {productos.length === 1 ? 'producto' : 'productos'}
+        </span>
+      </div>
+
+      {/* Buscador de productos optimizado */}
+      <div className="mb-4 relative">
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+          <input
+            type="text"
+            placeholder="Buscar productos por nombre o código..."
+            value={busquedaProducto}
+            onChange={(e) => setBusquedaProducto(e.target.value)}
+            className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          />
+        </div>
+
+        {showProductosDropdown && productosEncontrados.length > 0 && (
+          <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-md shadow-lg max-h-60 overflow-y-auto">
+            {productosEncontrados.map(producto => (
+              <button
+                key={producto.id}
+                type="button"
+                onClick={() => onAgregarProducto(producto)}
+                className="w-full px-4 py-3 text-left hover:bg-gray-50 border-b border-gray-100 last:border-b-0"
+              >
+                <div className="font-medium text-gray-900">{producto.nombre}</div>
+                <div className="text-sm text-gray-500">{producto.codigo} • S/ {producto.precio}</div>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Lista de productos seleccionados */}
+      <div className="space-y-3">
+        {productos.map((producto, index) => (
+          <div key={producto.id || index} className="bg-gray-50 p-3 rounded-lg border">
+            <div className="grid grid-cols-1 md:grid-cols-6 gap-3 items-center">
+              <div className="md:col-span-2">
+                <div className="font-medium text-gray-900">{producto.nombre}</div>
+                <div className="text-sm text-gray-500">{producto.codigo}</div>
+              </div>
+
+              <div>
+                <input
+                  type="number"
+                  min="1"
+                  value={producto.cantidad || ''}
+                  onChange={(e) => onActualizarProducto(producto.id, 'cantidad', e.target.value)}
+                  placeholder="Cant."
+                  className="w-full px-2 py-1 border border-gray-300 rounded text-sm"
+                />
+              </div>
+
+              <div>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={producto.precio_unitario || ''}
+                  onChange={(e) => onActualizarProducto(producto.id, 'precio_unitario', e.target.value)}
+                  placeholder="Precio"
+                  className="w-full px-2 py-1 border border-gray-300 rounded text-sm"
+                />
+              </div>
+
+              <div className="text-right">
+                <div className="font-medium">S/ {(producto.total_linea || 0).toFixed(2)}</div>
+              </div>
+
+              <div className="text-right">
+                <button
+                  type="button"
+                  onClick={() => onEliminarProducto(producto.id)}
+                  className="text-red-600 hover:text-red-800 p-1"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  ));
+
+  // ⚡ COMPONENTE RESUMEN MEMOIZADO
+  const ResumenVenta = memo(({ totales, moneda = 'USD' }) => (
+    <div className="bg-gradient-to-r from-green-50 to-blue-50 p-4 rounded-lg border border-green-200">
+      <h4 className="text-lg font-semibold text-gray-900 mb-3 flex items-center">
+        <DollarSign className="h-5 w-5 mr-2 text-green-600" />
+        Resumen de la Venta
+      </h4>
+      <div className="space-y-2">
+        <div className="flex justify-between items-center text-sm">
+          <span className="text-gray-600">Subtotal:</span>
+          <span className="font-medium">S/ {totales.subtotal.toFixed(2)}</span>
+        </div>
+        {totales.descuento > 0 && (
+          <div className="flex justify-between items-center text-sm">
+            <span className="text-red-600">Descuento:</span>
+            <span className="font-medium text-red-600">-S/ {totales.descuento.toFixed(2)}</span>
+          </div>
+        )}
+        <div className="border-t border-gray-300 pt-2">
+          <div className="flex justify-between items-center">
+            <span className="text-lg font-semibold text-gray-900">Total Final:</span>
+            <span className="text-2xl font-bold text-green-600">S/ {totales.total.toFixed(2)}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  ));
 
   // Obtener info del estado detallado seleccionado
   const getEstadoDetalladoInfo = (estadoValue) => {
     return estadosDetallados.find(e => e.value === estadoValue) || estadosDetallados[0];
   };
 
-  // Componente de notificación
-  const NotificationComponent = () => {
+  // Componente memoizado para evitar re-renders
+  const NotificationComponent = React.memo(() => {
     if (!notification) return null;
 
     const iconos = {
@@ -898,23 +1282,52 @@ if (response.details?.errores) {
       info: 'bg-blue-100 border-blue-200 text-blue-800'
     };
 
-    const IconComponent = iconos[notification.tipo];
+    // Normalizar el tipo de notificación y usar fallback
+    const tipoNormalizado = notification.tipo || notification.type || 'info';
+    const IconComponent = iconos[tipoNormalizado] || AlertCircle;
+    const colorClase = colores[tipoNormalizado] || colores.info;
 
     return (
-      <div className={`fixed top-4 right-4 z-50 p-4 rounded-lg border shadow-lg ${colores[notification.tipo]} max-w-sm`}>
-        <div className="flex items-center">
-          <IconComponent className="h-5 w-5 mr-2" />
-          <span className="text-sm font-medium">{notification.mensaje}</span>
+      <div className={`fixed top-4 right-4 z-50 p-4 rounded-lg border shadow-lg ${colorClase} max-w-sm`}>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center">
+            <IconComponent className="h-5 w-5 mr-2" />
+            <span className="text-sm font-medium">{notification.mensaje || notification.message}</span>
+          </div>
+          <button
+            onClick={() => setNotification(null)}
+            className="ml-2 text-gray-500 hover:text-gray-700"
+          >
+            ✕
+          </button>
         </div>
       </div>
     );
-  };
+  });
+
+  // Timer separado que se ejecuta cuando cambia la notificación
+  React.useEffect(() => {
+    if (notification?.id) {
+      console.log('🕐 Timer iniciado para notificación:', notification.id);
+      const timer = setTimeout(() => {
+        console.log('⏰ Timer ejecutado, ocultando notificación');
+        setNotification(null);
+      }, 4000);
+
+      return () => {
+        console.log('🗑️ Timer limpiado');
+        clearTimeout(timer);
+      };
+    }
+  }, [notification?.id]);
+
+  const totales = totalesMemoizados;
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-lg shadow-xl max-w-6xl w-full max-h-screen overflow-y-auto">
         {/* Header */}
-            <div className="flex items-center justify-between p-6 border-b border-gray-200">
+        <div className="flex items-center justify-between p-6 border-b border-gray-200">
           <div>
             <h2 className="text-xl font-bold text-gray-900 flex items-center">
               {mode === 'conversion' ? (
@@ -971,21 +1384,21 @@ if (response.details?.errores) {
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   <Hash className="h-4 w-4 inline mr-1" />
-                  Correlativo Venta
+                  Código de Venta
                 </label>
                 <div className="relative">
                   <input
                     type="text"
-                    value={mode === 'edit' 
-                      ? `#${formData.correlativo_asesor || 'N/A'}` 
-                      : loadingCorrelativos 
-                        ? 'Cargando...' 
-                        : proximosCorrelativos 
-                          ? `#${proximosCorrelativos.correlativo_asesor} (próximo)`
-                          : 'Se generará automáticamente'
+                    value={mode === 'edit'
+                      ? formData.codigo || `VTA-2025-${formData.correlativo_asesor || 'XXX'}`
+                      : loadingCorrelativos
+                        ? 'Generando código...'
+                        : proximosCorrelativos
+                          ? proximosCorrelativos.codigo_global
+                          : 'Se asignará automáticamente'
                     }
                     disabled={true}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-50 text-gray-700 font-bold text-center"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-50 text-gray-700 font-bold text-center text-lg"
                   />
                   <div className="absolute right-2 top-1/2 transform -translate-y-1/2">
                     {loadingCorrelativos ? (
@@ -995,28 +1408,7 @@ if (response.details?.errores) {
                     )}
                   </div>
                 </div>
-                
-                {mode === 'create' && proximosCorrelativos && (
-                  <div className="mt-2 p-3 bg-blue-50 rounded-lg border border-blue-200">
-                    <div className="flex items-center justify-between text-sm">
-                      <div className="flex items-center text-blue-800">
-                        <Hash className="h-4 w-4 mr-2" />
-                        <span className="font-medium">Próximos correlativos:</span>
-                      </div>
-                      <div className="text-xs text-blue-600">
-                        Año {new Date().getFullYear()}
-                      </div>
-                    </div>
-                    <div className="mt-1 space-y-1">
-                      <div className="text-sm text-blue-700">
-                        <span className="font-bold">Global:</span> {proximosCorrelativos.codigo_global}
-                      </div>
-                      <div className="text-sm text-blue-700">
-                        <span className="font-bold">Asesor:</span> #{proximosCorrelativos.correlativo_asesor} (tu numeración personal)
-                      </div>
-                    </div>
-                  </div>
-                )}
+
               </div>
 
               <div>
@@ -1028,7 +1420,7 @@ if (response.details?.errores) {
                   onChange={(e) => handleInputChange('tipo_venta', e.target.value)}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 >
-                  {tiposVenta.map(tipo => (
+                  {opcionesTipoVenta.map(tipo => (
                     <option key={tipo.value} value={tipo.value}>
                       {tipo.label} - {tipo.descripcion}
                     </option>
@@ -1036,7 +1428,7 @@ if (response.details?.errores) {
                 </select>
               </div>
 
-              <div>
+              <div style={{ display: 'none' }}>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Moneda
                 </label>
@@ -1052,44 +1444,40 @@ if (response.details?.errores) {
                   ))}
                 </select>
               </div>
-            </div>
 
-            {/* Estado Detallado */}
-            <div className="mt-4">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Estado Detallado *
-              </label>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Empresa de Depósito *
+                </label>
                 <select
-                  value={formData.estado_detallado}
-                  onChange={(e) => handleInputChange('estado_detallado', e.target.value)}
+                  value={formData.empresa_deposito}
+                  onChange={(e) => handleInputChange('empresa_deposito', e.target.value)}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 >
-                  {estadosDetallados.map(estado => (
-                    <option key={estado.value} value={estado.value}>
-                      {estado.icon} {estado.label}
+                  {empresasDeposito.map(empresa => (
+                    <option key={empresa.value} value={empresa.value}>
+                      {empresa.label} - {empresa.descripcion}
                     </option>
                   ))}
                 </select>
-                
-                <div className={`p-3 rounded-lg border ${(() => {
-                  const info = getEstadoDetalladoInfo(formData.estado_detallado);
-                  const colorMap = {
-                    blue: 'bg-blue-50 border-blue-200 text-blue-800',
-                    yellow: 'bg-yellow-50 border-yellow-200 text-yellow-800',
-                    orange: 'bg-orange-50 border-orange-200 text-orange-800',
-                    green: 'bg-green-50 border-green-200 text-green-800',
-                    red: 'bg-red-50 border-red-200 text-red-800',
-                    purple: 'bg-purple-50 border-purple-200 text-purple-800'
-                  };
-                  return colorMap[info.color] || colorMap.blue;
-                })()}`}>
-                  <div className="flex items-center text-sm font-medium">
-                    <span className="mr-2">{getEstadoDetalladoInfo(formData.estado_detallado).icon}</span>
-                    {getEstadoDetalladoInfo(formData.estado_detallado).descripcion}
-                  </div>
-                </div>
+                <p className="mt-1 text-xs text-gray-500">
+                  Selecciona la empresa donde el cliente realizará el depósito
+                </p>
               </div>
+            </div>
+
+            {/* Estado Detallado - Oculto pero funcional */}
+            <div style={{ display: 'none' }}>
+              <select
+                value={formData.estado_detallado}
+                onChange={(e) => handleInputChange('estado_detallado', e.target.value)}
+              >
+                {opcionesEstadosDetallados.map(estado => (
+                  <option key={estado.value} value={estado.value}>
+                    {estado.icon} {estado.label}
+                  </option>
+                ))}
+              </select>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
@@ -1180,6 +1568,72 @@ if (response.details?.errores) {
               </button>
             </div>
 
+            {/* 🚀 DOCUMENTO INTELIGENTE - NUEVA EXPERIENCIA */}
+            <div className="mb-4 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg">
+              <h4 className="text-sm font-medium text-blue-900 mb-3 flex items-center">
+                <Search className="h-4 w-4 mr-2" />
+                Documento del Cliente
+                <span className="ml-2 px-2 py-1 bg-blue-100 text-blue-800 text-xs font-medium rounded-full">
+                  🤖 Inteligente
+                </span>
+              </h4>
+
+              <DocumentoInteligente
+                value={formData.cliente_documento}
+                onChange={(data) => {
+                  // Actualizar formData con la información del documento
+                  handleInputChange('cliente_documento', data.documento);
+                  handleInputChange('tipo_documento', data.tipo_documento);
+                }}
+                onClienteEncontrado={(data) => {
+                  // Auto-llenar campos cuando encuentra un cliente
+                  const cliente = data.cliente;
+                  const tipoCliente = data.tipo_documento;
+
+                  handleInputChange('cliente_id', cliente.id);
+
+                  // ⚡ MANEJO DIFERENCIADO: RUC vs DNI
+                  if (tipoCliente === 'RUC' || cliente.tipo_cliente === 'empresa') {
+                    // EMPRESA: Solo razón social
+                    handleInputChange('nombre_cliente', cliente.razon_social || '');
+                    handleInputChange('apellido_cliente', '');
+                    handleInputChange('cliente_empresa', cliente.razon_social || '');
+                  } else {
+                    // PERSONA: Nombres y apellidos
+                    handleInputChange('nombre_cliente', cliente.nombres || '');
+                    handleInputChange('apellido_cliente', cliente.apellidos || '');
+                    handleInputChange('cliente_empresa', '');
+                  }
+
+                  handleInputChange('cliente_email', cliente.email || '');
+                  handleInputChange('cliente_telefono', cliente.telefono || '');
+
+                  // También llenar ubicación si está disponible
+                  if (cliente.departamento) handleInputChange('departamento', cliente.departamento);
+                  if (cliente.provincia) handleInputChange('ciudad', cliente.provincia);
+                  if (cliente.distrito) handleInputChange('distrito', cliente.distrito);
+
+                  // Mostrar notificación solo si es un cliente diferente al actual
+                  if (formData.cliente_id !== cliente.id) {
+                    const tipoTexto = tipoCliente === 'RUC' ? 'Empresa' : 'Cliente';
+                    setNotification({
+                      type: 'success',
+                      message: `${tipoTexto} ${cliente.nombre_completo || cliente.razon_social} cargado automáticamente`,
+                      id: Date.now()
+                    });
+                  }
+                }}
+                onClienteNoEncontrado={(data) => {
+                  // Limpiar campos cuando no encuentra cliente
+                  handleInputChange('cliente_id', null);
+
+                  // Mantener la información del documento para creación automática
+                }}
+                placeholder="DNI, RUC, Pasaporte o CE..."
+                className="w-full"
+              />
+            </div>
+
             {showClienteSearch && (
               <div className="mb-4 p-3 bg-gray-50 rounded-lg">
                 <div className="relative">
@@ -1218,10 +1672,22 @@ if (response.details?.errores) {
             )}
 
             {/* ✅ CAMPOS DE CLIENTE CORREGIDOS - SEPARAR NOMBRE Y APELLIDO */}
+            {/* ⚡ CAMPOS DINÁMICOS SEGÚN TIPO DE DOCUMENTO */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* CAMPO PRINCIPAL: Nombre o Razón Social */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Nombre del Cliente *
+                <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center">
+                  {formData.tipo_documento === 'RUC' ? (
+                    <>
+                      <Building className="h-4 w-4 mr-1 text-blue-600" />
+                      Razón Social *
+                    </>
+                  ) : (
+                    <>
+                      <User className="h-4 w-4 mr-1 text-green-600" />
+                      Nombre del Cliente *
+                    </>
+                  )}
                 </label>
                 <input
                   type="text"
@@ -1230,39 +1696,44 @@ if (response.details?.errores) {
                   className={`w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
                     errors.nombre_cliente ? 'border-red-300' : 'border-gray-300'
                   }`}
-                  placeholder="Nombre del cliente"
+                  placeholder={formData.tipo_documento === 'RUC' ? 'Ej: Empresa ABC S.A.C.' : 'Nombre del cliente'}
                 />
                 {errors.nombre_cliente && (
                   <p className="mt-1 text-sm text-red-600">{errors.nombre_cliente}</p>
                 )}
               </div>
 
-              {/* ✅ NUEVO CAMPO - Apellido */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Apellido del Cliente
-                </label>
-                <input
-                  type="text"
-                  value={formData.apellido_cliente}
-                  onChange={(e) => handleInputChange('apellido_cliente', e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder="Apellido del cliente"
-                />
-              </div>
+              {/* APELLIDO: Solo para personas */}
+              {formData.tipo_documento !== 'RUC' && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Apellido del Cliente
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.apellido_cliente}
+                    onChange={(e) => handleInputChange('apellido_cliente', e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    placeholder="Apellido del cliente"
+                  />
+                </div>
+              )}
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Empresa
-                </label>
-                <input
-                  type="text"
-                  value={formData.cliente_empresa}
-                  onChange={(e) => handleInputChange('cliente_empresa', e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder="Nombre de la empresa"
-                />
-              </div>
+              {/* EMPRESA: Solo cuando no es RUC */}
+              {formData.tipo_documento !== 'RUC' && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Empresa (Opcional)
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.cliente_empresa}
+                    onChange={(e) => handleInputChange('cliente_empresa', e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    placeholder="Nombre de la empresa donde trabaja"
+                  />
+                </div>
+              )}
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -1300,160 +1771,108 @@ if (response.details?.errores) {
                 )}
               </div>
 
-              {/* CAMPOS GEOGRÁFICOS */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  <MapPin className="h-4 w-4 inline mr-1" />
-                  Departamento
-                </label>
-                <input
-                  type="text"
-                  value={formData.departamento}
-                  onChange={(e) => handleInputChange('departamento', e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder="Ej: Lima, Arequipa, Cusco"
-                />
-              </div>
+              {/* SELECTOR DE UBICACIONES OFICIALES */}
+              <div className="md:col-span-3">
+                <div className="p-4 bg-gradient-to-r from-green-50 to-blue-50 rounded-lg border border-green-200">
+                  <div className="flex items-center mb-3">
+                    <MapPin className="h-5 w-5 text-green-600 mr-2" />
+                    <h4 className="text-lg font-semibold text-gray-900">Ubicación del Cliente</h4>
+                    <span className="ml-2 px-2 py-1 bg-green-100 text-green-800 text-xs font-medium rounded-full">
+                      
+                    </span>
+                  </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  <MapPin className="h-4 w-4 inline mr-1" />
-                  Ciudad
-                </label>
-                <input
-                  type="text"
-                  value={formData.ciudad}
-                  onChange={(e) => handleInputChange('ciudad', e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder="Ej: Lima, Arequipa, Cusco"
-                />
-              </div>
-
-              <div className="md:col-span-2">
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  <MapPin className="h-4 w-4 inline mr-1" />
-                  Distrito
-                </label>
-                <input
-                  type="text"
-                  value={formData.distrito}
-                  onChange={(e) => handleInputChange('distrito', e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder="Ej: Miraflores, San Isidro, Surco"
-                />
+                  <UbicacionesSelector
+                    value={{
+                      departamento: formData.departamento,
+                      provincia: formData.ciudad, // En tu BD ciudad guarda la provincia
+                      distrito: formData.distrito
+                    }}
+                    onChange={(ubicacion) => {
+                      // Actualizar los campos del formulario
+                      handleInputChange('departamento', ubicacion.departamento);
+                      handleInputChange('ciudad', ubicacion.provincia); // Tu BD usa 'ciudad' para provincia
+                      handleInputChange('distrito', ubicacion.distrito);
+                    }}
+                    required={false}
+                    showDistrito={true}
+                    size="default"
+                    placeholder={{
+                      departamento: 'Selecciona departamento',
+                      provincia: 'Selecciona provincia',
+                      distrito: 'Selecciona distrito (opcional)'
+                    }}
+                  />
+                </div>
               </div>
             </div>
 
-            {/* ✅ AGREGADO - Canal de Contacto */}
+            {/* ✅ MEJORADO - Canal de Contacto con tooltips y colores */}
             <div className="mt-6">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label className="block text-sm font-medium text-gray-700 mb-3">
                 Canal de Contacto *
+                <span className="text-xs text-gray-500 ml-2">(¿Cómo te contactó el cliente?)</span>
               </label>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                {canalesPredefinidos.map((canal) => (
-                  <button
-                    key={canal.codigo}
-                    type="button"
-                    onClick={() => handleInputChange('canal_contacto', canal.codigo)}
-                    className={`p-3 border-2 rounded-lg text-sm font-medium transition-all ${
-                      formData.canal_contacto === canal.codigo
-                        ? 'border-blue-500 bg-blue-50 text-blue-700'
-                        : 'border-gray-200 hover:border-gray-300'
-                    }`}
-                  >
-                    <div className="text-center">
-                      <div className="text-lg mb-1">{canal.icono}</div>
-                      <div>{canal.nombre}</div>
-                    </div>
-                  </button>
-                ))}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                {canalesPredefinidos.map((canal) => {
+                  const isSelected = formData.canal_contacto === canal.codigo;
+                  const colorClasses = {
+                    green: isSelected ? 'border-green-500 bg-green-50 text-green-700' : 'border-gray-200 hover:border-green-300 hover:bg-green-25',
+                    blue: isSelected ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-gray-200 hover:border-blue-300 hover:bg-blue-25',
+                    pink: isSelected ? 'border-pink-500 bg-pink-50 text-pink-700' : 'border-gray-200 hover:border-pink-300 hover:bg-pink-25',
+                    yellow: isSelected ? 'border-yellow-500 bg-yellow-50 text-yellow-700' : 'border-gray-200 hover:border-yellow-300 hover:bg-yellow-25',
+                    purple: isSelected ? 'border-purple-500 bg-purple-50 text-purple-700' : 'border-gray-200 hover:border-purple-300 hover:bg-purple-25',
+                    gray: isSelected ? 'border-gray-500 bg-gray-50 text-gray-700' : 'border-gray-200 hover:border-gray-300 hover:bg-gray-25'
+                  };
+
+                  return (
+                    <button
+                      key={canal.codigo}
+                      type="button"
+                      onClick={() => handleInputChange('canal_contacto', canal.codigo)}
+                      title={canal.tooltip}
+                      className={`p-3 border-2 rounded-lg text-sm font-medium transition-all duration-200 ${
+                        colorClasses[canal.color]
+                      } ${isSelected ? 'ring-2 ring-offset-2 ring-blue-500' : ''}`}
+                    >
+                      <div className="text-center">
+                        <div className="text-xl mb-1">{canal.icono}</div>
+                        <div className="text-xs">{canal.nombre}</div>
+                      </div>
+                    </button>
+                  );
+                })}
               </div>
               {errors.canal_contacto && (
-                <p className="mt-1 text-sm text-red-600">{errors.canal_contacto}</p>
+                <p className="mt-2 text-sm text-red-600 flex items-center">
+                  <AlertCircle className="h-4 w-4 mr-1" />
+                  {errors.canal_contacto}
+                </p>
               )}
             </div>
           </div>
 
-          {/* SECCIÓN DE PRODUCTOS */}
-          <div className="border border-gray-200 rounded-lg p-4">
-            <div className="flex items-center justify-between mb-4">
+          {/* ⚡ SECCIÓN DE PRODUCTOS OPTIMIZADA */}
+          <div className="border border-gray-200 rounded-lg p-6 bg-white shadow-sm">
+            <div className="flex items-center justify-between mb-6">
               <h3 className="text-lg font-semibold text-gray-900 flex items-center">
-                <ShoppingCart className="h-5 w-5 mr-2" />
+                <ShoppingCart className="h-5 w-5 mr-2 text-blue-600" />
                 Productos de la Venta
               </h3>
+              <span className="text-sm text-gray-500 bg-gray-100 px-3 py-1 rounded-full">
+                {formData.productos.length} {formData.productos.length === 1 ? 'producto' : 'productos'}
+              </span>
             </div>
 
-            {/* Buscador de productos */}
-            <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Buscar Producto por Código o Descripción
-              </label>
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-                <input
-                  type="text"
-                  placeholder="Escribe código o descripción del producto..."
-                  value={busquedaProducto}
-                  onChange={(e) => setBusquedaProducto(e.target.value)}
-                  onFocus={() => setShowProductosDropdown(productosEncontrados.length > 0)}
-                  className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 shadow-sm"
-                />
-                {loadingProductos && (
-                  <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-500"></div>
-                  </div>
-                )}
-              </div>
-
-              {/* Dropdown de productos encontrados */}
-              {showProductosDropdown && productosEncontrados.length > 0 && (
-                <div className="relative z-10 mt-1">
-                  <div className="absolute w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-64 overflow-y-auto">
-                    <div className="py-1">
-                      {productosEncontrados.map((producto) => (
-                        <button
-                          key={producto.id}
-                          type="button"
-                          onClick={() => seleccionarProducto(producto)}
-                          className="w-full text-left px-4 py-3 hover:bg-blue-50 transition-colors border-b border-gray-100 last:border-b-0 group"
-                        >
-                          <div className="flex items-start justify-between">
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center mb-1">
-                                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800 mr-2">
-                                  {producto.codigo}
-                                </span>
-                                {producto.categoria && (
-                                  <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-800">
-                                    <Tag className="h-3 w-3 mr-1" />
-                                    {producto.categoria}
-                                  </span>
-                                )}
-                              </div>
-                              <div className="text-sm font-medium text-gray-900 truncate mb-1">
-                                {producto.descripcion}
-                              </div>
-                              <div className="text-xs text-gray-500 flex items-center">
-                                <Building className="h-3 w-3 mr-1" />
-                                <span className="mr-3">{producto.marca}</span>
-                                <Package className="h-3 w-3 mr-1" />
-                                <span>{producto.unidad}</span>
-                              </div>
-                            </div>
-                            <div className="flex-shrink-0 ml-4 text-right">
-                              <div className="text-lg font-bold text-green-600">
-                                ${parseFloat(producto.precio_base || 0).toFixed(2)}
-                              </div>
-                              <div className="text-xs text-gray-500">por {producto.unidad}</div>
-                            </div>
-                          </div>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
+            {/* Buscador optimizado con componente memoizado */}
+            <BuscadorProductos
+              busqueda={busquedaProducto}
+              onBusquedaChange={handleBusquedaProductoChange}
+              productos={productosEncontrados}
+              onAgregar={seleccionarProducto}
+              loading={loadingProductos}
+              showDropdown={showProductosDropdown}
+            />
 
             {/* Lista de productos agregados */}
             {formData.productos.length === 0 ? (
@@ -1474,73 +1893,12 @@ if (response.details?.errores) {
                 </div>
                 
                 {formData.productos.map((producto) => (
-                  <div key={producto.id} className="grid grid-cols-12 gap-3 items-center border border-gray-200 p-4 rounded-lg bg-white shadow-sm">
-                    <div className="col-span-3">
-                      <div className="flex items-start">
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center mb-1">
-                            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800 mr-2">
-                              {producto.codigo}
-                            </span>
-                            {producto.categoria && (
-                              <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-800">
-                                {producto.categoria}
-                              </span>
-                            )}
-                          </div>
-                          <div className="font-medium text-gray-900 truncate text-sm mb-1">
-                            {producto.nombre}
-                          </div>
-                          <div className="text-xs text-gray-500 flex items-center">
-                            <Building className="h-3 w-3 mr-1" />
-                            <span className="mr-2">{producto.marca}</span>
-                            <Package className="h-3 w-3 mr-1" />
-                            <span>{producto.unidad}</span>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                    <div className="col-span-2">
-                      <input
-                        type="number"
-                        min="0.01"
-                        step="0.01"
-                        value={producto.cantidad}
-                        onChange={(e) => actualizarProducto(producto.id, 'cantidad', e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-center focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      />
-                    </div>
-                    <div className="col-span-2">
-                      <input
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        value={producto.precio_unitario}
-                        onChange={(e) => actualizarProducto(producto.id, 'precio_unitario', e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-right focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      />
-                    </div>
-                    <div className="col-span-2">
-                      <div className="text-right font-medium text-gray-900">
-                        ${parseFloat(producto.subtotal || 0).toFixed(2)}
-                      </div>
-                    </div>
-                    <div className="col-span-2">
-                      <div className="text-right font-bold text-green-600">
-                        ${parseFloat(producto.total_linea || 0).toFixed(2)}
-                      </div>
-                    </div>
-                    <div className="col-span-1">
-                      <button
-                        type="button"
-                        onClick={() => eliminarProducto(producto.id)}
-                        className="p-2 text-red-600 hover:bg-red-50 rounded-full transition-colors"
-                        title="Eliminar producto"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
-                    </div>
-                  </div>
+                  <ProductoItem
+                    key={producto.id}
+                    producto={producto}
+                    onActualizar={actualizarProducto}
+                    onEliminar={eliminarProducto}
+                  />
                 ))}
               </div>
             )}
@@ -1657,7 +2015,7 @@ if (response.details?.errores) {
                 </div>
                 
                 <div className="mt-4 text-xs text-gray-500">
-                  Moneda: {formData.moneda}
+                  Moneda: USD
                 </div>
               </div>
             </div>

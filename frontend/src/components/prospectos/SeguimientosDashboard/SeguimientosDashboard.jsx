@@ -1,19 +1,21 @@
 // src/components/prospectos/SeguimientosDashboard/SeguimientosDashboard.jsx
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { 
-  Clock, AlertTriangle, Calendar, Phone, Mail, MessageSquare, 
-  MapPin, CheckCircle, XCircle, RefreshCw, User, Bell, Settings, 
+import {
+  Clock, AlertTriangle, Calendar, Phone, Mail, MessageSquare,
+  MapPin, CheckCircle, XCircle, RefreshCw, User, Bell, Settings,
   TrendingUp, Eye, ExternalLink, Loader2, ChevronDown, ChevronUp,
-  Zap, Filter, BarChart3, Target
+  Zap, Filter, BarChart3, Target, Star, DollarSign, Users,
+  Flame, ShieldAlert, Award, Activity
 } from 'lucide-react';
 import prospectosService from '../../../services/prospectosService';
 
 const SeguimientosDashboard = ({ asesorId = null, refreshTrigger = 0 }) => {
-  const [seguimientos, setSeguimientos] = useState({
-    pendientes: [],
-    vencidos: [],
-    completados_hoy: [],
-    stats: {}
+  const [dashboardData, setDashboardData] = useState({
+    seguimientos: { proximos: [], vencidos: [], hoy: [] },
+    conteos: {},
+    metricas: {},
+    alertas: {},
+    sistema: {}
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);

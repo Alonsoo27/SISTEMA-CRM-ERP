@@ -1070,6 +1070,44 @@ class SoporteController {
             });
         }
     }
+
+    /**
+     * Obtener técnicos disponibles
+     * GET /api/soporte/tecnicos
+     */
+    static async obtenerTecnicos(req, res) {
+        try {
+            const { query } = require('../../../config/database');
+
+            const sql = `
+                SELECT u.id, u.nombre, u.apellido, u.email, u.activo,
+                       r.nombre as rol_nombre,
+                       CONCAT(u.nombre, ' ', u.apellido) as nombre_completo
+                FROM usuarios u
+                JOIN roles r ON u.rol_id = r.id
+                WHERE u.activo = true
+                  AND (r.nombre ILIKE '%tecnico%' OR r.nombre ILIKE '%soporte%' OR r.nombre = 'Técnico')
+                ORDER BY u.nombre, u.apellido
+            `;
+
+            const result = await query(sql, []);
+
+            res.json({
+                success: true,
+                message: 'Técnicos obtenidos exitosamente',
+                data: result.rows || []
+            });
+
+        } catch (error) {
+            console.error('Error en obtenerTecnicos:', error);
+            res.status(500).json({
+                success: false,
+                message: 'Error interno del servidor al obtener técnicos',
+                error: error.message,
+                data: []
+            });
+        }
+    }
 }
 
 module.exports = SoporteController;

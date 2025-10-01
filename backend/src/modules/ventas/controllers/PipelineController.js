@@ -10,28 +10,49 @@ const obtenerFechasPorPeriodo = (periodo) => {
   const hoy = new Date();
   let desde, hasta;
 
-  switch (periodo) {
-    case 'hoy':
-      desde = hasta = hoy.toISOString().split('T')[0];
-      break;
-    case 'semana_actual':
-      const inicioSemana = new Date(hoy.setDate(hoy.getDate() - hoy.getDay()));
-      desde = inicioSemana.toISOString().split('T')[0];
-      hasta = new Date().toISOString().split('T')[0];
-      break;
-    case 'mes_actual':
-      desde = new Date(hoy.getFullYear(), hoy.getMonth(), 1).toISOString().split('T')[0];
-      hasta = new Date().toISOString().split('T')[0];
-      break;
-    case 'trimestre_actual':
-      const mesActual = new Date().getMonth();
-      const trimestreInicio = Math.floor(mesActual / 3) * 3;
-      desde = new Date(new Date().getFullYear(), trimestreInicio, 1).toISOString().split('T')[0];
-      hasta = new Date().toISOString().split('T')[0];
-      break;
-    default:
-      desde = new Date(hoy.getFullYear(), hoy.getMonth(), 1).toISOString().split('T')[0];
-      hasta = new Date().toISOString().split('T')[0];
+  // Manejar períodos específicos (mes_2025-09, trimestre_2025-Q3, año_2025)
+  if (periodo.startsWith('mes_') && periodo.includes('-')) {
+    const [year, month] = periodo.replace('mes_', '').split('-');
+    desde = new Date(parseInt(year), parseInt(month) - 1, 1).toISOString().split('T')[0];
+    hasta = new Date(parseInt(year), parseInt(month), 0).toISOString().split('T')[0];
+  } else if (periodo.startsWith('trimestre_') && periodo.includes('-Q')) {
+    const [year, quarter] = periodo.replace('trimestre_', '').split('-Q');
+    const mesInicio = (parseInt(quarter) - 1) * 3;
+    desde = new Date(parseInt(year), mesInicio, 1).toISOString().split('T')[0];
+    hasta = new Date(parseInt(year), mesInicio + 3, 0).toISOString().split('T')[0];
+  } else if (periodo.startsWith('año_') && /^\d{4}$/.test(periodo.replace('año_', ''))) {
+    const year = periodo.replace('año_', '');
+    desde = new Date(parseInt(year), 0, 1).toISOString().split('T')[0];
+    hasta = new Date(parseInt(year), 11, 31).toISOString().split('T')[0];
+  } else {
+    // Períodos predeterminados
+    switch (periodo) {
+      case 'hoy':
+        desde = hasta = hoy.toISOString().split('T')[0];
+        break;
+      case 'semana_actual':
+        const inicioSemana = new Date(hoy.setDate(hoy.getDate() - hoy.getDay()));
+        desde = inicioSemana.toISOString().split('T')[0];
+        hasta = new Date().toISOString().split('T')[0];
+        break;
+      case 'mes_actual':
+        desde = new Date(hoy.getFullYear(), hoy.getMonth(), 1).toISOString().split('T')[0];
+        hasta = new Date().toISOString().split('T')[0];
+        break;
+      case 'trimestre_actual':
+        const mesActual = new Date().getMonth();
+        const trimestreInicio = Math.floor(mesActual / 3) * 3;
+        desde = new Date(new Date().getFullYear(), trimestreInicio, 1).toISOString().split('T')[0];
+        hasta = new Date().toISOString().split('T')[0];
+        break;
+      case 'año_actual':
+        desde = new Date(new Date().getFullYear(), 0, 1).toISOString().split('T')[0];
+        hasta = new Date().toISOString().split('T')[0];
+        break;
+      default:
+        desde = new Date(hoy.getFullYear(), hoy.getMonth(), 1).toISOString().split('T')[0];
+        hasta = new Date().toISOString().split('T')[0];
+    }
   }
 
   return { desde, hasta };
@@ -67,6 +88,15 @@ const dashboardPipeline = async (req, res) => {
         -- Pipeline value usando campos reales
         SUM(valor_estimado) FILTER (WHERE estado IN ('Prospecto', 'Cotizado', 'Negociacion')) as valor_pipeline_activo,
         AVG(valor_estimado) FILTER (WHERE estado = 'Cerrado') as ticket_promedio,
+
+        -- Ingresos totales desde tabla ventas
+        (
+          SELECT COALESCE(SUM(v.valor_final), 0)
+          FROM ventas v
+          WHERE v.activo = true
+            AND v.fecha_venta::date BETWEEN $1 AND $2
+            ${asesor_id ? 'AND v.asesor_id = $3' : ''}
+        ) as ingresos_totales,
         
         -- Seguimientos críticos
         COUNT(*) FILTER (WHERE seguimiento_vencido = true) as seguimientos_vencidos,
@@ -88,7 +118,7 @@ const dashboardPipeline = async (req, res) => {
 
     // Query 2: Distribución por etapas con valores
     const distribucionQuery = `
-      SELECT 
+      SELECT
         estado,
         COUNT(*) as cantidad,
         SUM(valor_estimado) as valor_total,
@@ -138,20 +168,20 @@ const dashboardPipeline = async (req, res) => {
     // Query 4: Análisis de productos más demandados
     const productosQuery = `
       SELECT 
-        producto,
+        empresa as producto,
         COUNT(*) as frecuencia,
-        AVG(valor_estimado) as valor_promedio,
+        AVG(valor_estimado / 3.7) as valor_promedio,
         COUNT(*) FILTER (WHERE convertido_venta = true) as conversiones_logradas,
         ROUND(
           COUNT(*) FILTER (WHERE convertido_venta = true)::decimal / 
           NULLIF(COUNT(*), 0) * 100, 2
         ) as tasa_conversion_producto
-      FROM prospectos,
-        unnest(productos_interes) as producto
+      FROM prospectos
       WHERE activo = true
         AND fecha_contacto::date BETWEEN $1 AND $2
         ${asesor_id ? 'AND asesor_id = $3' : ''}
-      GROUP BY producto
+        AND empresa IS NOT NULL AND empresa != ''
+      GROUP BY empresa
       HAVING COUNT(*) >= 2  -- Solo productos con mínimo 2 intereses
       ORDER BY tasa_conversion_producto DESC, frecuencia DESC
       LIMIT 10
@@ -349,7 +379,6 @@ const seguimientosCriticos = async (req, res) => {
           ELSE 'BAJA'
         END as prioridad,
         
-        productos_interes,
         fecha_contacto,
         observaciones
         
@@ -525,7 +554,7 @@ const healthCheck = (req, res) => {
     optimizaciones: [
       'Queries específicos para tabla prospectos',
       'Cálculos basados en probabilidad_cierre',
-      'Análisis de productos_interes array',
+      'Información de seguimientos',
       'Priorización empresarial por valor'
     ],
     timestamp: new Date().toISOString()

@@ -61,151 +61,114 @@ const PipelineMetrics = ({ asesorId = null, refreshTrigger = 0 }) => {
     return null;
   }
 
+  // 📊 Tarjetas principales OPTIMIZADAS - Diseño más compacto
   const tarjetas = [
     {
       titulo: 'Total Prospectos',
       valor: metricas.total_prospectos || 0,
       icono: Users,
       color: 'blue',
-      descripcion: `${metricas.prospectos_activos || 0} activos`
-    },
-    {
-      titulo: 'Tasa Conversión',
-      valor: metricas.tasa_conversion || '0.00%',
-      icono: TrendingUp,
-      color: 'green',
-      descripcion: `${metricas.cerrados || 0} cerrados`
+      extra: `${metricas.prospectos_activos || 0} activos`,
+      badge: metricas.seguimientos_pendientes > 0 ? metricas.seguimientos_pendientes : null,
+      badgeLabel: 'pendientes'
     },
     {
       titulo: 'En Negociación',
       valor: metricas.en_negociacion || 0,
       icono: Target,
-      color: 'yellow',
-      descripcion: 'Próximos a cerrar'
+      color: 'orange',
+      extra: 'Próximos a cerrar'
     },
     {
-      titulo: 'Valor Pipeline',
-      valor: metricas.valor_total_pipeline ? `$${(metricas.valor_total_pipeline).toLocaleString()}` : '$0',
-      icono: DollarSign,
-      color: 'purple',
-      descripcion: `Valor promedio: $${metricas.valor_promedio || 0}`
+      titulo: 'Tasa Conversión',
+      valor: metricas.tasa_conversion || '0%',
+      icono: TrendingUp,
+      color: 'green',
+      extra: `${metricas.cerrados || 0} cerrados`
+    },
+    {
+      titulo: 'Seguimientos',
+      valor: metricas.seguimientos_pendientes || 0,
+      icono: Clock,
+      color: 'red',
+      extra: 'Requieren atención',
+      urgent: (metricas.seguimientos_pendientes || 0) > 0
     }
   ];
 
   const colores = {
     blue: 'bg-blue-500 text-blue-600 bg-blue-50',
     green: 'bg-green-500 text-green-600 bg-green-50',
-    yellow: 'bg-yellow-500 text-yellow-600 bg-yellow-50',
-    purple: 'bg-purple-500 text-purple-600 bg-purple-50'
+    orange: 'bg-orange-500 text-orange-600 bg-orange-50',
+    red: 'bg-red-500 text-red-600 bg-red-50'
   };
 
   return (
-    <div className="space-y-6">
-      {/* Tarjetas principales */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        {tarjetas.map((tarjeta, index) => {
-          const IconComponent = tarjeta.icono;
-          const [bgColor, textColor, bgLight] = colores[tarjeta.color].split(' ');
-          
-          return (
-            <div key={index} className="bg-white rounded-lg shadow hover:shadow-lg transition-shadow p-6">
-              <div className="flex items-center">
-                <div className={`p-3 rounded-lg ${bgLight}`}>
-                  <IconComponent className={`h-6 w-6 ${textColor}`} />
-                </div>
-                <div className="ml-4">
-                  <p className="text-sm font-medium text-gray-600">{tarjeta.titulo}</p>
-                  <p className="text-2xl font-bold text-gray-900">{tarjeta.valor}</p>
-                </div>
-              </div>
-              <div className="mt-4">
-                <p className="text-sm text-gray-500">{tarjeta.descripcion}</p>
-              </div>
-            </div>
-          );
-        })}
-      </div>
+    // 🚀 DISEÑO ULTRA MINIMALISTA - UNA SOLA BARRA COMPACTA
+    <div className="bg-white rounded border shadow-sm p-2 mb-4">
+      <div className="flex items-center justify-between text-xs">
 
-      {/* Métricas por estado */}
-      <div className="bg-white rounded-lg shadow p-6">
-        <div className="flex items-center mb-4">
-          <BarChart3 className="h-5 w-5 text-gray-400 mr-2" />
-          <h3 className="text-lg font-medium text-gray-900">Distribución por Estado</h3>
-        </div>
-        
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-          {metricas.por_estado && Object.entries(metricas.por_estado).map(([estado, cantidad]) => {
-            const coloresEstado = {
-              'Prospecto': 'bg-blue-100 text-blue-800',
-              'Cotizado': 'bg-yellow-100 text-yellow-800',
-              'Negociacion': 'bg-orange-100 text-orange-800',
-              'Cerrado': 'bg-green-100 text-green-800',
-              'Perdido': 'bg-red-100 text-red-800'
-            };
+        {/* 📊 MÉTRICAS PRINCIPALES EN LÍNEA */}
+        <div className="flex items-center space-x-4">
+          {tarjetas.map((tarjeta, index) => {
+            const IconComponent = tarjeta.icono;
+            const [bgColor, textColor, bgLight] = colores[tarjeta.color].split(' ');
 
             return (
-              <div key={estado} className="text-center">
-                <div className={`inline-flex px-3 py-1 rounded-full text-sm font-medium ${coloresEstado[estado] || 'bg-gray-100 text-gray-800'}`}>
-                  {cantidad}
-                </div>
-                <p className="text-xs text-gray-600 mt-1">{estado}</p>
+              <div key={index} className={`flex items-center space-x-1 ${tarjeta.urgent ? 'text-red-600' : ''}`}>
+                <IconComponent className={`h-3 w-3 ${textColor} flex-shrink-0`} />
+                <span className="font-bold text-sm">{tarjeta.valor}</span>
+                {tarjeta.badge && (
+                  <span className="bg-red-500 text-white text-xs font-bold rounded-full w-4 h-4 flex items-center justify-center leading-none ml-1">
+                    {tarjeta.badge}
+                  </span>
+                )}
               </div>
             );
           })}
         </div>
+
+        {/* 📈 ESTADOS COMPACTOS */}
+        <div className="flex items-center space-x-2">
+          {metricas.por_estado && Object.entries(metricas.por_estado).map(([estado, cantidad]) => {
+            if (cantidad === 0) return null;
+
+            const colores = {
+              'Prospecto': 'text-blue-600',
+              'Cotizado': 'text-yellow-600',
+              'Negociacion': 'text-orange-600',
+              'Cerrado': 'text-green-600',
+              'Perdido': 'text-red-600'
+            };
+
+            const emoji = {
+              'Prospecto': '👤',
+              'Cotizado': '📋',
+              'Negociacion': '🤝',
+              'Cerrado': '✅',
+              'Perdido': '❌'
+            };
+
+            return (
+              <span key={estado} className={`${colores[estado]} font-medium text-xs flex items-center`}>
+                {emoji[estado]}{cantidad}
+              </span>
+            );
+          })}
+
+          {/* 💰 VALORES ULTRA COMPACTOS */}
+          {(metricas.valor_total_pipeline > 0 || metricas.valor_ventas_cerradas > 0) && (
+            <>
+              <span className="text-green-600 font-medium text-xs">
+                📈{(metricas.valor_total_pipeline / 1000).toFixed(0)}k
+              </span>
+              <span className="text-blue-600 font-medium text-xs">
+                💰{(metricas.valor_ventas_cerradas / 1000).toFixed(0)}k
+              </span>
+            </>
+          )}
+        </div>
       </div>
-
-      {/* Métricas adicionales */}
-      {metricas.tiempo_promedio_cierre && (
-        <div className="bg-white rounded-lg shadow p-6">
-          <div className="flex items-center mb-4">
-            <Clock className="h-5 w-5 text-gray-400 mr-2" />
-            <h3 className="text-lg font-medium text-gray-900">Métricas de Tiempo</h3>
-          </div>
-          
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="text-center">
-              <p className="text-2xl font-bold text-gray-900">{metricas.tiempo_promedio_cierre}</p>
-              <p className="text-sm text-gray-600">Tiempo promedio de cierre</p>
-            </div>
-            <div className="text-center">
-              <p className="text-2xl font-bold text-gray-900">{metricas.seguimientos_pendientes || 0}</p>
-              <p className="text-sm text-gray-600">Seguimientos pendientes</p>
-            </div>
-            <div className="text-center">
-              <p className="text-2xl font-bold text-gray-900">{metricas.reasignaciones_mes || 0}</p>
-              <p className="text-sm text-gray-600">Reasignaciones este mes</p>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Información del asesor (si aplica) */}
-      {asesorId && metricas.asesor_info && (
-        <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg p-6">
-          <h3 className="text-lg font-medium text-gray-900 mb-2">
-            Rendimiento de {metricas.asesor_info.nombre}
-          </h3>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
-            <div>
-              <p className="text-xl font-bold text-blue-600">{metricas.asesor_info.prospectos_asignados || 0}</p>
-              <p className="text-sm text-gray-600">Asignados</p>
-            </div>
-            <div>
-              <p className="text-xl font-bold text-green-600">{metricas.asesor_info.ventas_cerradas || 0}</p>
-              <p className="text-sm text-gray-600">Cerradas</p>
-            </div>
-            <div>
-              <p className="text-xl font-bold text-yellow-600">{metricas.asesor_info.tasa_conversion || '0%'}</p>
-              <p className="text-sm text-gray-600">Conversión</p>
-            </div>
-            <div>
-              <p className="text-xl font-bold text-purple-600">${metricas.asesor_info.valor_generado || 0}</p>
-              <p className="text-sm text-gray-600">Valor generado</p>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

@@ -317,6 +317,10 @@ class ProductosService {
       errores.push('La unidad de medida es obligatoria');
     }
 
+    if (!datosProducto.linea_producto?.trim()) {
+      errores.push('La línea de producto es obligatoria');
+    }
+
     return {
       valido: errores.length === 0,
       errores
@@ -387,6 +391,30 @@ class ProductosService {
       porcentajeDescuento: Math.round((1 - factorDescuento) * 100),
       subtotal: precio * factorDescuento * cant
     };
+  }
+
+  // Dashboard de productos
+  async obtenerDashboard(filtros = {}) {
+    try {
+      const params = new URLSearchParams();
+
+      if (filtros.periodo) params.append('periodo', filtros.periodo);
+      if (filtros.linea_producto) params.append('linea_producto', filtros.linea_producto);
+
+      const response = await this.apiClient.get(`/productos/dashboard?${params.toString()}`);
+
+      return {
+        success: true,
+        data: response.data.data
+      };
+
+    } catch (error) {
+      return {
+        success: false,
+        error: error.response?.data?.error || 'Error obteniendo dashboard',
+        details: error.response?.data
+      };
+    }
   }
 
   // Test de conectividad

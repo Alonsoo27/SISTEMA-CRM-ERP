@@ -10,10 +10,10 @@ import {
 import almacenService from '../services/almacenService';
 
 // Lazy loading de componentes pesados
-const InventarioList = React.lazy(() => import('../components/almacen/inventario/InventarioList'));
+const InventarioModerno = React.lazy(() => import('../components/almacen/InventarioModerno'));
 const MovimientosList = React.lazy(() => import('../components/almacen/movimientos/MovimientosList'));
 const DespachosList = React.lazy(() => import('../components/almacen/despachos/DespachosList'));
-const UploadStock = React.lazy(() => import('../components/almacen/upload/UploadStock'));
+const UploadMasivePage = React.lazy(() => import('../components/almacen/UploadMasivePage'));
 const AnalisisInventario = React.lazy(() => import('../components/almacen/AnalisisInventario'));
 const ReportesAvanzados = React.lazy(() => import('../components/almacen/ReportesAvanzados'));
 
@@ -202,7 +202,7 @@ const AlmacenPage = () => {
         icono: Upload,
         descripcion: 'Carga masiva de inventario desde Excel',
         tieneRefreshAuto: false,
-        requierePermisos: ['JEFE_ALMACEN', 'GERENTE', 'SUPER_ADMIN']
+        requierePermisos: ['SUPER_ADMIN']
       }
     ];
 
@@ -352,91 +352,265 @@ const AlmacenPage = () => {
       <div className="space-y-6">
         {/* Métricas principales */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          <div className="bg-white p-6 rounded-lg shadow border border-gray-200">
-            <div className="flex items-center">
-              <div className="flex-shrink-0">
-                <Package className="h-8 w-8 text-blue-600" />
+          <div className="bg-gradient-to-br from-green-50 to-emerald-100 p-6 rounded-xl shadow-lg border border-green-200 hover:shadow-xl transition-all duration-300">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center">
+                <div className="flex-shrink-0 p-3 bg-green-500 rounded-full">
+                  <Package className="h-8 w-8 text-white" />
+                </div>
+                <div className="ml-4">
+                  <p className="text-sm font-medium text-green-800">Disponibilidad Stock</p>
+                  <p className="text-3xl font-bold text-green-900">
+                    {almacenService.formatearCantidad(metricas.productos_con_stock)}
+                  </p>
+                  <p className="text-sm text-green-600">
+                    {Math.round(((metricas.productos_con_stock || 0) / Math.max(1, (metricas.productos_con_stock || 0) + (metricas.productos_agotados || 0))) * 100)}% disponible
+                  </p>
+                </div>
               </div>
-              <div className="ml-4">
-                <p className="text-sm font-medium text-gray-500">Total Productos</p>
-                <p className="text-2xl font-bold text-gray-900">
-                  {almacenService.formatearCantidad(metricas.total_productos)}
-                </p>
+              <div className="text-right">
+                <div className="w-20 h-20 relative">
+                  <svg className="w-20 h-20 transform -rotate-90" viewBox="0 0 36 36">
+                    <path d="M18 2.0845
+                      a 15.9155 15.9155 0 0 1 0 31.831
+                      a 15.9155 15.9155 0 0 1 0 -31.831"
+                      fill="none" stroke="#E5E7EB" strokeWidth="3" />
+                    <path d="M18 2.0845
+                      a 15.9155 15.9155 0 0 1 0 31.831
+                      a 15.9155 15.9155 0 0 1 0 -31.831"
+                      fill="none" stroke="#10B981" strokeWidth="3"
+                      strokeDasharray={`${Math.round(((metricas.productos_con_stock || 0) / Math.max(1, (metricas.productos_con_stock || 0) + (metricas.productos_agotados || 0))) * 100)}, 100`} />
+                  </svg>
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <span className="text-xs font-bold text-green-700">
+                      {Math.round(((metricas.productos_con_stock || 0) / Math.max(1, (metricas.productos_con_stock || 0) + (metricas.productos_agotados || 0))) * 100)}%
+                    </span>
+                  </div>
+                </div>
+                <p className="text-xs text-red-500 mt-1">{metricas.productos_agotados || 0} agotados</p>
               </div>
             </div>
           </div>
 
-          <div className="bg-white p-6 rounded-lg shadow border border-gray-200">
-            <div className="flex items-center">
-              <div className="flex-shrink-0">
-                <Warehouse className="h-8 w-8 text-green-600" />
+          <div className={`bg-gradient-to-br p-6 rounded-xl shadow-lg border hover:shadow-xl transition-all duration-300 ${
+            (metricas.productos_stock_bajo || 0) > 50 ? 'from-red-50 to-red-100 border-red-200' :
+            (metricas.productos_stock_bajo || 0) > 20 ? 'from-yellow-50 to-orange-100 border-yellow-200' :
+            'from-green-50 to-green-100 border-green-200'
+          }`}>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center">
+                <div className={`flex-shrink-0 p-3 rounded-full ${
+                  (metricas.productos_stock_bajo || 0) > 50 ? 'bg-red-500' :
+                  (metricas.productos_stock_bajo || 0) > 20 ? 'bg-yellow-500' : 'bg-green-500'
+                }`}>
+                  <AlertTriangle className="h-8 w-8 text-white" />
+                </div>
+                <div className="ml-4">
+                  <p className={`text-sm font-medium ${
+                    (metricas.productos_stock_bajo || 0) > 50 ? 'text-red-800' :
+                    (metricas.productos_stock_bajo || 0) > 20 ? 'text-yellow-800' : 'text-green-800'
+                  }`}>Stock Crítico</p>
+                  <p className={`text-3xl font-bold ${
+                    (metricas.productos_stock_bajo || 0) > 50 ? 'text-red-900' :
+                    (metricas.productos_stock_bajo || 0) > 20 ? 'text-yellow-900' : 'text-green-900'
+                  }`}>{metricas.productos_stock_bajo || 0}</p>
+                  <p className={`text-sm ${
+                    (metricas.productos_stock_bajo || 0) > 50 ? 'text-red-600' :
+                    (metricas.productos_stock_bajo || 0) > 20 ? 'text-yellow-600' : 'text-green-600'
+                  }`}>
+                    {(metricas.productos_stock_bajo || 0) === 0 ? 'Stock controlado' : 'Requiere atención'}
+                  </p>
+                </div>
               </div>
-              <div className="ml-4">
-                <p className="text-sm font-medium text-gray-500">Almacenes Activos</p>
-                <p className="text-2xl font-bold text-gray-900">{metricas.total_almacenes}</p>
+              {(metricas.productos_stock_bajo || 0) > 0 && (
+                <button
+                  onClick={() => setVistaActual('inventario')}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    (metricas.productos_stock_bajo || 0) > 50 ? 'bg-red-500 hover:bg-red-600 text-white' :
+                    (metricas.productos_stock_bajo || 0) > 20 ? 'bg-yellow-500 hover:bg-yellow-600 text-white' :
+                    'bg-green-500 hover:bg-green-600 text-white'
+                  }`}
+                >
+                  Ver Lista
+                </button>
+              )}
+            </div>
+          </div>
+
+          <div className="bg-gradient-to-br from-purple-50 to-indigo-100 p-6 rounded-xl shadow-lg border border-purple-200 hover:shadow-xl transition-all duration-300">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center">
+                <div className="flex-shrink-0 p-3 bg-purple-500 rounded-full">
+                  <TrendingUp className="h-8 w-8 text-white" />
+                </div>
+                <div className="ml-4">
+                  <p className="text-sm font-medium text-purple-800">Valor Inventario</p>
+                  <p className="text-3xl font-bold text-purple-900">
+                    {almacenService.formatearValorMonetario(metricas.valor_total_inventario)}
+                  </p>
+                  <div className="flex items-center mt-1">
+                    <div className="w-32 bg-purple-200 rounded-full h-2 mr-2">
+                      <div className="bg-purple-600 h-2 rounded-full" style={{width: '87%'}}></div>
+                    </div>
+                    <span className="text-sm text-purple-600">87% objetivo</span>
+                  </div>
+                </div>
+              </div>
+              <div className="text-right">
+                <p className="text-sm text-purple-600">+2.3%</p>
+                <p className="text-xs text-purple-500">vs mes anterior</p>
               </div>
             </div>
           </div>
 
-          <div className="bg-white p-6 rounded-lg shadow border border-gray-200">
-            <div className="flex items-center">
-              <div className="flex-shrink-0">
-                <TrendingUp className="h-8 w-8 text-purple-600" />
+          <div className={`bg-gradient-to-br p-6 rounded-xl shadow-lg border hover:shadow-xl transition-all duration-300 ${
+            (metricas.despachos_pendientes || 0) > 20 ? 'from-red-50 to-red-100 border-red-200' :
+            (metricas.despachos_pendientes || 0) > 10 ? 'from-orange-50 to-yellow-100 border-orange-200' :
+            'from-blue-50 to-blue-100 border-blue-200'
+          }`}>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center">
+                <div className={`flex-shrink-0 p-3 rounded-full ${
+                  (metricas.despachos_pendientes || 0) > 20 ? 'bg-red-500' :
+                  (metricas.despachos_pendientes || 0) > 10 ? 'bg-orange-500' : 'bg-blue-500'
+                }`}>
+                  <Truck className="h-8 w-8 text-white" />
+                </div>
+                <div className="ml-4">
+                  <p className={`text-sm font-medium ${
+                    (metricas.despachos_pendientes || 0) > 20 ? 'text-red-800' :
+                    (metricas.despachos_pendientes || 0) > 10 ? 'text-orange-800' : 'text-blue-800'
+                  }`}>Despachos Operativos</p>
+                  <p className={`text-3xl font-bold ${
+                    (metricas.despachos_pendientes || 0) > 20 ? 'text-red-900' :
+                    (metricas.despachos_pendientes || 0) > 10 ? 'text-orange-900' : 'text-blue-900'
+                  }`}>{metricas.despachos_pendientes || 0}</p>
+                  <div className="flex items-center space-x-2 mt-1">
+                    <span className={`text-sm ${
+                      (metricas.despachos_pendientes || 0) > 20 ? 'text-red-600' :
+                      (metricas.despachos_pendientes || 0) > 10 ? 'text-orange-600' : 'text-blue-600'
+                    }`}>
+                      {metricas.despachos_dia || 0} hoy
+                    </span>
+                    <span className="text-xs text-gray-500">•</span>
+                    <span className={`text-xs ${
+                      (metricas.despachos_pendientes || 0) > 20 ? 'text-red-500' :
+                      (metricas.despachos_pendientes || 0) > 10 ? 'text-orange-500' : 'text-blue-500'
+                    }`}>
+                      {(metricas.despachos_pendientes || 0) === 0 ? 'Al día' : 'Pendientes'}
+                    </span>
+                  </div>
+                </div>
               </div>
-              <div className="ml-4">
-                <p className="text-sm font-medium text-gray-500">Valor Inventario</p>
-                <p className="text-2xl font-bold text-gray-900">
-                  {almacenService.formatearValorMonetario(metricas.valor_total_inventario)}
-                </p>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white p-6 rounded-lg shadow border border-gray-200">
-            <div className="flex items-center">
-              <div className="flex-shrink-0">
-                <AlertTriangle className={`h-8 w-8 ${
-                  metricas.alertas_activas > 10 ? 'text-red-600' :
-                  metricas.alertas_activas > 5 ? 'text-yellow-600' : 'text-green-600'
-                }`} />
-              </div>
-              <div className="ml-4">
-                <p className="text-sm font-medium text-gray-500">Alertas Activas</p>
-                <p className="text-2xl font-bold text-gray-900">{metricas.alertas_activas}</p>
-              </div>
+              {(metricas.despachos_pendientes || 0) > 0 && (
+                <button
+                  onClick={() => setVistaActual('despachos')}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    (metricas.despachos_pendientes || 0) > 20 ? 'bg-red-500 hover:bg-red-600 text-white' :
+                    (metricas.despachos_pendientes || 0) > 10 ? 'bg-orange-500 hover:bg-orange-600 text-white' :
+                    'bg-blue-500 hover:bg-blue-600 text-white'
+                  }`}
+                >
+                  Procesar
+                </button>
+              )}
             </div>
           </div>
         </div>
 
-        {/* Métricas secundarias */}
+        {/* Widgets operativos premium */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div className="bg-white p-6 rounded-lg shadow border border-gray-200">
+          <div className={`bg-gradient-to-br p-6 rounded-xl shadow-lg border hover:shadow-xl transition-all duration-300 ${
+            (metricas.movimientos_dia || 0) > 0 ? 'from-emerald-50 to-green-100 border-emerald-200' : 'from-gray-50 to-gray-100 border-gray-200'
+          }`}>
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-500">Despachos Pendientes</p>
-                <p className="text-xl font-bold text-gray-900">{metricas.despachos_pendientes}</p>
+                <p className={`text-sm font-medium ${
+                  (metricas.movimientos_dia || 0) > 0 ? 'text-emerald-800' : 'text-gray-600'
+                }`}>Actividad Operativa</p>
+                <p className={`text-2xl font-bold ${
+                  (metricas.movimientos_dia || 0) > 0 ? 'text-emerald-900' : 'text-gray-700'
+                }`}>
+                  {metricas.movimientos_dia || 0}
+                </p>
+                <div className="flex items-center mt-1">
+                  <div className={`w-2 h-2 rounded-full mr-2 ${
+                    (metricas.movimientos_dia || 0) > 0 ? 'bg-emerald-500 animate-pulse' : 'bg-gray-400'
+                  }`}></div>
+                  <p className={`text-sm ${
+                    (metricas.movimientos_dia || 0) > 0 ? 'text-emerald-600' : 'text-gray-500'
+                  }`}>
+                    {(metricas.movimientos_dia || 0) > 0 ? 'Sistema activo' : 'En espera'}
+                  </p>
+                </div>
               </div>
-              <Truck className="h-6 w-6 text-blue-600" />
+              <div className={`p-3 rounded-full ${
+                (metricas.movimientos_dia || 0) > 0 ? 'bg-emerald-500' : 'bg-gray-400'
+              }`}>
+                <Activity className="h-6 w-6 text-white" />
+              </div>
+            </div>
+            {(metricas.movimientos_dia || 0) > 0 && (
+              <button
+                onClick={() => setVistaActual('movimientos')}
+                className="mt-3 w-full bg-emerald-500 hover:bg-emerald-600 text-white py-2 rounded-lg text-sm font-medium transition-colors"
+              >
+                Ver Movimientos
+              </button>
+            )}
+          </div>
+
+          <div className={`bg-gradient-to-br p-6 rounded-xl shadow-lg border hover:shadow-xl transition-all duration-300 ${
+            (metricas.alertas_activas || 0) > 0 ? 'from-red-50 to-red-100 border-red-200' : 'from-green-50 to-green-100 border-green-200'
+          }`}>
+            <div className="flex items-center justify-between">
+              <div>
+                <p className={`text-sm font-medium ${
+                  (metricas.alertas_activas || 0) > 0 ? 'text-red-800' : 'text-green-800'
+                }`}>Estado Sistema</p>
+                <p className={`text-2xl font-bold ${
+                  (metricas.alertas_activas || 0) > 0 ? 'text-red-900' : 'text-green-900'
+                }`}>{metricas.alertas_activas || 0}</p>
+                <div className="flex items-center mt-1">
+                  <div className={`w-2 h-2 rounded-full mr-2 ${
+                    (metricas.alertas_activas || 0) > 0 ? 'bg-red-500 animate-pulse' : 'bg-green-500'
+                  }`}></div>
+                  <p className={`text-sm ${
+                    (metricas.alertas_activas || 0) > 0 ? 'text-red-600' : 'text-green-600'
+                  }`}>
+                    {(metricas.alertas_activas || 0) > 0 ? 'Alertas activas' : 'Todo normal'}
+                  </p>
+                </div>
+              </div>
+              <div className={`p-3 rounded-full ${
+                (metricas.alertas_activas || 0) > 0 ? 'bg-red-500' : 'bg-green-500'
+              }`}>
+                <Bell className="h-6 w-6 text-white" />
+              </div>
             </div>
           </div>
 
-          <div className="bg-white p-6 rounded-lg shadow border border-gray-200">
+          <div className="bg-gradient-to-br from-indigo-50 to-purple-100 p-6 rounded-xl shadow-lg border border-indigo-200 hover:shadow-xl transition-all duration-300">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-500">Movimientos Hoy</p>
-                <p className="text-xl font-bold text-gray-900">{metricas.movimientos_hoy}</p>
+                <p className="text-sm font-medium text-indigo-800">Disponibilidad</p>
+                <p className="text-2xl font-bold text-indigo-900">
+                  {Math.round(((metricas.productos_con_stock || 0) /
+                    Math.max(1, (metricas.productos_con_stock || 0) + (metricas.productos_agotados || 0))) * 100)}%
+                </p>
+                <div className="flex items-center mt-1">
+                  <div className="w-20 bg-indigo-200 rounded-full h-2 mr-2">
+                    <div className="bg-indigo-600 h-2 rounded-full" style={{
+                      width: `${Math.round(((metricas.productos_con_stock || 0) /
+                        Math.max(1, (metricas.productos_con_stock || 0) + (metricas.productos_agotados || 0))) * 100)}%`
+                    }}></div>
+                  </div>
+                  <span className="text-sm text-indigo-600">stock</span>
+                </div>
               </div>
-              <Activity className="h-6 w-6 text-green-600" />
-            </div>
-          </div>
-
-          <div className="bg-white p-6 rounded-lg shadow border border-gray-200">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-500">Stock Bajo</p>
-                <p className="text-xl font-bold text-gray-900">{metricas.productos_bajo_stock}</p>
+              <div className="p-3 bg-indigo-500 rounded-full">
+                <Target className="h-6 w-6 text-white" />
               </div>
-              <Archive className="h-6 w-6 text-orange-600" />
             </div>
           </div>
         </div>
@@ -532,6 +706,72 @@ const AlmacenPage = () => {
             </div>
           </div>
         )}
+
+        {/* Widget ABC por Rotación */}
+        {dashboardData.productos_mayor_rotacion && dashboardData.productos_mayor_rotacion.length > 0 && (
+          <div className="bg-white rounded-lg shadow border border-gray-200">
+            <div className="p-6 border-b border-gray-200">
+              <div className="flex items-center justify-between">
+                <h3 className="text-lg font-semibold text-gray-900">ABC por Rotación (30 días)</h3>
+                <button
+                  onClick={() => setVistaActual('analisis')}
+                  className="text-blue-600 hover:text-blue-800 text-sm font-medium"
+                >
+                  Ver análisis completo
+                </button>
+              </div>
+            </div>
+            <div className="p-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {dashboardData.productos_mayor_rotacion.slice(0, 9).map((producto, index) => {
+                  const clasificacion = index < 3 ? 'A' : index < 6 ? 'B' : 'C';
+                  const colorClases = {
+                    'A': 'bg-green-100 text-green-800 border-green-200',
+                    'B': 'bg-yellow-100 text-yellow-800 border-yellow-200',
+                    'C': 'bg-red-100 text-red-800 border-red-200'
+                  };
+
+                  return (
+                    <div key={producto.producto_id} className="border rounded-lg p-4 hover:bg-gray-50 transition-colors">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className={`text-xs px-2 py-1 rounded border font-medium ${colorClases[clasificacion]}`}>
+                          Clase {clasificacion}
+                        </span>
+                        <span className="text-xs text-gray-500">#{index + 1}</span>
+                      </div>
+                      <h4 className="font-medium text-gray-900 text-sm mb-1">
+                        {producto.producto_codigo}
+                      </h4>
+                      <p className="text-xs text-gray-600 mb-2 line-clamp-2">
+                        {producto.producto_descripcion}
+                      </p>
+                      <div className="flex justify-between items-center">
+                        <span className="text-sm font-bold text-blue-600">
+                          {almacenService.formatearCantidad(producto.total_cantidad || 0)}
+                        </span>
+                        <span className="text-xs text-gray-500">unidades</span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="mt-4 flex items-center justify-center space-x-6 text-xs text-gray-600">
+                <div className="flex items-center">
+                  <div className="w-3 h-3 bg-green-100 border border-green-200 rounded mr-2"></div>
+                  <span>Clase A: Alta rotación (80% ventas)</span>
+                </div>
+                <div className="flex items-center">
+                  <div className="w-3 h-3 bg-yellow-100 border border-yellow-200 rounded mr-2"></div>
+                  <span>Clase B: Media rotación (15% ventas)</span>
+                </div>
+                <div className="flex items-center">
+                  <div className="w-3 h-3 bg-red-100 border border-red-200 rounded mr-2"></div>
+                  <span>Clase C: Baja rotación (5% ventas)</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     );
   };
@@ -563,31 +803,6 @@ const AlmacenPage = () => {
                 Limpiar Filtros
               </button>
             )}
-
-            <button
-              onClick={handleRefresh}
-              disabled={loading}
-              className="inline-flex items-center px-3 py-2 border border-gray-300 rounded-md text-gray-700 bg-white hover:bg-gray-50 transition-colors disabled:opacity-50"
-            >
-              <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
-              Actualizar
-            </button>
-
-            <button
-              onClick={() => handleExportar('plantilla')}
-              className="inline-flex items-center px-3 py-2 border border-blue-300 rounded-md text-blue-700 bg-blue-50 hover:bg-blue-100 transition-colors"
-            >
-              <Download className="h-4 w-4 mr-2" />
-              Plantilla
-            </button>
-
-            <button
-              onClick={() => setShowUploadModal(true)}
-              className="inline-flex items-center px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors shadow-sm"
-            >
-              <Upload className="h-4 w-4 mr-2" />
-              Upload Stock
-            </button>
           </div>
         </div>
       </div>
@@ -669,10 +884,10 @@ const AlmacenPage = () => {
 
           {vistaActual === 'inventario' && (
             <div className="h-full p-6 overflow-y-auto">
-              <InventarioList
-                refreshTrigger={refreshTrigger}
+              <InventarioModerno
                 filtros={filtros}
-                onFiltrosChange={setFiltros}
+                onRefresh={handleRefresh}
+                usuario={usuarioActual}
               />
             </div>
           )}
@@ -698,14 +913,13 @@ const AlmacenPage = () => {
           )}
 
           {vistaActual === 'upload' && (
-            <div className="h-full p-6 overflow-y-auto">
-              <UploadStock
-                isOpen={true}
-                onClose={() => setVistaActual('dashboard')}
-                onSuccess={() => {
+            <div className="h-full overflow-y-auto">
+              <UploadMasivePage
+                onSuccess={(data) => {
                   handleRefresh();
                   showNotification('Stock actualizado exitosamente', 'success');
                 }}
+                onRefresh={handleRefresh}
               />
             </div>
           )}

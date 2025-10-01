@@ -69,13 +69,13 @@ const obtenerHoraLima = () => {
  */
 const validarHorarioCheckin = () => {
     const horaActualLima = obtenerHoraLima();
-    
+
     // Permitir bypass en desarrollo si está configurado
     if (process.env.NODE_ENV === 'development' && process.env.BYPASS_SCHEDULE_VALIDATION === 'true') {
         console.log('⚠️  DEVELOPMENT: Schedule validation bypassed for check-in');
         return true;
     }
-    
+
     // Horario empresarial: 6:00 AM - 2:00 PM (flexible)
     return horaActualLima >= 6 && horaActualLima <= 14;
 };
@@ -302,7 +302,9 @@ exports.checkIn = async (req, res) => {
             mensajes_whatsapp = 0,
             mensajes_instagram = 0,
             mensajes_tiktok = 0,
-            notas_check_in = ''
+            notas_check_in = '',
+            en_campana = false,
+            producto_campana = ''
         } = req.body;
 
         const userId = req.user.id;
@@ -363,31 +365,58 @@ exports.checkIn = async (req, res) => {
             });
         }
 
+        // ✅ NUEVA LÓGICA: Calcular estado de entrada y tardanza
+        const horaActual = new Date();
+        const horaCheckIn = new Date(horaActual.toLocaleString("en-US", {timeZone: "America/Lima"}));
+        const hora = horaCheckIn.getHours();
+        const minutos = horaCheckIn.getMinutes();
+
+        // Lógica de puntualidad: 8:00-8:15 = puntual, 8:16+ = tardanza
+        let estado_entrada = 'puntual';
+        let minutos_tardanza = 0;
+
+        if (hora > 8 || (hora === 8 && minutos > 15)) {
+            estado_entrada = 'tardanza';
+            // Calcular minutos de tardanza desde las 8:15
+            const limiteHora = new Date(horaCheckIn);
+            limiteHora.setHours(8, 15, 0, 0);
+            minutos_tardanza = Math.floor((horaCheckIn - limiteHora) / (1000 * 60));
+        }
+
+        console.log(`📝 Check-in: ${hora}:${minutos.toString().padStart(2, '0')} → ${estado_entrada} (${minutos_tardanza} min tardanza)`);
+
         // Realizar check-in
-        const checkInQuery = registroExistente.rows.length > 0 ? 
+        const checkInQuery = registroExistente.rows.length > 0 ?
             // Actualizar registro existente
-            `UPDATE actividad_diaria SET 
-                check_in_time = NOW(),
+            `UPDATE actividad_diaria SET
+                check_in_time = (NOW() AT TIME ZONE 'UTC' AT TIME ZONE 'America/Lima'),
                 mensajes_meta = $3,
                 mensajes_whatsapp = $4,
                 mensajes_instagram = $5,
                 mensajes_tiktok = $6,
                 notas_check_in = $7,
+                en_campana = $8,
+                producto_campana = $9,
+                estado_entrada = $10,
+                minutos_tardanza = $11,
                 estado_jornada = 'en_progreso',
                 updated_at = NOW()
              WHERE usuario_id = $1 AND fecha = $2
              RETURNING *` :
             // Crear nuevo registro
             `INSERT INTO actividad_diaria (
-                usuario_id, fecha, check_in_time, 
+                usuario_id, fecha, check_in_time,
                 mensajes_meta, mensajes_whatsapp, mensajes_instagram, mensajes_tiktok,
-                notas_check_in, estado_jornada, created_at, updated_at
-             ) VALUES ($1, $2, NOW(), $3, $4, $5, $6, $7, 'en_progreso', NOW(), NOW())
+                notas_check_in, en_campana, producto_campana,
+                estado_entrada, minutos_tardanza, estado_jornada,
+                created_at, updated_at
+             ) VALUES ($1, $2, (NOW() AT TIME ZONE 'UTC' AT TIME ZONE 'America/Lima'), $3, $4, $5, $6, $7, $8, $9, $10, $11, 'en_progreso', NOW(), NOW())
              RETURNING *`;
 
         const result = await query(checkInQuery, [
-            userId, fechaHoy, mensajes_meta, mensajes_whatsapp, 
-            mensajes_instagram, mensajes_tiktok, notas_check_in
+            userId, fechaHoy, mensajes_meta, mensajes_whatsapp,
+            mensajes_instagram, mensajes_tiktok, notas_check_in,
+            en_campana, producto_campana, estado_entrada, minutos_tardanza
         ]);
 
         const actividad = result.rows[0];
@@ -518,13 +547,34 @@ exports.checkOut = async (req, res) => {
             });
         }
 
+        // ✅ NUEVA LÓGICA: Calcular estado de salida y horas efectivas
+        const horaActual = new Date();
+        const horaCheckOut = new Date(horaActual.toLocaleString("en-US", {timeZone: "America/Lima"}));
+        const hora = horaCheckOut.getHours();
+        const minutos = horaCheckOut.getMinutes();
+
+        // Lógica de salida: 5:50-6:00 PM = normal, antes 5:50 = temprana
+        let estado_salida = 'normal';
+        if (hora < 17 || (hora === 17 && minutos < 50)) {
+            estado_salida = 'temprana';
+        }
+
+        // Calcular horas efectivas
+        const checkInTime = new Date(registro.check_in_time);
+        const horasEfectivas = (horaCheckOut - checkInTime) / (1000 * 60 * 60); // Convertir a horas
+        const total_horas_efectivas = Math.round(horasEfectivas * 100) / 100; // 2 decimales
+
+        console.log(`📝 Check-out: ${hora}:${minutos.toString().padStart(2, '0')} → ${estado_salida} (${total_horas_efectivas}h efectivas)`);
+
         // Realizar check-out
         const checkOutQuery = `
-            UPDATE actividad_diaria SET 
-                check_out_time = NOW(),
+            UPDATE actividad_diaria SET
+                check_out_time = (NOW() AT TIME ZONE 'UTC' AT TIME ZONE 'America/Lima'),
                 llamadas_realizadas = $3,
                 llamadas_recibidas = $4,
                 notas_check_out = $5,
+                estado_salida = $6,
+                total_horas_efectivas = $7,
                 estado_jornada = 'finalizada',
                 updated_at = NOW()
             WHERE usuario_id = $1 AND fecha = $2
@@ -532,7 +582,8 @@ exports.checkOut = async (req, res) => {
         `;
 
         const result = await query(checkOutQuery, [
-            userId, fechaHoy, llamadas_realizadas, llamadas_recibidas, notas_check_out
+            userId, fechaHoy, llamadas_realizadas, llamadas_recibidas, notas_check_out,
+            estado_salida, total_horas_efectivas
         ]);
 
         const actividad = result.rows[0];
@@ -1102,6 +1153,216 @@ exports.getResumenSemanal = async (req, res) => {
         res.status(500).json({
             success: false,
             message: 'Error interno al obtener resumen semanal',
+            error: process.env.NODE_ENV === 'development' ? error.message : undefined
+        });
+    }
+};
+
+// ============================================
+// DATOS PARA GRÁFICOS TEMPORALES
+// ============================================
+exports.getDatosGraficos = async (req, res) => {
+    const startTime = Date.now();
+
+    try {
+        logRequest('getDatosGraficos', req);
+
+        const { vista = 'semanal', periodo, usuario_id, fecha_inicio, fecha_fin } = req.query;
+        const vistaActual = periodo || vista;
+        const userId = req.user.id;
+        const userRole = req.user.rol?.toUpperCase();
+
+        // Verificar permisos: jefes pueden ver otros usuarios
+        const puedeVerOtros = ['SUPER_ADMIN', 'GERENTE', 'ADMIN', 'JEFE_VENTAS'].includes(userRole);
+        const targetUserId = (puedeVerOtros && usuario_id) ? usuario_id : userId;
+
+        let datos = [];
+        const fechaHoy = new Date().toLocaleDateString('en-CA', {
+            timeZone: 'America/Lima'
+        });
+
+        switch(vistaActual) {
+            case 'semanal':
+                // Últimos 7 días
+                const fechaInicioSemanal = fecha_inicio || new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toLocaleDateString('en-CA', {
+                    timeZone: 'America/Lima'
+                });
+
+                const datosSemana = await query(`
+                    SELECT
+                        fecha,
+                        TO_CHAR(fecha, 'YYYY-MM-DD') as fecha_str,
+                        EXTRACT(DOW FROM fecha) as dia_semana,
+                        TO_CHAR(fecha, 'Day') as nombre_dia,
+                        COALESCE(mensajes_meta + mensajes_whatsapp + mensajes_instagram + mensajes_tiktok, 0) as total_mensajes,
+                        COALESCE(llamadas_realizadas + llamadas_recibidas, 0) as total_llamadas,
+                        COALESCE(jornada_horas, 0) as horas_efectivas,
+                        estado_entrada,
+                        minutos_tardanza,
+                        estado_jornada
+                    FROM actividad_diaria
+                    WHERE usuario_id = $1 AND fecha >= $2 AND fecha <= $3
+                    ORDER BY fecha ASC
+                `, [targetUserId, fechaInicioSemanal, fechaHoy]);
+
+                // Crear array con todos los días de la semana
+                const diasSemana = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+                datos = [];
+
+                for (let i = 0; i < 7; i++) {
+                    const fecha = new Date(Date.now() - (6-i) * 24 * 60 * 60 * 1000);
+                    const fechaStr = fecha.toLocaleDateString('en-CA', { timeZone: 'America/Lima' });
+                    const registro = datosSemana.rows.find(row => row.fecha_str === fechaStr);
+
+                    datos.push({
+                        fecha: fechaStr,
+                        dia: diasSemana[fecha.getDay()],
+                        mensajes: registro ? parseInt(registro.total_mensajes) : 0,
+                        llamadas: registro ? parseInt(registro.total_llamadas) : 0,
+                        horas: registro ? parseFloat(registro.horas_efectivas) : 0,
+                        actividad_total: registro ? (parseInt(registro.total_mensajes) + parseInt(registro.total_llamadas)) : 0,
+                        puntual: registro ? (registro.estado_entrada === 'puntual') : null,
+                        tardanza: registro ? parseInt(registro.minutos_tardanza || 0) : 0,
+                        trabajado: !!registro
+                    });
+                }
+                break;
+
+            case 'mensual':
+                // Últimas 4 semanas - agrupado por semanas
+                const fechaInicioMensual = fecha_inicio || new Date(Date.now() - 28 * 24 * 60 * 60 * 1000).toLocaleDateString('en-CA', {
+                    timeZone: 'America/Lima'
+                });
+
+                const datosMes = await query(`
+                    SELECT
+                        DATE_TRUNC('week', fecha) as semana,
+                        EXTRACT(WEEK FROM fecha) as numero_semana,
+                        TO_CHAR(DATE_TRUNC('week', fecha), 'Mon DD') as semana_label,
+                        SUM(mensajes_meta + mensajes_whatsapp + mensajes_instagram + mensajes_tiktok) as total_mensajes,
+                        SUM(llamadas_realizadas + llamadas_recibidas) as total_llamadas,
+                        SUM(jornada_horas) as total_horas,
+                        COUNT(*) as dias_trabajados,
+                        SUM(CASE WHEN estado_entrada = 'puntual' THEN 1 ELSE 0 END) as dias_puntuales
+                    FROM actividad_diaria
+                    WHERE usuario_id = $1 AND fecha >= $2 AND fecha <= $3
+                    GROUP BY DATE_TRUNC('week', fecha), EXTRACT(WEEK FROM fecha)
+                    ORDER BY semana ASC
+                `, [targetUserId, fechaInicioMensual, fechaHoy]);
+
+                datos = datosMes.rows.map((row, index) => ({
+                    dia: `Sem ${index + 1}`,
+                    semana_completa: row.semana_label,
+                    fecha: row.semana,
+                    mensajes: parseInt(row.total_mensajes || 0),
+                    llamadas: parseInt(row.total_llamadas || 0),
+                    horas: parseFloat(row.total_horas || 0),
+                    actividad_total: parseInt(row.total_mensajes || 0) + parseInt(row.total_llamadas || 0),
+                    dias_trabajados: parseInt(row.dias_trabajados || 0),
+                    puntualidad: row.dias_trabajados > 0 ? Math.round((row.dias_puntuales / row.dias_trabajados) * 100) : 0
+                }));
+                break;
+
+            case 'trimestral':
+                // Últimos 3 meses agrupados por mes
+                const fechaInicioTrimestral = fecha_inicio || new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toLocaleDateString('en-CA', {
+                    timeZone: 'America/Lima'
+                });
+
+                const datosTrimestre = await query(`
+                    SELECT
+                        DATE_TRUNC('month', fecha) as mes,
+                        TO_CHAR(DATE_TRUNC('month', fecha), 'Mon') as mes_abrev,
+                        TO_CHAR(DATE_TRUNC('month', fecha), 'Month YYYY') as nombre_mes_completo,
+                        SUM(mensajes_meta + mensajes_whatsapp + mensajes_instagram + mensajes_tiktok) as total_mensajes,
+                        SUM(llamadas_realizadas + llamadas_recibidas) as total_llamadas,
+                        SUM(jornada_horas) as total_horas,
+                        COUNT(*) as dias_trabajados,
+                        SUM(CASE WHEN estado_entrada = 'puntual' THEN 1 ELSE 0 END) as dias_puntuales
+                    FROM actividad_diaria
+                    WHERE usuario_id = $1 AND fecha >= $2 AND fecha <= $3
+                    GROUP BY DATE_TRUNC('month', fecha)
+                    ORDER BY mes ASC
+                `, [targetUserId, fechaInicioTrimestral, fechaHoy]);
+
+                datos = datosTrimestre.rows.map(row => ({
+                    dia: row.mes_abrev.trim(),
+                    mes_completo: row.nombre_mes_completo.trim(),
+                    fecha: row.mes,
+                    mensajes: parseInt(row.total_mensajes || 0),
+                    llamadas: parseInt(row.total_llamadas || 0),
+                    horas: parseFloat(row.total_horas || 0),
+                    actividad_total: parseInt(row.total_mensajes || 0) + parseInt(row.total_llamadas || 0),
+                    dias_trabajados: parseInt(row.dias_trabajados || 0),
+                    puntualidad: row.dias_trabajados > 0 ? Math.round((row.dias_puntuales / row.dias_trabajados) * 100) : 0
+                }));
+                break;
+
+            case 'anual':
+                // Últimos 12 meses agrupados por mes
+                const fechaInicioAnual = fecha_inicio || new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toLocaleDateString('en-CA', {
+                    timeZone: 'America/Lima'
+                });
+
+                const datosAnual = await query(`
+                    SELECT
+                        DATE_TRUNC('month', fecha) as mes,
+                        TO_CHAR(DATE_TRUNC('month', fecha), 'Mon') as mes_abrev,
+                        TO_CHAR(DATE_TRUNC('month', fecha), 'Mon YYYY') as mes_anio,
+                        SUM(mensajes_meta + mensajes_whatsapp + mensajes_instagram + mensajes_tiktok) as total_mensajes,
+                        SUM(llamadas_realizadas + llamadas_recibidas) as total_llamadas,
+                        SUM(jornada_horas) as total_horas,
+                        COUNT(*) as dias_trabajados,
+                        SUM(CASE WHEN estado_entrada = 'puntual' THEN 1 ELSE 0 END) as dias_puntuales
+                    FROM actividad_diaria
+                    WHERE usuario_id = $1 AND fecha >= $2 AND fecha <= $3
+                    GROUP BY DATE_TRUNC('month', fecha)
+                    ORDER BY mes ASC
+                `, [targetUserId, fechaInicioAnual, fechaHoy]);
+
+                datos = datosAnual.rows.map(row => ({
+                    dia: row.mes_abrev.trim(),
+                    mes_anio: row.mes_anio.trim(),
+                    fecha: row.mes,
+                    mensajes: parseInt(row.total_mensajes || 0),
+                    llamadas: parseInt(row.total_llamadas || 0),
+                    horas: parseFloat(row.total_horas || 0),
+                    actividad_total: parseInt(row.total_mensajes || 0) + parseInt(row.total_llamadas || 0),
+                    dias_trabajados: parseInt(row.dias_trabajados || 0),
+                    puntualidad: row.dias_trabajados > 0 ? Math.round((row.dias_puntuales / row.dias_trabajados) * 100) : 0
+                }));
+                break;
+
+            default:
+                return res.status(400).json({
+                    success: false,
+                    error: 'Vista no válida. Use: semanal, mensual, trimestral, anual'
+                });
+        }
+
+        const duration = Date.now() - startTime;
+        logSuccess('getDatosGraficos', {
+            vista: vistaActual,
+            registros: datos.length,
+            usuario_objetivo: targetUserId
+        }, duration);
+
+        res.json({
+            success: true,
+            data: {
+                vista: vistaActual,
+                datos,
+                usuario_id: targetUserId,
+                puede_ver_otros: puedeVerOtros,
+                fecha_generacion: new Date().toISOString()
+            }
+        });
+
+    } catch (error) {
+        logError('getDatosGraficos', error, { userId: req.user.id });
+        res.status(500).json({
+            success: false,
+            message: 'Error al obtener datos para gráficos',
             error: process.env.NODE_ENV === 'development' ? error.message : undefined
         });
     }

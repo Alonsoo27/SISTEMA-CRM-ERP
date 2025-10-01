@@ -4,14 +4,32 @@ const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
 const { testConnection } = require('./src/config/database');
+const { getFaltasService } = require('./src/services/FaltasAutomaticasService');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
 
 // MIDDLEWARE - CONFIGURACIÓN CORS UNIFICADA Y CORREGIDA
+const allowedOrigins = [
+    'http://localhost:5173',
+    'http://localhost:3000',
+    process.env.FRONTEND_URL
+].filter(Boolean); // Eliminar valores undefined/null
+
 app.use(cors({
-    origin: ['http://localhost:5173', 'http://localhost:3000', process.env.FRONTEND_URL || 'http://localhost:5173'],
-    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'], // ← AGREGADO PATCH
+    origin: function (origin, callback) {
+        // Permitir requests sin origin (como mobile apps o curl requests)
+        if (!origin) return callback(null, true);
+
+        // En producción, verificar que el origin esté en la lista
+        if (allowedOrigins.indexOf(origin) !== -1 || process.env.NODE_ENV === 'development') {
+            callback(null, true);
+        } else {
+            console.warn(`🚫 CORS bloqueado para origin: ${origin}`);
+            callback(new Error('Not allowed by CORS'));
+        }
+    },
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
     credentials: true
 }));
@@ -25,6 +43,15 @@ app.use((req, res, next) => {
 app.use(morgan('combined'));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
+
+// Inicializar Cache Service Redis
+const cacheService = require('./src/services/CacheService');
+cacheService.inicializar().then(() => {
+    console.log('⚡ Cache Redis inicializado exitosamente');
+}).catch((error) => {
+    console.warn('⚠️ Cache Redis no disponible, continuando sin cache:', error.message);
+});
+
 // SISTEMA DE CARGA DE MÓDULOS OPTIMIZADO
 console.log('🔧 Iniciando carga de módulos...');
 
@@ -33,6 +60,7 @@ const modules = {
     auth: { path: './src/modules/auth/routes/authRoutes', route: '/api/auth', loaded: null },
     productos: { path: './src/modules/productos/routes/productosRoutes', route: '/api/productos', loaded: null },
     prospectos: { path: './src/modules/prospectos/routes/prospectosRoutes', route: '/api/prospectos', loaded: null },
+    seguimientos: { path: './src/modules/prospectos/routes/seguimientosRoutes', route: '/api/prospectos/seguimientos', loaded: null },
     notificaciones: { path: './src/modules/notificaciones/routes/notificacionesRoutes', route: '/api/notificaciones', loaded: null },
     ventas: { path: './src/modules/ventas/routes/ventasRoutes', route: '/api/ventas', loaded: null },
     comisiones: { path: './src/modules/ventas/routes/comisionesRoutes', route: '/api/comisiones', loaded: null },
@@ -44,7 +72,12 @@ const modules = {
     dashboardEjecutivo: { path: './src/modules/ventas/routes/dashboardEjecutivoRoutes', route: '/api/dashboard-ejecutivo',  loaded: null },
     pipeline: { path: './src/modules/ventas/routes/pipelineRoutes', route: '/api/ventas/pipeline', loaded: null },
     ventasPDF: { path: './src/modules/ventas/routes/ventasPDFRoutes', route: '/api/pdf', loaded: null },
-    almacen: { path: './src/modules/almacen/routes/almacenRoutes', route: '/api/almacen', loaded: null }
+    almacen: { path: './src/modules/almacen/routes/almacenRoutes', route: '/api/almacen', loaded: null },
+    soporte: { path: './src/modules/soporte/routes/soporteRoutes', route: '/api/soporte', loaded: null },
+    metas: { path: './src/modules/ventas/routes/metas', route: '/api/metas', loaded: null },
+    asesores: { path: './src/modules/ventas/routes/asesoresRoutes', route: '/api/asesores', loaded: null },
+    ubicaciones: { path: './src/modules/ubicaciones/routes/ubicacionesRoutes', route: '/api/ubicaciones', loaded: null },
+    campanas: { path: './src/modules/ventas/routes/campanasRoutes', route: '/api/campanas', loaded: null }
 };
 
 // MÓDULOS PAUSADOS TEMPORALMENTE:
@@ -86,11 +119,9 @@ console.log('🔧 Registrando rutas...');
 
 // Función para registrar rutas de forma segura
 const registerRoutes = (name, config) => {
-    if (config.loaded && typeof config.loaded === 'function') {
-        // CORRECCIÓN IMPORTANTE: Seguimientos ya no se monta en /api/prospectos
-        const routePath = name === 'seguimientos' ? '/api/seguimientos' : config.route;
-        app.use(routePath, config.loaded);
-        console.log(`✅ Rutas de ${name} registradas en ${routePath}`);
+    if (config.loaded && (typeof config.loaded === 'function' || typeof config.loaded === 'object')) {
+        app.use(config.route, config.loaded);
+        console.log(`✅ Rutas de ${name} registradas en ${config.route}`);
         return true;
     } else {
         console.error(`❌ NO se pudieron registrar rutas de ${name} - Módulo no válido`);
@@ -112,9 +143,7 @@ const getModuleStatus = () => {
     Object.entries(modules).forEach(([name, config]) => {
         if (routesRegistered[name]) {
             status[name] = 'Funcionando ✅';
-            // Corrección para seguimientos
-            const endpoint = name === 'seguimientos' ? '/api/seguimientos' : config.route;
-            endpoints[name] = endpoint;
+            endpoints[name] = config.route;
         } else {
             status[name] = 'ERROR ❌';
         }
@@ -441,8 +470,7 @@ app.listen(PORT, async () => {
     Object.entries(modules).forEach(([name, config]) => {
         const status = routesRegistered[name] ? '✅' : '❌';
         if (status.includes('✅')) workingModules++;
-        const route = name === 'seguimientos' ? '/api/seguimientos' : config.route;
-        console.log(`   - ${name.charAt(0).toUpperCase() + name.slice(1)}: ${status} (${route})`);
+        console.log(`   - ${name.charAt(0).toUpperCase() + name.slice(1)}: ${status} (${config.route})`);
     });
     
     const successRate = Math.round((workingModules / totalModules) * 100);
@@ -457,6 +485,20 @@ app.listen(PORT, async () => {
     }
     console.log(`   - Horario: L-V 8am-6pm, Sáb 9am-12pm`);
     console.log(`   - Vencimiento: 18 horas laborales`);
+
+    // Inicializar sistema de automatización de actividad
+    console.log(`\n🕐 SISTEMA DE AUTOMATIZACIÓN DE ACTIVIDAD:`);
+    try {
+        const faltasService = getFaltasService();
+        const estadoFaltas = faltasService.getEstadisticas();
+        console.log(`   - Estado: Activo ✅`);
+        console.log(`   - Jobs Programados: ${estadoFaltas.jobs_activos}`);
+        console.log(`   - Checkout Automático: ${estadoFaltas.horarios.checkout_automatico} (L-V)`);
+        console.log(`   - Detección de Faltas: ${estadoFaltas.horarios.deteccion_faltas} (L-V)`);
+        console.log(`   - Timezone: ${estadoFaltas.timezone}`);
+    } catch (error) {
+        console.log(`   - Estado: Error ❌ (${error.message})`);
+    }
     
     console.log(`\n📊 RESUMEN EMPRESARIAL:`);
     console.log(`   - Módulos Operativos: ${workingModules}/${totalModules} (${successRate}%)`);
@@ -469,5 +511,73 @@ app.listen(PORT, async () => {
     console.log(`   - Status: http://localhost:${PORT}/api/admin/estado`);
     console.log(`   - Health: http://localhost:${PORT}/api/health`);
     console.log(`   - Automation: http://localhost:${PORT}/api/admin/automation/status`);
+    console.log(`   - Actividad: http://localhost:${PORT}/api/admin/actividad/estado`);
     console.log(`   - Dashboards: http://localhost:${PORT}/api/dashboards`);
+});
+
+// ENDPOINTS DE ADMINISTRACIÓN - SISTEMA DE AUTOMATIZACIÓN DE ACTIVIDAD
+app.get('/api/admin/actividad/estado', (req, res) => {
+    try {
+        const faltasService = getFaltasService();
+        const estadisticas = faltasService.getEstadisticas();
+
+        res.json({
+            success: true,
+            data: {
+                ...estadisticas,
+                descripcion: 'Sistema automático de checkout y detección de faltas',
+                funcionalidades: [
+                    'Checkout automático a las 6:00 PM (L-V)',
+                    'Detección de faltas a las 9:00 AM del día siguiente (L-V)',
+                    'Cálculo automático de horas efectivas',
+                    'Estados de entrada y salida automáticos'
+                ]
+            }
+        });
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            error: error.message
+        });
+    }
+});
+
+app.post('/api/admin/actividad/test-checkout', async (req, res) => {
+    try {
+        const faltasService = getFaltasService();
+        console.log('🧪 Ejecutando checkout automático manualmente...');
+        await faltasService.testCheckoutAutomatico();
+
+        res.json({
+            success: true,
+            message: 'Checkout automático ejecutado manualmente'
+        });
+    } catch (error) {
+        console.error('❌ Error en test de checkout:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error al ejecutar checkout automático',
+            error: error.message
+        });
+    }
+});
+
+app.post('/api/admin/actividad/test-faltas', async (req, res) => {
+    try {
+        const faltasService = getFaltasService();
+        console.log('🧪 Ejecutando detección de faltas manualmente...');
+        await faltasService.testDeteccionFaltas();
+
+        res.json({
+            success: true,
+            message: 'Detección de faltas ejecutada manualmente'
+        });
+    } catch (error) {
+        console.error('❌ Error en test de faltas:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error al ejecutar detección de faltas',
+            error: error.message
+        });
+    }
 });

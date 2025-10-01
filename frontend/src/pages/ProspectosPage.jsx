@@ -1,16 +1,20 @@
 // src/pages/ProspectosPage.jsx
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { 
-  Plus, BarChart3, List, Users, Filter, Download, 
+import {
+  Plus, BarChart3, List, Users, Filter, Download,
   RefreshCw, Settings, Search, Calendar, AlertCircle,
-  CheckCircle, XCircle, Bell
+  CheckCircle, XCircle, Bell, Zap, Grid
 } from 'lucide-react';
+
 import KanbanBoard from '../components/prospectos/KanbanBoard/KanbanBoard';
-import PipelineMetrics from '../components/prospectos/PipelineMetrics/PipelineMetrics';
 import ProspectoForm from '../components/prospectos/ProspectoForm/ProspectoForm';
 import ProspectoList from '../components/prospectos/ProspectoList/ProspectoList';
 import KanbanFilters from '../components/prospectos/KanbanFilters/KanbanFilters';
-import SeguimientosDashboard from '../components/prospectos/SeguimientosDashboard/SeguimientosDashboard';
+import AnalyticsEnterprise from '../components/prospectos/AnalyticsEnterprise/AnalyticsEnterprise';
+import Analytics from '../components/prospectos/Analytics/Analytics';
+import SeguimientosDashboardEnterprise from '../components/prospectos/SeguimientosDashboard/SeguimientosDashboardEnterprise';
+import BalanzaSeguimientos from '../components/prospectos/BalanzaSeguimientos/BalanzaSeguimientos';
+
 import prospectosService from '../services/prospectosService';
 
 const ProspectosPage = () => {
@@ -130,11 +134,10 @@ const ProspectosPage = () => {
     }
   }, [showNotification]);
 
-  // Configuración de vistas con metadatos mejorados
   const vistas = useMemo(() => [
     {
       id: 'kanban',
-      nombre: 'Kanban Board',
+      nombre: 'Pipeline',
       icono: BarChart3,
       descripcion: 'Vista de pipeline con drag & drop',
       tieneRefreshAuto: true
@@ -143,22 +146,22 @@ const ProspectosPage = () => {
       id: 'lista',
       nombre: 'Lista',
       icono: List,
-      descripcion: 'Vista de tabla con filtros avanzados',
+      descripcion: 'Vista de tabla con filtros',
       tieneRefreshAuto: false
     },
     {
       id: 'seguimientos',
       nombre: 'Seguimientos',
-      icono: AlertCircle,
-      descripcion: 'Dashboard de seguimientos automáticos',
+      icono: Bell,
+      descripcion: 'Gestión de seguimientos y alertas',
       tieneRefreshAuto: true
     },
     {
-      id: 'metricas',
-      nombre: 'Métricas',
-      icono: Users,
-      descripcion: 'Dashboard de análisis y reportes',
-      tieneRefreshAuto: false
+      id: 'analytics',
+      nombre: 'Analytics',
+      icono: BarChart3,
+      descripcion: 'Gráficos interactivos y mapa geográfico',
+      tieneRefreshAuto: true
     }
   ], []);
 
@@ -197,29 +200,56 @@ const ProspectosPage = () => {
     );
   };
 
-  const StatsCard = ({ titulo, valor, descripcion, icono: IconComponent, color, loading = false }) => (
-    <div className="bg-white rounded-lg shadow p-6 transition-all hover:shadow-md">
-      <div className="flex items-center">
-        <div className={`p-3 rounded-lg ${color.bg} transition-colors`}>
-          <IconComponent className={`h-6 w-6 ${color.text}`} />
-        </div>
-        <div className="ml-4 flex-1">
-          <p className="text-sm font-medium text-gray-600">{titulo}</p>
-          {loading ? (
-            <div className="animate-pulse">
-              <div className="h-6 bg-gray-200 rounded w-12 mb-1"></div>
-              <div className="h-3 bg-gray-200 rounded w-20"></div>
-            </div>
-          ) : (
-            <>
-              <p className="text-2xl font-bold text-gray-900">{valor}</p>
-              <p className="text-sm text-gray-500">{descripcion}</p>
-            </>
-          )}
+  const StatsCard = ({ titulo, valor, descripcion, icono: IconComponent, color, loading = false }) => {
+    // 🚨 Detectar métricas importantes para destacar
+    const esUrgente = (titulo === 'Seguimientos Pendientes' && parseInt(valor) > 0);
+    const esExitoso = (titulo === 'Tasa Conversión' && parseFloat(valor) >= 50);
+
+    return (
+      <div className={`bg-white rounded-lg border shadow-sm p-3 transition-all hover:shadow-md hover:scale-105 ${
+        esUrgente ? 'ring-2 ring-red-200 bg-red-50' :
+        esExitoso ? 'ring-2 ring-green-200 bg-green-50' : ''
+      }`}>
+        <div className="flex items-center space-x-3">
+          {/* Icono con badge urgente */}
+          <div className={`relative p-2 rounded-lg ${color.bg} flex-shrink-0`}>
+            <IconComponent className={`h-4 w-4 ${color.text}`} />
+            {esUrgente && (
+              <div className="absolute -top-1 -right-1 bg-red-500 text-white text-xs font-bold rounded-full w-4 h-4 flex items-center justify-center">
+                !
+              </div>
+            )}
+          </div>
+
+          <div className="min-w-0 flex-1">
+            {loading ? (
+              <div className="animate-pulse">
+                <div className="h-5 bg-gray-200 rounded w-10 mb-1"></div>
+                <div className="h-3 bg-gray-200 rounded w-16"></div>
+              </div>
+            ) : (
+              <>
+                <div className={`text-xl font-bold leading-tight ${
+                  esUrgente ? 'text-red-700' : esExitoso ? 'text-green-700' : 'text-gray-900'
+                }`}>
+                  {valor}
+                </div>
+                <div className="text-sm font-medium text-gray-600">{titulo}</div>
+                <div className="text-xs text-gray-500">{descripcion}</div>
+              </>
+            )}
+          </div>
+
+          {/* Emoji indicador de estado */}
+          <div className="text-lg">
+            {esUrgente ? '🚨' : esExitoso ? '🎯' :
+             titulo.includes('Total') ? '👥' :
+             titulo.includes('Negociación') ? '🤝' : '📊'}
+          </div>
         </div>
       </div>
-    </div>
-  );
+    );
+  };
 
   return (
     <div className="h-full flex flex-col">
@@ -269,10 +299,10 @@ const ProspectosPage = () => {
         </div>
       </div>
 
-      {/* Stats rápidos */}
+      {/* Stats rápidos - COMPACTOS MEJORADOS */}
       {(statsGenerales || statsLoading) && (
-        <div className="px-6 py-4 bg-gray-50 border-b">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="px-5 py-3 bg-gradient-to-r from-gray-50 to-blue-50 border-b">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             <StatsCard
               titulo="Total Prospectos"
               valor={statsGenerales?.total_prospectos || '0'}
@@ -324,7 +354,7 @@ const ProspectosPage = () => {
                 <button
                   key={vista.id}
                   onClick={() => setVistaActual(vista.id)}
-                  className={`inline-flex items-center px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                  className={`relative inline-flex items-center px-4 py-2 rounded-lg text-sm font-medium transition-all ${
                     isActive
                       ? 'bg-blue-100 text-blue-700 border border-blue-200 shadow-sm'
                       : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100 border border-transparent'
@@ -333,6 +363,7 @@ const ProspectosPage = () => {
                 >
                   <IconComponent className="h-4 w-4 mr-2" />
                   {vista.nombre}
+
                   {vista.tieneRefreshAuto && isActive && (
                     <div className="ml-2 w-2 h-2 bg-green-400 rounded-full animate-pulse" title="Auto-refresh activo" />
                   )}
@@ -377,6 +408,23 @@ const ProspectosPage = () => {
 
       {/* Contenido principal */}
       <div className="flex-1 overflow-hidden">
+        {vistaActual === 'analytics' && (
+          <div className="h-full p-6 overflow-y-auto">
+            <Analytics
+              asesorId={filtros.asesor_id || usuarioActual?.id}
+            />
+          </div>
+        )}
+
+        {vistaActual === 'seguimientos' && (
+          <div className="h-full p-6 overflow-y-auto">
+            <BalanzaSeguimientos
+              asesorId={filtros.asesor_id || usuarioActual?.id}
+              refreshTrigger={refreshTrigger}
+            />
+          </div>
+        )}
+
         {vistaActual === 'kanban' && (
           <div className="h-full p-6">
             <KanbanBoard
@@ -395,25 +443,6 @@ const ProspectosPage = () => {
               refreshTrigger={refreshTrigger}
               onEdit={handleEditarProspecto}
               onView={handleEditarProspecto}
-              filtros={filtros}
-            />
-          </div>
-        )}
-
-        {vistaActual === 'seguimientos' && (
-          <div className="h-full p-6 overflow-y-auto">
-            <SeguimientosDashboard
-              asesorId={filtros.asesor_id}
-              refreshTrigger={refreshTrigger}
-            />
-          </div>
-        )}
-
-        {vistaActual === 'metricas' && (
-          <div className="h-full p-6 overflow-y-auto">
-            <PipelineMetrics
-              asesorId={filtros.asesor_id}
-              refreshTrigger={refreshTrigger}
               filtros={filtros}
             />
           </div>
