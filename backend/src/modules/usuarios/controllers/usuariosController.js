@@ -19,15 +19,13 @@ const listarUsuarios = async (req, res) => {
                 u.apellido,
                 u.nombre || ' ' || u.apellido as nombre_completo,
                 u.telefono,
-                u.avatar,
                 u.es_jefe,
                 u.vende,
-                COALESCE(u.estado, 'ACTIVO') as estado,
+                u.estado,
                 u.ultimo_login,
                 u.created_at,
                 r.id as rol_id,
                 r.nombre as rol_nombre,
-                r.nivel as rol_nivel,
                 a.id as area_id,
                 a.nombre as area_nombre,
                 a.descripcion as departamento,
@@ -36,7 +34,7 @@ const listarUsuarios = async (req, res) => {
             LEFT JOIN roles r ON u.rol_id = r.id
             LEFT JOIN areas a ON u.area_id = a.id
             LEFT JOIN usuarios jefe ON u.jefe_id = jefe.id
-            WHERE u.deleted_at IS NULL OR u.deleted_at IS NULL
+            WHERE u.deleted_at IS NULL
             ORDER BY u.created_at DESC
         `);
 
@@ -69,7 +67,6 @@ const obtenerUsuario = async (req, res) => {
                 u.*,
                 u.nombre || ' ' || u.apellido as nombre_completo,
                 r.nombre as rol_nombre,
-                r.nivel as rol_nivel,
                 r.permisos as rol_permisos,
                 a.nombre as area_nombre,
                 a.descripcion as departamento,
@@ -78,7 +75,7 @@ const obtenerUsuario = async (req, res) => {
             LEFT JOIN roles r ON u.rol_id = r.id
             LEFT JOIN areas a ON u.area_id = a.id
             LEFT JOIN usuarios jefe ON u.jefe_id = jefe.id
-            WHERE u.id = $1 AND (u.deleted_at IS NULL OR u.deleted_at IS NULL)
+            WHERE u.id = $1 AND u.deleted_at IS NULL
         `, [id]);
 
         if (result.rows.length === 0) {
@@ -158,7 +155,7 @@ const crearUsuario = async (req, res) => {
                 es_jefe, vende, debe_cambiar_password
             ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, true)
             RETURNING id, email, nombre, apellido, nombre || ' ' || apellido as nombre_completo,
-                      rol_id, area_id, COALESCE(estado, 'ACTIVO') as estado, created_at
+                      rol_id, area_id, estado, created_at
         `, [
             email,
             password_hash,
@@ -248,7 +245,7 @@ const actualizarUsuario = async (req, res) => {
                 es_jefe = COALESCE($8, es_jefe),
                 vende = COALESCE($9, vende),
                 estado = COALESCE($10, estado)
-            WHERE id = $11 AND (deleted_at IS NULL OR deleted_at IS NULL)
+            WHERE id = $11 AND deleted_at IS NULL
             RETURNING id, email, nombre, apellido, nombre || ' ' || apellido as nombre_completo,
                       rol_id, area_id, estado, updated_at
         `, [
@@ -363,7 +360,7 @@ const eliminarUsuario = async (req, res) => {
             UPDATE usuarios
             SET deleted_at = CURRENT_TIMESTAMP,
                 estado = 'INACTIVO'
-            WHERE id = $1 AND (deleted_at IS NULL OR deleted_at IS NULL)
+            WHERE id = $1 AND deleted_at IS NULL
             RETURNING id, email, nombre || ' ' || apellido as nombre_completo
         `, [id]);
 

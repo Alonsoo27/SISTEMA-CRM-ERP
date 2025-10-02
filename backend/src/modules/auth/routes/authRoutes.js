@@ -88,15 +88,15 @@ router.post('/login', async (req, res) => {
                 u.nombre,
                 u.apellido,
                 u.nombre || ' ' || u.apellido as nombre_completo,
-                COALESCE(u.estado, 'ACTIVO') as estado,
+                u.estado,
                 u.configuracion,
-                COALESCE(u.debe_cambiar_password, false) as debe_cambiar_password,
+                u.debe_cambiar_password,
                 u.es_jefe,
                 u.vende,
                 u.jefe_id,
+                u.ultimo_login,
                 r.id as rol_id,
                 r.nombre as rol_nombre,
-                r.nivel as rol_nivel,
                 r.permisos as rol_permisos,
                 a.id as area_id,
                 a.nombre as area_nombre,
@@ -106,7 +106,7 @@ router.post('/login', async (req, res) => {
             LEFT JOIN roles r ON u.rol_id = r.id
             LEFT JOIN areas a ON u.area_id = a.id
             LEFT JOIN usuarios jefe ON u.jefe_id = jefe.id
-            WHERE u.email = $1 AND (u.deleted_at IS NULL OR u.deleted_at IS NULL)
+            WHERE u.email = $1 AND u.deleted_at IS NULL
         `, [email]);
 
         if (result.rows.length === 0) {
