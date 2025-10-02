@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { AuthUtils } from '../../../utils/auth';
-import { API_CONFIG } from '../../../config/apiConfig';
+import authService from '../../../services/authService';
 
 const Login = () => {
   const [formData, setFormData] = useState({
@@ -15,14 +14,12 @@ const Login = () => {
   // Si ya está autenticado, redirigir al dashboard
   useEffect(() => {
     console.log('🔍 Login - Verificando autenticación existente...');
-    
-    if (AuthUtils.isAuthenticated()) {
+
+    if (authService.isAuthenticated()) {
       console.log('✅ Login - Usuario ya autenticado, redirigiendo...');
       navigate('/', { replace: true });
     } else {
       console.log('❌ Login - No hay autenticación válida');
-      // Limpiar cualquier token inválido
-      AuthUtils.clearAuth();
     }
   }, [navigate]);
 
@@ -36,54 +33,25 @@ const Login = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     console.log('🚀 Login - Iniciando proceso de login...');
-    
+
     setLoading(true);
     setError('');
 
     try {
-      console.log('📤 Login - Enviando credenciales...');
-      
-      const response = await fetch(`${API_CONFIG.BASE_URL}/api/auth/login`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(formData),
+      // Usar authService.login() - ÚNICA FUENTE DE VERDAD
+      const user = await authService.login(formData.email, formData.password);
+
+      console.log('✅ Login - Autenticación exitosa:', {
+        id: user.id,
+        email: user.email,
+        nombre: user.nombre_completo || user.nombre
       });
 
-      const data = await response.json();
-      console.log('📥 Login - Respuesta recibida:', { 
-        success: data.success, 
-        hasToken: !!(data.data?.token),
-        hasUser: !!(data.data?.user)
-      });
+      // Redirigir al dashboard
+      navigate('/', { replace: true });
 
-      if (data.success && data.data?.token) {
-        console.log('💾 Login - Guardando datos de autenticación...');
-        
-        // Usar AuthUtils para guardar token y usuario
-        const tokenSaved = AuthUtils.setToken(data.data.token, data.data.user);
-        
-        if (!tokenSaved) {
-          throw new Error('Error guardando token en localStorage');
-        }
-
-        // Verificar que se guardó correctamente
-        if (!AuthUtils.isAuthenticated()) {
-          throw new Error('Error verificando autenticación después de guardar');
-        }
-
-        console.log('✅ Login - Autenticación exitosa, redirigiendo...');
-        
-        // ✅ Redirigir al dashboard (NO a '/')
-        navigate('/dashboard', { replace: true });
-        
-      } else {
-        console.error('❌ Login - Respuesta inválida:', data);
-        setError(data.message || 'Credenciales inválidas');
-      }
     } catch (err) {
-      console.error('💥 Login - Error:', err);
+      console.error('❌ Login - Error:', err);
       setError(err.message || 'Error de conexión con el servidor');
     } finally {
       setLoading(false);

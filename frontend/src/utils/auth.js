@@ -1,201 +1,132 @@
 // src/utils/auth.js
+// ============================================
+// AUTH UTILS - SOLO HELPERS JWT
+// ============================================
+// NOTA: authService es la única fuente de verdad para autenticación
+// Este archivo solo contiene utilidades para validar tokens JWT
+
 export const AuthUtils = {
-  
-  // ✅ NUEVO: Guardar token y datos de usuario
-  setToken(token, userData = null) {
+  /**
+   * Verificar si un token JWT es válido y no ha expirado
+   * @param {string} token - Token JWT
+   * @returns {boolean} True si el token es válido
+   */
+  isTokenValid(token) {
     try {
-      if (!token) {
-        console.error('AuthUtils.setToken: Token es requerido');
+      if (!token || typeof token !== 'string') {
         return false;
       }
-      
-      // Guardar token
-      localStorage.setItem('token', token);
-      
-      // Guardar datos de usuario si se proporcionan
-      if (userData) {
-        localStorage.setItem('user', JSON.stringify(userData));
+
+      // Validar estructura JWT (3 partes separadas por puntos)
+      const parts = token.split('.');
+      if (parts.length !== 3) {
+        return false;
       }
-      
-      console.log('✅ Token guardado exitosamente');
-      return true;
+
+      // Decodificar payload
+      const payload = JSON.parse(atob(parts[1]));
+
+      // Verificar expiración
+      if (!payload.exp) {
+        return false;
+      }
+
+      const currentTime = Math.floor(Date.now() / 1000);
+      const isValid = payload.exp > currentTime;
+
+      if (!isValid) {
+        console.warn('⚠️ AuthUtils: Token expirado');
+      }
+
+      return isValid;
+
     } catch (error) {
-      console.error('❌ Error guardando token:', error);
+      console.error('❌ AuthUtils: Error validando token:', error);
       return false;
     }
   },
 
-  // ✅ NUEVO: Obtener token simple
-  getToken() {
+  /**
+   * Decodificar payload de un token JWT (sin validar firma)
+   * @param {string} token - Token JWT
+   * @returns {Object|null} Payload decodificado o null
+   */
+  decodeToken(token) {
     try {
-      return localStorage.getItem('token');
-    } catch (error) {
-      console.error('❌ Error obteniendo token:', error);
-      return null;
-    }
-  },
-
-  // ✅ NUEVO: Verificar si está autenticado (simple)
-  isAuthenticated() {
-    const token = this.getToken();
-    const isValid = token && this.isTokenValid(token);
-    console.log('🔐 AuthUtils.isAuthenticated:', { 
-      hasToken: !!token, 
-      isValid, 
-      token: token ? token.substring(0, 20) + '...' : null 
-    });
-    return isValid;
-  },
-  
-  // ✅ Obtener token válido del localStorage (versión mejorada)
-  getAuthToken() {
-    try {
-      // Intentar obtener de 'token' primero (método nuevo)
-      const token = localStorage.getItem('token');
-      if (token && this.isTokenValid(token)) {
-        return token;
+      if (!token || typeof token !== 'string') {
+        return null;
       }
-      
-      // Limpiar token inválido
-      if (token) {
-        this.clearAuth();
+
+      const parts = token.split('.');
+      if (parts.length !== 3) {
+        return null;
       }
-      
-      // Intentar obtener de 'auth' como fallback (método legacy)
-      const authData = localStorage.getItem('auth');
-      if (authData) {
-        try {
-          const parsed = JSON.parse(authData);
-          if (parsed.token && this.isTokenValid(parsed.token)) {
-            return parsed.token;
-          } else {
-            localStorage.removeItem('auth');
-          }
-        } catch (e) {
-          localStorage.removeItem('auth');
-        }
+
+      const payload = JSON.parse(atob(parts[1]));
+      return payload;
+
+    } catch (error) {
+      console.error('❌ AuthUtils: Error decodificando token:', error);
+      return null;
+    }
+  },
+
+  /**
+   * Obtener información del usuario desde el token JWT
+   * @param {string} token - Token JWT
+   * @returns {Object|null} Usuario o null
+   */
+  getUserFromToken(token) {
+    try {
+      const payload = this.decodeToken(token);
+      if (!payload) {
+        return null;
       }
-      
-      // ❌ No hay token válido
-      return null;
-      
-    } catch (error) {
-      console.warn('Error obteniendo token:', error);
-      return null;
-    }
-  },
 
-  // ✅ Verificar si un token JWT es válido y no ha expirado
-isTokenValid(token) {
-  try {
-    if (!token || typeof token !== 'string') return false;
-    
-    // ✅ MODO DESARROLLO: Aceptar tokens fake para testing
-    if (token === 'fake-jwt-token-for-testing' || token.startsWith('fake-')) {
-      console.log('🛠️ AuthUtils: Token de desarrollo detectado');
-      return true;
-    }
-    
-    // ✅ MODO PRODUCCIÓN: Validar JWT real
-    const parts = token.split('.');
-    if (parts.length !== 3) return false;
-    
-    const payload = JSON.parse(atob(parts[1]));
-    const currentTime = Math.floor(Date.now() / 1000);
-    
-    return payload.exp && payload.exp > currentTime;
-  } catch (error) {
-    return false;
-  }
-},
-
-  // ✅ NUEVO: Limpiar autenticación (sin redirigir)
-  clearAuth() {
-    localStorage.removeItem('auth');
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
-    console.log('🗑️ Autenticación limpiada');
-  },
-
-  // ✅ Limpiar autenticación y redirigir al login
-  handleAuthError() {
-    this.clearAuth();
-    console.warn('Token expirado. Redirigiendo al login.');
-    
-    // Redirigir al login
-    if (typeof window !== 'undefined') {
-      window.location.href = '/login';
-    }
-  },
-
-  // ✅ Obtener headers con Authorization
-  getAuthHeaders() {
-    const token = this.getAuthToken();
-    if (!token) {
-      this.handleAuthError();
-      return {};
-    }
-    
-    return {
-      'Authorization': `Bearer ${token}`,
-      'Content-Type': 'application/json'
-    };
-  },
-
-  // ✅ Realizar fetch con autenticación automática
-  async authenticatedFetch(url, options = {}) {
-    const token = this.getAuthToken();
-    if (!token) {
-      this.handleAuthError();
-      throw new Error('No authenticated');
-    }
-
-    const headers = {
-      'Authorization': `Bearer ${token}`,
-      'Content-Type': 'application/json',
-      ...options.headers
-    };
-
-    const response = await fetch(url, {
-      ...options,
-      headers
-    });
-
-    // Si hay error de autenticación, manejar automáticamente
-    if (response.status === 401 || response.status === 403) {
-      this.handleAuthError();
-      throw new Error('Authentication failed');
-    }
-
-    return response;
-  },
-
-  // ✅ Obtener información del usuario del localStorage
-  getUser() {
-    try {
-      const userData = localStorage.getItem('user');
-      return userData ? JSON.parse(userData) : null;
-    } catch (error) {
-      console.error('Error obteniendo usuario:', error);
-      return null;
-    }
-  },
-
-  // ✅ Obtener información del usuario del token
-  getUserFromToken() {
-    try {
-      const token = this.getAuthToken();
-      if (!token) return null;
-      
-      const payload = JSON.parse(atob(token.split('.')[1]));
       return {
-        id: payload.user_id,
+        id: payload.user_id || payload.id,
+        email: payload.email,
         nombre: payload.nombre,
         apellido: payload.apellido,
-        rol: payload.rol
+        nombre_completo: payload.nombre_completo,
+        rol: payload.rol,
+        rol_id: payload.rol_id
       };
+
     } catch (error) {
+      console.error('❌ AuthUtils: Error extrayendo usuario del token:', error);
       return null;
+    }
+  },
+
+  /**
+   * Verificar si un token ha expirado
+   * @param {string} token - Token JWT
+   * @returns {boolean} True si ha expirado
+   */
+  isTokenExpired(token) {
+    return !this.isTokenValid(token);
+  },
+
+  /**
+   * Obtener tiempo restante del token en segundos
+   * @param {string} token - Token JWT
+   * @returns {number} Segundos restantes o 0
+   */
+  getTokenRemainingTime(token) {
+    try {
+      const payload = this.decodeToken(token);
+      if (!payload || !payload.exp) {
+        return 0;
+      }
+
+      const currentTime = Math.floor(Date.now() / 1000);
+      const remaining = payload.exp - currentTime;
+
+      return remaining > 0 ? remaining : 0;
+
+    } catch (error) {
+      return 0;
     }
   }
 };

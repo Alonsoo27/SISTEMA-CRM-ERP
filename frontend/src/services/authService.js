@@ -1,9 +1,13 @@
 // src/services/authService.js
+// ============================================
+// AUTH SERVICE - ÚNICA FUENTE DE VERDAD
+// ============================================
 import axios from 'axios';
 import { AuthUtils } from '../utils/auth';
 import { API_CONFIG } from '../config/apiConfig';
 
 const API_BASE_URL = `${API_CONFIG.BASE_URL}/api`;
+const USER_STORAGE_KEY = 'user'; // ← ÚNICA KEY DE STORAGE
 
 class AuthService {
   constructor() {
@@ -18,14 +22,14 @@ class AuthService {
     // Interceptor para agregar JWT automáticamente
     this.apiClient.interceptors.request.use(
       (config) => {
-        const token = AuthUtils.getAuthToken();
+        const token = this.getToken();
         if (token) {
           config.headers.Authorization = `Bearer ${token}`;
         }
         return config;
       },
       (error) => {
-        console.error('Error en request interceptor:', error);
+        console.error('❌ Error en request interceptor:', error);
         return Promise.reject(error);
       }
     );
@@ -34,8 +38,10 @@ class AuthService {
     this.apiClient.interceptors.response.use(
       (response) => response,
       (error) => {
-        if (error.response?.status === 401) {
-          AuthUtils.handleAuthError();
+        if (error.response?.status === 401 || error.response?.status === 403) {
+          console.warn('⚠️ Error de autenticación detectado, limpiando sesión');
+          this.logout();
+          window.location.href = '/login';
         }
         return Promise.reject(error);
       }
@@ -43,162 +49,164 @@ class AuthService {
   }
 
   /**
-   * Obtener información del usuario actual autenticado
-   * @returns {Promise<Object>} Usuario actual con toda la información
+   * ========================================
+   * MÉTODOS DE AUTENTICACIÓN
+   * ========================================
    */
-  async getCurrentUser() {
+
+  /**
+   * Login - Autenticar usuario
+   * @param {string} email
+   * @param {string} password
+   * @returns {Promise<Object>} Usuario autenticado
+   */
+  async login(email, password) {
     try {
-      console.log('🔍 AuthService: Obteniendo usuario actual...');
+      console.log('🔐 AuthService: Iniciando login para', email);
 
-      // Temporalmente usando /profile hasta que /me se registre correctamente
-      const response = await this.apiClient.get('/auth/profile');
+      const response = await axios.post(
+        `${API_CONFIG.BASE_URL}/api/auth/login`,
+        { email, password },
+        { headers: { 'Content-Type': 'application/json' } }
+      );
 
-      if (response.data?.success && response.data?.data?.usuario) {
-        const data = response.data.data;
-        const usuario = data.usuario;
-        const rol = data.rol;
+      const { data } = response;
 
-        // Adaptar estructura para compatibilidad con el sistema
-        const usuarioAdaptado = {
-          id: usuario.id,
-          nombre: usuario.nombre,
-          apellido: usuario.apellido,
-          nombre_completo: usuario.nombre_completo,
-          email: usuario.email,
-          rol: rol.nombre,
-          rol_id: rol.id,
-          es_jefe: false, // No disponible en /profile, usar default
-          vende: true, // No disponible en /profile, usar default
-          jefe_id: null,
-          area_id: data.area?.id || null,
-          area_nombre: data.area?.nombre || null,
-          jefe_nombre: null,
-          permisos: {
-            es_ejecutivo: [1, 2, 3, 11].includes(rol.id),
-            es_administrador: [1, 2, 11].includes(rol.id),
-            puede_vender: true, // Default
-            es_supervisor: false // Default
-          }
-        };
-
-        console.log('✅ AuthService: Usuario obtenido:', {
-          id: usuarioAdaptado.id,
-          nombre: usuarioAdaptado.nombre_completo,
-          rol: usuarioAdaptado.rol,
-          rol_id: usuarioAdaptado.rol_id,
-          es_ejecutivo: usuarioAdaptado.permisos.es_ejecutivo
-        });
-
-        // Guardar usuario en localStorage para cache
-        localStorage.setItem('currentUser', JSON.stringify(usuarioAdaptado));
-
-        return usuarioAdaptado;
-      } else {
-        throw new Error('Respuesta inválida del servidor');
+      if (!data.success || !data.data?.token || !data.data?.user) {
+        throw new Error(data.message || 'Respuesta inválida del servidor');
       }
+
+      const { token, user } = data.data;
+
+      // Guardar token
+      localStorage.setItem('token', token);
+
+      // Guardar usuario (estructura completa del backend)
+      localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(user));
+
+      // Limpiar cache viejo si existe
+      localStorage.removeItem('currentUser');
+      localStorage.removeItem('authToken');
+
+      console.log('✅ AuthService: Login exitoso', {
+        id: user.id,
+        email: user.email,
+        rol: user.rol?.nombre || user.rol
+      });
+
+      return user;
+
+    } catch (error) {
+      console.error('❌ AuthService: Error en login:', error);
+      throw new Error(error.response?.data?.message || error.message || 'Error en el login');
+    }
+  }
+
+  /**
+   * Obtener token del localStorage
+   * @returns {string|null} Token JWT
+   */
+  getToken() {
+    try {
+      const token = localStorage.getItem('token');
+      if (token && AuthUtils.isTokenValid(token)) {
+        return token;
+      }
+      return null;
+    } catch (error) {
+      console.error('❌ Error obteniendo token:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Obtener usuario del localStorage
+   * @returns {Object|null} Usuario o null
+   */
+  getUser() {
+    try {
+      const userData = localStorage.getItem(USER_STORAGE_KEY);
+      if (!userData) {
+        console.warn('⚠️ AuthService: No hay usuario en localStorage');
+        return null;
+      }
+
+      const user = JSON.parse(userData);
+
+      console.log('📦 AuthService: Usuario obtenido de localStorage:', {
+        id: user.id,
+        email: user.email,
+        nombre: user.nombre_completo || user.nombre,
+        rol: user.rol?.nombre || user.rol
+      });
+
+      return user;
     } catch (error) {
       console.error('❌ AuthService: Error obteniendo usuario:', error);
-
-      // Si hay error de auth, limpiar y redirigir
-      if (error.response?.status === 401 || error.response?.status === 403) {
-        AuthUtils.handleAuthError();
-        throw new Error('Sesión expirada');
-      }
-
-      throw new Error(`Error obteniendo usuario: ${error.message}`);
-    }
-  }
-
-  /**
-   * Obtener usuario desde cache (localStorage) si existe
-   * @returns {Object|null} Usuario desde cache o null
-   */
-  getCachedUser() {
-    try {
-      const cachedUser = localStorage.getItem('currentUser');
-      if (cachedUser) {
-        const userData = JSON.parse(cachedUser);
-        console.log('📦 AuthService: Usuario desde cache:', {
-          id: userData.id,
-          nombre: userData.nombre_completo,
-          rol: userData.rol
-        });
-        return userData;
-      }
-      return null;
-    } catch (error) {
-      console.error('❌ Error obteniendo usuario desde cache:', error);
-      localStorage.removeItem('currentUser');
       return null;
     }
   }
 
   /**
-   * Obtener usuario actual con fallback a cache
-   * @param {boolean} forceRefresh - Forzar obtener desde servidor
-   * @returns {Promise<Object>} Usuario actual
+   * Verificar si hay un usuario autenticado
+   * @returns {boolean} True si hay usuario autenticado
    */
-  async getUser(forceRefresh = false) {
-    try {
-      // Si no forzamos refresh, intentar obtener desde cache primero
-      if (!forceRefresh) {
-        const cachedUser = this.getCachedUser();
-        if (cachedUser) {
-          return cachedUser;
-        }
-      }
-
-      // Si no hay cache o se fuerza refresh, obtener desde servidor
-      return await this.getCurrentUser();
-    } catch (error) {
-      console.error('❌ AuthService: Error en getUser:', error);
-      throw error;
-    }
+  isAuthenticated() {
+    const token = this.getToken();
+    const user = this.getUser();
+    return !!(token && user);
   }
 
   /**
-   * Verificar si el usuario tiene acceso ejecutivo
-   * @returns {Promise<boolean>} True si tiene acceso ejecutivo
-   */
-  async hasExecutiveAccess() {
-    try {
-      const user = await this.getUser();
-      return user?.permisos?.es_ejecutivo || false;
-    } catch (error) {
-      console.error('❌ Error verificando acceso ejecutivo:', error);
-      return false;
-    }
-  }
-
-  /**
-   * Verificar si el usuario puede vender
-   * @returns {Promise<boolean>} True si puede vender
-   */
-  async canSell() {
-    try {
-      const user = await this.getUser();
-      return user?.vende || false;
-    } catch (error) {
-      console.error('❌ Error verificando permisos de venta:', error);
-      return false;
-    }
-  }
-
-  /**
-   * Limpiar cache del usuario
-   */
-  clearUserCache() {
-    localStorage.removeItem('currentUser');
-    console.log('🗑️ AuthService: Cache de usuario limpiado');
-  }
-
-  /**
-   * Logout completo
+   * Logout - Limpiar sesión
    */
   logout() {
-    this.clearUserCache();
-    AuthUtils.clearAuth();
-    console.log('👋 AuthService: Logout completo');
+    console.log('🚪 AuthService: Cerrando sesión...');
+
+    // Limpiar todo el localStorage relacionado con auth
+    localStorage.removeItem('token');
+    localStorage.removeItem(USER_STORAGE_KEY);
+    localStorage.removeItem('currentUser'); // Legacy
+    localStorage.removeItem('authToken'); // Legacy
+
+    console.log('✅ AuthService: Sesión cerrada');
+  }
+
+  /**
+   * ========================================
+   * MÉTODOS DE PERMISOS
+   * ========================================
+   */
+
+  /**
+   * Verificar si el usuario tiene rol específico
+   * @param {string|string[]} roles - Rol o array de roles permitidos
+   * @returns {boolean} True si tiene el rol
+   */
+  hasRole(roles) {
+    const user = this.getUser();
+    if (!user) return false;
+
+    const userRole = user.rol?.nombre || user.rol;
+    const allowedRoles = Array.isArray(roles) ? roles : [roles];
+
+    return allowedRoles.includes(userRole);
+  }
+
+  /**
+   * Verificar si el usuario es administrador
+   * @returns {boolean} True si es admin
+   */
+  isAdmin() {
+    return this.hasRole(['ADMIN', 'SUPER_ADMIN']);
+  }
+
+  /**
+   * Verificar si el usuario es gerente o superior
+   * @returns {boolean} True si es gerente o admin
+   */
+  isManager() {
+    return this.hasRole(['ADMIN', 'SUPER_ADMIN', 'GERENTE']);
   }
 }
 

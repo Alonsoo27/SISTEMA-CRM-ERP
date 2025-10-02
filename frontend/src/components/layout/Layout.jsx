@@ -2,7 +2,6 @@
 import React, { useState, useEffect } from 'react';
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
 import NotificationBell from '../NotificationBell';
-import { AuthUtils } from '../../utils/auth';
 import authService from '../../services/authService';
 
 const Layout = () => {
@@ -12,42 +11,29 @@ const Layout = () => {
 
   // Cargar usuario al montar componente
   useEffect(() => {
-    const cargarUsuario = async () => {
-      try {
-        console.log('🔍 Layout: Cargando usuario...');
+    console.log('🔍 Layout: Cargando usuario...');
 
-        // PRIORIDAD 1: Leer de localStorage 'user' (donde Login guarda)
-        let usuario = AuthUtils.getUser();
+    // Verificar autenticación
+    if (!authService.isAuthenticated()) {
+      console.warn('⚠️ Layout: Usuario no autenticado, redirigiendo a login');
+      navigate('/login', { replace: true });
+      return;
+    }
 
-        // PRIORIDAD 2: Si no está en 'user', intentar 'currentUser'
-        if (!usuario) {
-          usuario = await authService.getUser();
-        }
+    // Obtener usuario del localStorage
+    const usuario = authService.getUser();
 
-        // PRIORIDAD 3: Si no hay en cache, extraer del token
-        if (!usuario) {
-          usuario = AuthUtils.getUserFromToken();
-        }
-
-        if (usuario) {
-          setUsuarioActual(usuario);
-          console.log('✅ Layout: Usuario cargado:', {
-            id: usuario.id,
-            nombre: usuario.nombre_completo || usuario.nombre,
-            rol: usuario.rol
-          });
-        } else {
-          console.warn('⚠️ Layout: No se pudo obtener usuario');
-          navigate('/login', { replace: true });
-        }
-      } catch (error) {
-        console.error('❌ Layout: Error cargando usuario:', error);
-        // Si hay error de auth, redirigir al login
-        navigate('/login', { replace: true });
-      }
-    };
-
-    cargarUsuario();
+    if (usuario) {
+      setUsuarioActual(usuario);
+      console.log('✅ Layout: Usuario cargado:', {
+        id: usuario.id,
+        nombre: usuario.nombre_completo || usuario.nombre,
+        rol: usuario.rol?.nombre || usuario.rol
+      });
+    } else {
+      console.warn('⚠️ Layout: No se pudo obtener usuario');
+      navigate('/login', { replace: true });
+    }
   }, [navigate]);
 
   const menuItems = [
