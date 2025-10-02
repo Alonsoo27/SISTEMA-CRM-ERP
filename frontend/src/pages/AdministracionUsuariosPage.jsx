@@ -40,9 +40,9 @@ const AdministracionUsuariosPage = () => {
             const headers = { Authorization: `Bearer ${token}` };
 
             const [usuariosRes, rolesRes, areasRes] = await Promise.all([
-                axios.get(`${API_URL}/api/usuarios`, { headers }),
-                axios.get(`${API_URL}/api/usuarios/roles`, { headers }),
-                axios.get(`${API_URL}/api/usuarios/areas`, { headers })
+                axios.get(`${API_URL}/usuarios`, { headers }),
+                axios.get(`${API_URL}/usuarios/roles`, { headers }),
+                axios.get(`${API_URL}/usuarios/areas`, { headers })
             ]);
 
             setUsuarios(usuariosRes.data.data || []);
@@ -63,15 +63,15 @@ const AdministracionUsuariosPage = () => {
             const headers = { Authorization: `Bearer ${token}` };
 
             if (modalMode === 'create') {
-                await axios.post(`${API_URL}/api/usuarios`, formData, { headers });
+                await axios.post(`${API_URL}/usuarios`, formData, { headers });
                 toast.success('Usuario creado exitosamente');
             } else if (modalMode === 'edit') {
                 const { password, ...updateData } = formData;
-                await axios.put(`${API_URL}/api/usuarios/${selectedUsuario.id}`, updateData, { headers });
+                await axios.put(`${API_URL}/usuarios/${selectedUsuario.id}`, updateData, { headers });
                 toast.success('Usuario actualizado exitosamente');
             } else if (modalMode === 'password') {
                 await axios.put(
-                    `${API_URL}/api/usuarios/${selectedUsuario.id}/password`,
+                    `${API_URL}/usuarios/${selectedUsuario.id}/password`,
                     { password_nuevo: formData.password },
                     { headers }
                 );
@@ -92,7 +92,7 @@ const AdministracionUsuariosPage = () => {
 
         try {
             const token = localStorage.getItem('token');
-            await axios.delete(`${API_URL}/api/usuarios/${id}`, {
+            await axios.delete(`${API_URL}/usuarios/${id}`, {
                 headers: { Authorization: `Bearer ${token}` }
             });
             toast.success('Usuario eliminado');

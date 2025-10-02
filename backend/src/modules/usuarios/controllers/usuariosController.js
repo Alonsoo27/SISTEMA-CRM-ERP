@@ -393,16 +393,10 @@ const eliminarUsuario = async (req, res) => {
 const listarRoles = async (req, res) => {
     try {
         const result = await query(`
-            SELECT id, nombre, descripcion, nivel, permisos, activo
+            SELECT id, nombre, descripcion, permisos, activo
             FROM roles
             WHERE activo = true
-            ORDER BY
-                CASE nivel
-                    WHEN 'ADMIN' THEN 1
-                    WHEN 'EJECUTIVO' THEN 2
-                    WHEN 'OPERATIVO' THEN 3
-                END,
-                nombre
+            ORDER BY id
         `);
 
         res.json({
@@ -426,10 +420,10 @@ const listarRoles = async (req, res) => {
 const listarAreas = async (req, res) => {
     try {
         const result = await query(`
-            SELECT id, nombre, departamento, descripcion, activo
+            SELECT id, nombre, descripcion, activo
             FROM areas
             WHERE activo = true
-            ORDER BY departamento, nombre
+            ORDER BY nombre
         `);
 
         res.json({
