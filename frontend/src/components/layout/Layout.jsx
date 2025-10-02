@@ -281,9 +281,11 @@ const Layout = () => {
 
             {/* Avatar del usuario */}
             <div className="flex items-center space-x-3">
-              <span className="text-sm text-gray-600">Bienvenido, Admin</span>
+              <span className="text-sm text-gray-600">
+                Bienvenido, {usuarioActual?.nombre || 'Usuario'}
+              </span>
               <div className="h-8 w-8 bg-blue-600 rounded-full flex items-center justify-center">
-                <span className="text-white text-sm font-medium">A</span>
+                <span className="text-white text-sm font-medium">{getIniciales()}</span>
               </div>
             </div>
           </div>
