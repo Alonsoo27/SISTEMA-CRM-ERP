@@ -169,7 +169,16 @@ const Layout = () => {
   const getRol = () => {
     if (!usuarioActual) return 'Usuario';
 
-    const rol = usuarioActual.rol || usuarioActual.role || 'Usuario';
+    // Si rol es un objeto, extraer el nombre
+    let rol = usuarioActual.rol;
+    if (typeof rol === 'object' && rol !== null) {
+      rol = rol.nombre || rol.name || 'Usuario';
+    }
+
+    // Si no hay rol, usar fallback
+    if (!rol) {
+      rol = usuarioActual.role || 'Usuario';
+    }
 
     // Formatear rol para mostrar
     const rolesFormato = {
