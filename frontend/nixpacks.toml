@@ -1,5 +1,5 @@
-[providers]
-node = "18"
+[phases.setup]
+nixPkgs = ["nodejs_18"]
 
 [phases.install]
 cmds = ["npm ci"]
@@ -9,6 +9,3 @@ cmds = ["npm run build"]
 
 [start]
 cmd = "node serve.js"
-
-[staticAssets]
-disabled = true
