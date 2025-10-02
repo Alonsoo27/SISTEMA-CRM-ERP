@@ -3,7 +3,7 @@ import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import Layout from './components/layout/Layout';
 import Login from "./components/auth/Login/Login";
-import { AuthUtils } from './utils/auth'; // ✅ Importar AuthUtils
+import authService from './services/authService';
 
 // Páginas principales
 import ProductosPage from './pages/ProductosPage';
@@ -14,14 +14,14 @@ import SoportePage from './pages/SoportePage'; // ✅ NUEVO: Importar SoportePag
 import AdministracionUsuariosPage from './pages/AdministracionUsuariosPage'; // ✅ NUEVO: Administración de usuarios
 // import ClientesPage from './pages/ClientesPage'; // ✅ ELIMINADO: ClientesPage removido
 
-// ✅ Componente para verificar autenticación CORREGIDO
+// ✅ Componente para verificar autenticación
 const ProtectedRoute = ({ children }) => {
-  // Usar AuthUtils en lugar de validación JWT manual
-  if (!AuthUtils.isAuthenticated()) {
-    AuthUtils.clearAuth();
+  // Usar authService como única fuente de verdad
+  if (!authService.isAuthenticated()) {
+    authService.logout();
     return <Navigate to="/login" replace />;
   }
-  
+
   return children;
 };
 
