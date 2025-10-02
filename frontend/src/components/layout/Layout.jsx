@@ -1,16 +1,49 @@
 ﻿// src/components/layout/Layout.jsx
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
 import NotificationBell from '../NotificationBell';
+import { AuthUtils } from '../../utils/auth';
+import authService from '../../services/authService';
 
 const Layout = () => {
   const location = useLocation();
   const navigate = useNavigate();
+  const [usuarioActual, setUsuarioActual] = useState(null);
+
+  // Cargar usuario al montar componente
+  useEffect(() => {
+    const cargarUsuario = async () => {
+      try {
+        console.log('🔍 Layout: Cargando usuario...');
+
+        // Usar authService que maneja cache y fallback al servidor
+        const usuario = await authService.getUser();
+
+        if (usuario) {
+          setUsuarioActual(usuario);
+          console.log('✅ Layout: Usuario cargado:', {
+            id: usuario.id,
+            nombre: usuario.nombre_completo || usuario.nombre,
+            rol: usuario.rol
+          });
+        } else {
+          console.warn('⚠️ Layout: No se pudo obtener usuario');
+          navigate('/login', { replace: true });
+        }
+      } catch (error) {
+        console.error('❌ Layout: Error cargando usuario:', error);
+        // Si hay error de auth, redirigir al login
+        navigate('/login', { replace: true });
+      }
+    };
+
+    cargarUsuario();
+  }, [navigate]);
 
   const menuItems = [
-    { 
-      name: 'Dashboard', 
-      path: '/', 
+    {
+      name: 'Dashboard',
+      path: '/',
       icon: '🏠',
       description: 'Vista general del sistema'
     },
@@ -67,25 +100,21 @@ const Layout = () => {
   // FUNCIÓN LOGOUT COMPLETA
   const handleLogout = () => {
     try {
-      // Limpiar todos los datos de autenticación
-      localStorage.removeItem('token');
-      localStorage.removeItem('authToken');
-      localStorage.removeItem('user');
-      localStorage.removeItem('userRole');
-      
-      // Limpiar sessionStorage también por si acaso
-      sessionStorage.removeItem('token');
-      sessionStorage.removeItem('authToken');
-      sessionStorage.removeItem('user');
-      
-      // Opcional: mostrar mensaje de confirmación
-      console.log('Sesión cerrada correctamente');
-      
+      console.log('🚪 Layout: Cerrando sesión...');
+
+      // Usar authService para logout completo
+      authService.logout();
+
+      // Limpiar estado local
+      setUsuarioActual(null);
+
+      console.log('✅ Layout: Sesión cerrada correctamente');
+
       // Redireccionar al login
       navigate('/login', { replace: true });
-      
+
     } catch (error) {
-      console.error('Error al cerrar sesión:', error);
+      console.error('❌ Layout: Error al cerrar sesión:', error);
       // Aún así redireccionar
       navigate('/login', { replace: true });
     }
@@ -101,6 +130,49 @@ const Layout = () => {
   const getPageTitle = () => {
     const currentItem = menuItems.find(item => isActiveRoute(item.path));
     return currentItem ? currentItem.name : 'Sistema CRM/ERP';
+  };
+
+  // Obtener iniciales del usuario
+  const getIniciales = () => {
+    if (!usuarioActual) return 'U';
+
+    const nombre = usuarioActual.nombre || usuarioActual.username || '';
+    const apellido = usuarioActual.apellido || '';
+
+    const inicial1 = nombre.charAt(0).toUpperCase();
+    const inicial2 = apellido.charAt(0).toUpperCase();
+
+    return inicial2 ? inicial1 + inicial2 : inicial1;
+  };
+
+  // Obtener nombre completo del usuario
+  const getNombreCompleto = () => {
+    if (!usuarioActual) return 'Usuario';
+
+    const nombre = usuarioActual.nombre || usuarioActual.username || 'Usuario';
+    const apellido = usuarioActual.apellido || '';
+
+    return apellido ? `${nombre} ${apellido}` : nombre;
+  };
+
+  // Obtener rol del usuario
+  const getRol = () => {
+    if (!usuarioActual) return 'Usuario';
+
+    const rol = usuarioActual.rol || usuarioActual.role || 'Usuario';
+
+    // Formatear rol para mostrar
+    const rolesFormato = {
+      'ADMIN': 'Administrador',
+      'SUPER_ADMIN': 'Super Administrador',
+      'GERENTE': 'Gerente',
+      'ASESOR': 'Asesor de Ventas',
+      'VENDEDOR': 'Vendedor',
+      'SOPORTE': 'Soporte Técnico',
+      'ALMACEN': 'Almacén'
+    };
+
+    return rolesFormato[rol] || rol;
   };
 
   return (
@@ -155,11 +227,11 @@ const Layout = () => {
           {/* Info del usuario */}
           <div className="flex items-center mb-4 p-3 bg-gray-50 rounded-lg">
             <div className="h-10 w-10 bg-blue-600 rounded-full flex items-center justify-center mr-3">
-              <span className="text-white text-sm font-medium">A</span>
+              <span className="text-white text-sm font-medium">{getIniciales()}</span>
             </div>
             <div className="flex-1">
-              <div className="text-sm font-medium text-gray-900">Admin User</div>
-              <div className="text-xs text-gray-600">Administrador</div>
+              <div className="text-sm font-medium text-gray-900">{getNombreCompleto()}</div>
+              <div className="text-xs text-gray-600">{getRol()}</div>
             </div>
           </div>
 
