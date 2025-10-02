@@ -151,6 +151,31 @@ npm run dev
 
 ---
 
+## 🔑 Gestión de Passwords
+
+### Resetear password de un usuario:
+
+```bash
+cd backend
+node reset_password.js email@usuario.com nuevaPassword
+```
+
+**Ejemplo:**
+```bash
+node reset_password.js admin@test.com MiNuevaPassword123
+```
+
+### Actualizar passwords de usuarios de prueba:
+
+Ejecuta en Supabase SQL Editor:
+```
+database/migrations/fix_test_users_passwords.sql
+```
+
+Esto actualiza los usuarios 3-7 con password: `Test123!`
+
+---
+
 ## 🆘 Troubleshooting
 
 ### Error: "Cannot find module usuarios"
@@ -159,13 +184,24 @@ npm run dev
 ### Error: "Table usuarios does not exist"
 → Ejecuta la migración SQL en Supabase
 
-### No puedo hacer login
-→ Verifica que la migración SQL se ejecutó correctamente
-→ Revisa en Supabase que exista el usuario en la tabla `usuarios`
+### No puedo hacer login / "Credenciales inválidas"
+**Causas comunes:**
+1. **Hash de password inválido** → Usa `reset_password.js` para arreglarlo
+2. **Usuario inactivo** → Verifica `estado = 'ACTIVO'` y `activo = true`
+3. **Usuario eliminado** → Verifica `deleted_at IS NULL`
+
+**Solución rápida:**
+```bash
+node reset_password.js tu@email.com admin123
+```
 
 ### El panel de usuarios no carga
 → Verifica que el backend esté corriendo
 → Revisa la consola del navegador (F12) para errores
+
+### Error: "syntax error at or near WHERE"
+→ En Supabase, escribe el UPDATE en UNA SOLA LÍNEA
+→ Los caracteres `$` en el hash pueden causar problemas en multi-línea
 
 ---
 
