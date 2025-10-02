@@ -19,5 +19,13 @@ export default defineConfig({
         secure: false
       }
     }
+  },
+  preview: {
+    port: 5173,
+    host: true,
+    allowedHosts: [
+      'splendid-serenity-production.up.railway.app',
+      '.railway.app'
+    ]
   }
 })
