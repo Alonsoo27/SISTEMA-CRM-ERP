@@ -44,13 +44,8 @@ app.use(morgan('combined'));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
-// Inicializar Cache Service Redis
+// Cache Service (se auto-inicializa si REDIS_HOST está configurado)
 const cacheService = require('./src/services/CacheService');
-cacheService.inicializar().then(() => {
-    console.log('⚡ Cache Redis inicializado exitosamente');
-}).catch((error) => {
-    console.warn('⚠️ Cache Redis no disponible, continuando sin cache:', error.message);
-});
 
 // SISTEMA DE CARGA DE MÓDULOS OPTIMIZADO
 console.log('🔧 Iniciando carga de módulos...');

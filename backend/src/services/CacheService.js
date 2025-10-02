@@ -30,13 +30,28 @@ class CacheService {
      * Inicializar conexión Redis
      */
     async inicializar() {
+        // NO intentar conectar si no hay REDIS_HOST configurado
+        if (!process.env.REDIS_HOST) {
+            if (!this.hasLoggedError) {
+                console.log('📦 Redis no configurado - Sistema funcionando sin cache');
+                this.hasLoggedError = true;
+            }
+            this.isConnected = false;
+            return false;
+        }
+
+        // Ya se intentó conectar antes y falló
+        if (this.retryAttempts >= this.maxRetries) {
+            return false;
+        }
+
         try {
             // Configuración Redis
             const redisConfig = {
                 socket: {
-                    host: process.env.REDIS_HOST || 'localhost',
+                    host: process.env.REDIS_HOST,
                     port: process.env.REDIS_PORT || 6379,
-                    connectTimeout: 10000,
+                    connectTimeout: 5000,
                     lazyConnect: true
                 },
                 password: process.env.REDIS_PASSWORD || undefined,
@@ -45,7 +60,7 @@ class CacheService {
 
             this.client = redis.createClient(redisConfig);
 
-            // Event handlers
+            // Event handlers - SIN REINTENTOS AUTOMÁTICOS
             this.client.on('connect', () => {
                 console.log('🔥 Redis Cache: Conectado exitosamente');
                 this.isConnected = true;
@@ -54,16 +69,7 @@ class CacheService {
 
             this.client.on('error', (error) => {
                 this.isConnected = false;
-
-                // Solo intentar reconexión si no hemos llegado al máximo
-                if (this.retryAttempts < this.maxRetries) {
-                    this.retryAttempts++;
-                    console.log(`🔄 Intentando reconexión Redis (${this.retryAttempts}/${this.maxRetries})...`);
-                    setTimeout(() => this.inicializar(), 5000);
-                } else {
-                    // Después de 3 intentos, solo mostrar el mensaje una vez
-                    console.warn('⚠️ Redis no disponible - Sistema funcionando sin cache');
-                }
+                // NO hacer reintentos automáticos
             });
 
             this.client.on('ready', () => {
@@ -75,11 +81,13 @@ class CacheService {
 
             return true;
         } catch (error) {
+            this.retryAttempts++;
+
             if (!this.hasLoggedError) {
-                console.warn('💥 Redis no disponible - Sistema funcionando sin cache');
-                console.log('💡 Para activar cache: instalar Redis o Docker');
+                console.log('📦 Redis no disponible - Sistema funcionando sin cache');
                 this.hasLoggedError = true;
             }
+
             this.isConnected = false;
             return false;
         }
@@ -340,9 +348,12 @@ class CacheService {
 // Crear instancia singleton
 const cacheService = new CacheService();
 
-// Inicializar automáticamente si está en producción o si Redis está configurado
-if (process.env.NODE_ENV === 'production' || process.env.REDIS_HOST) {
-    cacheService.inicializar().catch(console.error);
+// Solo inicializar automáticamente si REDIS_HOST está configurado
+// (No forzar conexión en producción si no hay Redis disponible)
+if (process.env.REDIS_HOST) {
+    cacheService.inicializar().catch(() => {
+        // Fallar silenciosamente, el log ya se mostró en inicializar()
+    });
 }
 
 module.exports = cacheService;
