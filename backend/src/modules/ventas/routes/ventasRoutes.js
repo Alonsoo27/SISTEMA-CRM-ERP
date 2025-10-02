@@ -7,7 +7,7 @@ const express = require('express');
 const router = express.Router();
 
 // Controllers
-const VentasController = require('../controllers/VentasController');
+const VentasController = require('../controllers/ventasController');
 const ClientesController = require('../controllers/clientesController');
 const ConversionService = require('../services/ConversionService');
 const VentasService = require('../services/VentasService');
