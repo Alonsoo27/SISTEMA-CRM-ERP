@@ -4,7 +4,7 @@
 // ============================================
 
 const { query } = require('../../../config/database');
-const VentasService = require('../services/VentasService');
+const VentasService = require('../services/ventasService');
 const ConversionService = require('../services/ConversionService');
 const almacenService = require('../../almacen/services/almacenService');
 // Funciones para manejar timezone de Lima

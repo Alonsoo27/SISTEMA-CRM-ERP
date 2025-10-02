@@ -10,7 +10,7 @@ const router = express.Router();
 const VentasController = require('../controllers/ventasController');
 const ClientesController = require('../controllers/clientesController');
 const ConversionService = require('../services/ConversionService');
-const VentasService = require('../services/VentasService');
+const VentasService = require('../services/ventasService');
 
 // Middleware de autenticación (ajustar según tu sistema)
 const { authenticateToken } = require('../../../middleware/auth');
