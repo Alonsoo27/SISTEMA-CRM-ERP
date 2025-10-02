@@ -9,3 +9,6 @@ cmds = ["npm run build"]
 
 [start]
 cmd = "npm start"
+
+[variables]
+NIXPACKS_NO_CADDY = "1"
