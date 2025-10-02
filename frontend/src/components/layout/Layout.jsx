@@ -16,8 +16,18 @@ const Layout = () => {
       try {
         console.log('🔍 Layout: Cargando usuario...');
 
-        // Usar authService que maneja cache y fallback al servidor
-        const usuario = await authService.getUser();
+        // PRIORIDAD 1: Leer de localStorage 'user' (donde Login guarda)
+        let usuario = AuthUtils.getUser();
+
+        // PRIORIDAD 2: Si no está en 'user', intentar 'currentUser'
+        if (!usuario) {
+          usuario = await authService.getUser();
+        }
+
+        // PRIORIDAD 3: Si no hay en cache, extraer del token
+        if (!usuario) {
+          usuario = AuthUtils.getUserFromToken();
+        }
 
         if (usuario) {
           setUsuarioActual(usuario);
