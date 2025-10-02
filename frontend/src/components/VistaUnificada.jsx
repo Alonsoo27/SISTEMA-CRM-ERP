@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import DashboardEjecutivoGuard from './guards/DashboardEjecutivoGuard';
 import PeriodSelectorAdvanced from './ventas/PeriodSelector/PeriodSelectorAdvanced';
+import { API_CONFIG } from '../config/apiConfig';
 
 const VistaUnificada = ({ 
   usuarioActual,
@@ -45,7 +46,7 @@ const VistaUnificada = ({
       console.log(`[Vista Unificada] Cargando datos para período: ${periodoSeleccionado}`);
 
       const response = await fetch(
-        `/api/dashboard-ejecutivo/vista-unificada?periodo=${periodoSeleccionado}`, 
+        `${API_CONFIG.BASE_URL}/api/dashboard-ejecutivo/vista-unificada?periodo=${periodoSeleccionado}`,
         { headers }
       );
 

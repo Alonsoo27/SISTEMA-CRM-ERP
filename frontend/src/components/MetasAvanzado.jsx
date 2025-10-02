@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import ventasService from '../services/ventasService';
+import { API_CONFIG } from '../config/apiConfig';
 import {
   Target,
   TrendingUp,
@@ -76,7 +77,7 @@ const MetasAvanzado = ({ usuarioActual }) => {
       setLoadingConfig(true);
 
       // Obtener lista de asesores configurables
-      const response = await fetch('/api/metas/ventas/configurables', {
+      const response = await fetch(`${API_CONFIG.BASE_URL}/api/metas/ventas/configurables`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`,
           'Content-Type': 'application/json'
@@ -103,7 +104,7 @@ const MetasAvanzado = ({ usuarioActual }) => {
     try {
       setLoadingConfig(true);
 
-      const response = await fetch('/api/metas/ventas/automaticas', {
+      const response = await fetch(`${API_CONFIG.BASE_URL}/api/metas/ventas/automaticas`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`,
@@ -137,7 +138,7 @@ const MetasAvanzado = ({ usuarioActual }) => {
     try {
       const hoy = new Date();
 
-      const response = await fetch('/api/metas/ventas/configurar', {
+      const response = await fetch(`${API_CONFIG.BASE_URL}/api/metas/ventas/configurar`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`,
