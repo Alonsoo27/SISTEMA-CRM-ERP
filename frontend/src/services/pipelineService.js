@@ -1,18 +1,17 @@
 // src/services/pipelineService.js
 // Cliente API para métricas de Pipeline - VERSIÓN CORREGIDA
+import { API_CONFIG } from '../config/apiConfig';
 
-const API_BASE_URL = 'http://localhost:3001/api/ventas/pipeline';
+const API_BASE_URL = `${API_CONFIG.BASE_URL}/api/ventas/pipeline`;
 
 class PipelineService {
 
   // Función para obtener headers con authorization
   getAuthHeaders() {
-    const token = localStorage.getItem('authToken') || 
-                  localStorage.getItem('fake-jwt-token-for-testing') || 
-                  'fake-jwt-token-for-testing';
+    const token = localStorage.getItem('token') || localStorage.getItem('authToken');
     return {
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`
+      ...(token && { 'Authorization': `Bearer ${token}` })
     };
   }
 

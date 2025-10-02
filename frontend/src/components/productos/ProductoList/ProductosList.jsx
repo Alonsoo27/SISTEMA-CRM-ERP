@@ -4,12 +4,13 @@ import ProductoForm from '../ProductoForm/ProductoForm';
 import ProductoDetalles from '../ProductoDetalles/ProductoDetalles';
 import ConfirmDialog from '../../common/ConfirmDialog';
 import UploadMasivo from '../UploadMasivo/UploadMasivo';
+import { API_CONFIG } from '../../../config/apiConfig';
 
 const getAuthHeaders = () => {
-    const token = localStorage.getItem('authToken') || localStorage.getItem('fake-jwt-token-for-testing') || 'fake-jwt-token-for-testing';
+    const token = localStorage.getItem('token') || localStorage.getItem('authToken');
     return {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`
+        ...(token && { 'Authorization': `Bearer ${token}` })
     };
 };
 
@@ -54,8 +55,8 @@ const ProductosList = () => {
 
             // Cargar productos y categorías en paralelo
             const [productosResponse, categoriasResponse] = await Promise.all([
-                fetch('http://localhost:3001/api/productos', { headers: getAuthHeaders() }),
-                fetch('http://localhost:3001/api/productos/categorias', { headers: getAuthHeaders() })
+                fetch(`${API_CONFIG.BASE_URL}/api/productos`, { headers: getAuthHeaders() }),
+                fetch(`${API_CONFIG.BASE_URL}/api/productos/categorias`, { headers: getAuthHeaders() })
             ]);
 
             if (!productosResponse.ok || !categoriasResponse.ok) {
@@ -160,7 +161,7 @@ const ProductosList = () => {
         if (!productoSeleccionado) return;
         setActionLoading(true);
         try {
-            const response = await fetch(`http://localhost:3001/api/productos/${productoSeleccionado.id}`, {
+            const response = await fetch(`${API_CONFIG.BASE_URL}/api/productos/${productoSeleccionado.id}`, {
                 method: 'DELETE',
                 headers: getAuthHeaders()
             });

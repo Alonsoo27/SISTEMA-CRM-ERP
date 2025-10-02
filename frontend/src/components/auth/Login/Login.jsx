@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AuthUtils } from '../../../utils/auth';
+import { API_CONFIG } from '../../../config/apiConfig';
 
 const Login = () => {
   const [formData, setFormData] = useState({
@@ -42,7 +43,7 @@ const Login = () => {
     try {
       console.log('📤 Login - Enviando credenciales...');
       
-      const response = await fetch('http://localhost:3001/api/auth/login', {
+      const response = await fetch(`${API_CONFIG.BASE_URL}/api/auth/login`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

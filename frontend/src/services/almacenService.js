@@ -2,8 +2,9 @@
 // Servicio Empresarial para Gestión de Almacén - Patrón Profesional
 import axios from 'axios';
 import { AuthUtils } from '../utils/auth';
+import { API_CONFIG } from '../config/apiConfig';
 
-const API_BASE_URL = 'http://localhost:3001/api';
+const API_BASE_URL = `${API_CONFIG.BASE_URL}/api`;
 
 class AlmacenService {
   constructor() {

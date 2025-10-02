@@ -2,8 +2,9 @@
 // CLIENTES SERVICE - COMUNICACIÓN API MEJORADA
 // Sistema CRM/ERP v2.0 - Servicio profesional integrado
 // ============================================
+import { API_CONFIG } from '../config/apiConfig';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+const API_BASE_URL = API_CONFIG.BASE_URL;
 
 class ClientesService {
   constructor() {

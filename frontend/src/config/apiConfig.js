@@ -64,10 +64,11 @@ export const apiCall = async (endpoint, options = {}) => {
 
   console.log(`🌐 API Call: ${url}`);
 
+  const token = localStorage.getItem('token');
   const defaultOptions = {
     headers: {
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${localStorage.getItem('token') || 'fake-jwt-token-for-testing'}`
+      ...(token && { 'Authorization': `Bearer ${token}` })
     }
   };
 

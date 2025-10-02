@@ -1,5 +1,7 @@
 // frontend/src/services/notificacionesService.js
-const API_BASE = 'http://localhost:3001/api';
+import { API_CONFIG } from '../config/apiConfig';
+
+const API_BASE = `${API_CONFIG.BASE_URL}/api`;
 
 class NotificacionesService {
     
@@ -16,16 +18,9 @@ class NotificacionesService {
         if (userId) return userId;
 
         // Opción 2: Obtener token de localStorage con keys correctas
-        const token = localStorage.getItem('authToken') || 
-                      localStorage.getItem('fake-jwt-token-for-testing') || 
-                      localStorage.getItem('token');
+        const token = localStorage.getItem('token') || localStorage.getItem('authToken');
 
         if (token) {
-            // ✅ DETECTAR TOKEN FAKE PARA DESARROLLO
-            if (token === 'fake-jwt-token-for-testing' || token.startsWith('fake-')) {
-                console.log('🔍 Token fake detectado en notificaciones, usando user ID 1');
-                return '1';
-            }
 
             // ✅ DECODIFICAR SOLO JWT REALES
             try {
@@ -49,12 +44,10 @@ class NotificacionesService {
 
     // ✅ CORREGIDO: Headers con keys correctas de localStorage
     getHeaders() {
-        const token = localStorage.getItem('authToken') || 
-                      localStorage.getItem('fake-jwt-token-for-testing') || 
-                      'fake-jwt-token-for-testing';
+        const token = localStorage.getItem('token') || localStorage.getItem('authToken');
         return {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
+            ...(token && { 'Authorization': `Bearer ${token}` })
         };
     }
 

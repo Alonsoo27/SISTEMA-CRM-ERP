@@ -1,16 +1,17 @@
 // src/services/prospectosService.js
 // Servicio API SUPERIOR - Método unificado con parámetros (Opción 3) - CORREGIDO
+import { API_CONFIG } from '../config/apiConfig';
 
-const API_BASE_URL = 'http://localhost:3001/api/prospectos';
+const API_BASE_URL = `${API_CONFIG.BASE_URL}/api/prospectos`;
 
 class ProspectosService {
   
   // ✅ FUNCIÓN PARA OBTENER HEADERS CON AUTHORIZATION
   getAuthHeaders() {
-    const token = localStorage.getItem('authToken') || localStorage.getItem('fake-jwt-token-for-testing') || 'fake-jwt-token-for-testing';
+    const token = localStorage.getItem('token') || localStorage.getItem('authToken');
     return {
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`
+      ...(token && { 'Authorization': `Bearer ${token}` })
     };
   }
 
