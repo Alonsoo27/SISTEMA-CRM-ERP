@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { DollarSign, Target, TrendingUp, X, Award, Zap } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { AuthUtils } from '../../utils/auth';
+import { API_CONFIG } from '../../config/apiConfig';
 
 const BonoProyectado = ({ asesorId = 1 }) => {
   const [datosBonus, setDatosBonus] = useState(null);
@@ -19,7 +20,7 @@ const BonoProyectado = ({ asesorId = 1 }) => {
       setCargando(true);
       
       // ✅ Usar AuthUtils para obtener token y hacer request seguro
-      const response = await AuthUtils.authenticatedFetch(`http://localhost:3001/api/comisiones/bono-actual/${asesorId}`);
+      const response = await AuthUtils.authenticatedFetch(`${API_CONFIG.BASE_URL}/api/comisiones/bono-actual/${asesorId}`);
       
       const data = await response.json();
       console.log('🔍 Respuesta API bonos:', data); // DEBUG

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { API_CONFIG } from '../../../config/apiConfig';
 
 const ProductoForm = ({
     isOpen,
@@ -88,7 +89,7 @@ const ProductoForm = ({
     const cargarCategorias = async () => {
         try {
             const token = localStorage.getItem('token') || sessionStorage.getItem('token');
-        const response = await fetch('http://localhost:3001/api/productos/categorias', {
+        const response = await fetch(`${API_CONFIG.BASE_URL}/api/productos/categorias`, {
             headers: {
                 'Authorization': `Bearer ${token}`
             }
@@ -183,8 +184,8 @@ const ProductoForm = ({
 
         try {
             const url = modo === 'editar'
-                ? `http://localhost:3001/api/productos/${producto.id}`
-                : 'http://localhost:3001/api/productos';
+                ? `${API_CONFIG.BASE_URL}/api/productos/${producto.id}`
+                : `${API_CONFIG.BASE_URL}/api/productos`;
 
             const method = modo === 'editar' ? 'PUT' : 'POST';
 

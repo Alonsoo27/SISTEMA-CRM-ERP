@@ -1,5 +1,6 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import * as XLSX from 'xlsx';
+import { API_CONFIG } from '../../../config/apiConfig';
 
 const UploadMasivo = ({ isOpen, onClose, onUploadComplete, categorias = [] }) => {
     const [step, setStep] = useState(1); // 1: Upload, 2: Preview, 3: DuplicatesModal, 4: Processing, 5: Results
@@ -54,13 +55,13 @@ const UploadMasivo = ({ isOpen, onClose, onUploadComplete, categorias = [] }) =>
 const generarPlantilla = async () => {
     try {
         // Obtener token de autenticación
-        const token = localStorage.getItem('authToken') || localStorage.getItem('fake-jwt-token-for-testing') || 'fake-jwt-token-for-testing';
+        const token = localStorage.getItem('token') || localStorage.getItem('authToken');
 
         // Realizar fetch con headers de autenticación
-        const response = await fetch('http://localhost:3001/api/productos/plantilla/premium', {
+        const response = await fetch(`${API_CONFIG.BASE_URL}/api/productos/plantilla/premium`, {
             method: 'GET',
             headers: {
-                'Authorization': `Bearer ${token}`,
+                ...(token && { 'Authorization': `Bearer ${token}` }),
                 'Content-Type': 'application/json'
             }
         });
@@ -292,7 +293,7 @@ const leerArchivo = useCallback(async (file) => {
             }));
 
             const token = localStorage.getItem('token') || sessionStorage.getItem('token');
-            const response = await fetch('http://localhost:3001/api/productos/upload/preview', {
+            const response = await fetch(`${API_CONFIG.BASE_URL}/api/productos/upload/preview`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -364,7 +365,7 @@ const leerArchivo = useCallback(async (file) => {
             }));
 
             const token = localStorage.getItem('token') || sessionStorage.getItem('token');
-            const response = await fetch('http://localhost:3001/api/productos/upload/masivo', {
+            const response = await fetch(`${API_CONFIG.BASE_URL}/api/productos/upload/masivo`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',

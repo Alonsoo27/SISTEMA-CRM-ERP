@@ -9,6 +9,7 @@ import {
   Filter,
   RefreshCw
 } from 'lucide-react';
+import { API_CONFIG } from '../../../config/apiConfig';
 
 const DashboardProductos = () => {
   const [dashboardData, setDashboardData] = useState(null);
@@ -23,7 +24,7 @@ const DashboardProductos = () => {
   const cargarDashboard = async () => {
     try {
       setLoading(true);
-      const token = localStorage.getItem('authToken') || localStorage.getItem('fake-jwt-token-for-testing') || 'fake-jwt-token-for-testing';
+      const token = localStorage.getItem('token') || localStorage.getItem('authToken');
 
       const params = new URLSearchParams();
       params.append('periodo', filtros.periodo);
@@ -31,9 +32,9 @@ const DashboardProductos = () => {
         params.append('linea_producto', filtros.linea_producto);
       }
 
-      const response = await fetch(`http://localhost:3001/api/productos/dashboard?${params.toString()}`, {
+      const response = await fetch(`${API_CONFIG.BASE_URL}/api/productos/dashboard?${params.toString()}`, {
         headers: {
-          'Authorization': `Bearer ${token}`,
+          ...(token && { 'Authorization': `Bearer ${token}` }),
           'Content-Type': 'application/json'
         }
       });
