@@ -6,6 +6,8 @@
 const express = require('express');
 const router = express.Router();
 const jwt = require('jsonwebtoken');
+const bcrypt = require('bcrypt');
+const { query } = require('../../../config/database');
 
 // Middleware de autenticación (importar el existente)
 const { authenticateToken } = require('../../../middleware/auth');
@@ -57,7 +59,7 @@ router.get('/test', (req, res) => {
 // ============================================
 // LOGIN EMPRESARIAL MEJORADO
 // ============================================
-router.post('/login', (req, res) => {
+router.post('/login', async (req, res) => {
     try {
         const { email, password } = req.body;
         
@@ -77,88 +79,165 @@ router.post('/login', (req, res) => {
             });
         }
 
-        // Validación de credenciales empresariales
-        if (email === 'eliashuaraca2012@gmail.com' && password === 'admin123') {
-            
-            // Generar token empresarial (puede ser JWT real o token de prueba)
-            const tokenPayload = {
-                user_id: 1,
-                email: email,
-                nombre: 'Alonso',
-                apellido: 'Admin',
-                rol: 'admin',
-                area: 'SISTEMAS',
-                permissions: ['READ', 'WRITE', 'DELETE', 'ADMIN'],
-                login_time: new Date().toISOString(),
-                session_id: `session_${Date.now()}`
-            };
+        // Buscar usuario en la base de datos
+        const result = await query(`
+            SELECT
+                u.id,
+                u.email,
+                u.password_hash,
+                u.nombre,
+                u.apellido,
+                u.nombre_completo,
+                u.estado,
+                u.configuracion,
+                u.debe_cambiar_password,
+                u.es_jefe,
+                u.vende,
+                u.jefe_id,
+                r.id as rol_id,
+                r.nombre as rol_nombre,
+                r.nivel as rol_nivel,
+                r.permisos as rol_permisos,
+                a.id as area_id,
+                a.nombre as area_nombre,
+                a.departamento,
+                jefe.nombre_completo as jefe_nombre
+            FROM usuarios u
+            LEFT JOIN roles r ON u.rol_id = r.id
+            LEFT JOIN areas a ON u.area_id = a.id
+            LEFT JOIN usuarios jefe ON u.jefe_id = jefe.id
+            WHERE u.email = $1 AND u.deleted_at IS NULL
+        `, [email]);
 
-            // Token empresarial (puedes cambiar esto por JWT real)
-            const token = process.env.NODE_ENV === 'production' 
-                ? jwt.sign(tokenPayload, process.env.JWT_SECRET || 'default-secret', { expiresIn: '8h' })
-                : 'fake-jwt-token-for-testing'; // Token de desarrollo
-
-            // Usuario empresarial estructurado
-            const userData = {
-                id: 1,
-                email: email,
-                nombre: 'Alonso',
-                apellido: 'Admin',
-                nombre_completo: 'Alonso Admin',
-                rol: { 
-                    id: 1,
-                    nombre: 'SUPER_ADMIN',
-                    nivel: 'ADMIN',
-                    permisos: ['READ', 'WRITE', 'DELETE', 'ADMIN']
-                },
-                area: { 
-                    id: 1,
-                    nombre: 'SISTEMAS',
-                    departamento: 'TECNOLOGIA'
-                },
-                estado: 'ACTIVO',
-                ultimo_login: new Date().toISOString(),
-                configuracion: {
-                    theme: 'light',
-                    language: 'es',
-                    timezone: 'America/Lima'
-                }
-            };
-
-            logAuthEvent('LOGIN_SUCCESS', { 
-                user_id: userData.id,
-                email: userData.email,
-                rol: userData.rol.nombre 
+        if (result.rows.length === 0) {
+            logAuthEvent('LOGIN_FAILED', {
+                reason: 'User not found',
+                email: email
             });
 
-            res.json({
-                success: true,
-                message: 'Login exitoso',
-                data: {
-                    token: token,
-                    user: userData,
-                    session: {
-                        expires_in: '8 hours',
-                        issued_at: new Date().toISOString(),
-                        session_type: process.env.NODE_ENV === 'production' ? 'JWT' : 'DEVELOPMENT'
-                    }
-                }
-            });
-
-        } else {
-            logAuthEvent('LOGIN_FAILED', { 
-                reason: 'Invalid credentials', 
-                email: email,
-                attempted_password_length: password?.length || 0
-            });
-
-            res.status(401).json({
+            return res.status(401).json({
                 success: false,
                 message: 'Credenciales inválidas',
                 code: 'INVALID_CREDENTIALS',
                 timestamp: new Date().toISOString()
             });
         }
+
+        const usuario = result.rows[0];
+
+        // Verificar si el usuario está activo
+        if (usuario.estado !== 'ACTIVO') {
+            logAuthEvent('LOGIN_FAILED', {
+                reason: 'User inactive',
+                email: email,
+                estado: usuario.estado
+            });
+
+            return res.status(401).json({
+                success: false,
+                message: 'Usuario inactivo o suspendido',
+                code: 'USER_INACTIVE',
+                timestamp: new Date().toISOString()
+            });
+        }
+
+        // Verificar contraseña con bcrypt
+        const passwordValido = await bcrypt.compare(password, usuario.password_hash);
+
+        if (!passwordValido) {
+            logAuthEvent('LOGIN_FAILED', {
+                reason: 'Invalid password',
+                email: email
+            });
+
+            return res.status(401).json({
+                success: false,
+                message: 'Credenciales inválidas',
+                code: 'INVALID_CREDENTIALS',
+                timestamp: new Date().toISOString()
+            });
+        }
+
+        // Generar token JWT
+        const tokenPayload = {
+            user_id: usuario.id,
+            id: usuario.id, // Compatibilidad
+            email: usuario.email,
+            nombre: usuario.nombre,
+            apellido: usuario.apellido,
+            nombre_completo: usuario.nombre_completo,
+            rol: usuario.rol_nombre,
+            rol_id: usuario.rol_id,
+            area: usuario.area_nombre,
+            area_id: usuario.area_id,
+            es_jefe: usuario.es_jefe,
+            vende: usuario.vende,
+            jefe_id: usuario.jefe_id,
+            jefe_nombre: usuario.jefe_nombre,
+            permissions: usuario.rol_permisos || [],
+            login_time: new Date().toISOString(),
+            session_id: `session_${Date.now()}`
+        };
+
+        const token = jwt.sign(
+            tokenPayload,
+            process.env.JWT_SECRET || 'default-secret',
+            { expiresIn: process.env.JWT_EXPIRES_IN || '8h' }
+        );
+
+        // Actualizar último login
+        await query(
+            'UPDATE usuarios SET ultimo_login = CURRENT_TIMESTAMP, total_sesiones = total_sesiones + 1 WHERE id = $1',
+            [usuario.id]
+        );
+
+        // Usuario empresarial estructurado
+        const userData = {
+            id: usuario.id,
+            email: usuario.email,
+            nombre: usuario.nombre,
+            apellido: usuario.apellido,
+            nombre_completo: usuario.nombre_completo,
+            rol: {
+                id: usuario.rol_id,
+                nombre: usuario.rol_nombre,
+                nivel: usuario.rol_nivel,
+                permisos: usuario.rol_permisos
+            },
+            area: {
+                id: usuario.area_id,
+                nombre: usuario.area_nombre,
+                departamento: usuario.departamento
+            },
+            estado: usuario.estado,
+            ultimo_login: new Date().toISOString(),
+            configuracion: usuario.configuracion || {
+                theme: 'light',
+                language: 'es',
+                timezone: 'America/Lima'
+            },
+            debe_cambiar_password: usuario.debe_cambiar_password
+        };
+
+        logAuthEvent('LOGIN_SUCCESS', {
+            user_id: userData.id,
+            email: userData.email,
+            rol: userData.rol.nombre
+        });
+
+        res.json({
+            success: true,
+            message: 'Login exitoso',
+            data: {
+                token: token,
+                user: userData,
+                session: {
+                    expires_in: process.env.JWT_EXPIRES_IN || '8 hours',
+                    issued_at: new Date().toISOString(),
+                    session_type: 'JWT'
+                }
+            }
+        });
 
     } catch (error) {
         logAuthEvent('LOGIN_ERROR', { 

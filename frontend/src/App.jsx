@@ -11,6 +11,7 @@ import ProspectosPage from './pages/ProspectosPage';
 import VentasPage from './pages/VentasPage';
 import AlmacenPage from './pages/AlmacenPage'; // ✅ NUEVO: Importar AlmacenPage real
 import SoportePage from './pages/SoportePage'; // ✅ NUEVO: Importar SoportePage con tabs
+import AdministracionUsuariosPage from './pages/AdministracionUsuariosPage'; // ✅ NUEVO: Administración de usuarios
 // import ClientesPage from './pages/ClientesPage'; // ✅ ELIMINADO: ClientesPage removido
 
 // ✅ Componente para verificar autenticación CORREGIDO
@@ -122,7 +123,10 @@ function App() {
           <Route path="soporte" element={<SoportePage />} />
           <Route path="marketing" element={<MarketingPage />} />
           <Route path="chat" element={<ChatPage />} />
-          
+
+          {/* Administración */}
+          <Route path="admin/usuarios" element={<AdministracionUsuariosPage />} />
+
           {/* Ruta de desarrollo/testing (opcional) */}
           <Route path="dev" element={<DevPage />} />
         </Route>

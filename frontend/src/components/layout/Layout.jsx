@@ -50,11 +50,17 @@ const Layout = () => {
       icon: '📢',
       description: 'Campañas y planificación'
     },
-    { 
-      name: 'Chat', 
-      path: '/chat', 
+    {
+      name: 'Chat',
+      path: '/chat',
       icon: '💬',
       description: 'Comunicación interna'
+    },
+    {
+      name: 'Usuarios',
+      path: '/admin/usuarios',
+      icon: '👥',
+      description: 'Administración de usuarios'
     }
   ];
 

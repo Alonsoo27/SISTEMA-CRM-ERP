@@ -58,6 +58,7 @@ console.log('🔧 Iniciando carga de módulos...');
 // ✅ CONFIGURACIÓN EMPRESARIAL FINAL - 9 MÓDULOS CORE + DASHBOARDS ADICIONALES
 const modules = {
     auth: { path: './src/modules/auth/routes/authRoutes', route: '/api/auth', loaded: null },
+    usuarios: { path: './src/modules/usuarios/routes/usuariosRoutes', route: '/api/usuarios', loaded: null },
     productos: { path: './src/modules/productos/routes/productosRoutes', route: '/api/productos', loaded: null },
     prospectos: { path: './src/modules/prospectos/routes/prospectosRoutes', route: '/api/prospectos', loaded: null },
     seguimientos: { path: './src/modules/prospectos/routes/seguimientosRoutes', route: '/api/prospectos/seguimientos', loaded: null },
