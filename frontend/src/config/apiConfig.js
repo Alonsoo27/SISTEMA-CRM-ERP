@@ -11,7 +11,7 @@ const getBaseURL = () => {
   }
 
   // Para producción (Railway)
-  return import.meta.env.VITE_API_URL || 'https://tu-backend-railway.up.railway.app';
+  return import.meta.env.VITE_API_URL || 'https://sistema-crm-erp-production.up.railway.app';
 };
 
 export const API_CONFIG = {
