@@ -2,20 +2,17 @@ FROM node:18-alpine
 
 WORKDIR /app
 
-# Copiar package files
-COPY package*.json ./
+# Copiar package files y .npmrc
+COPY package*.json .npmrc ./
 
-# Instalar dependencias
-RUN npm ci
+# Instalar dependencias con legacy-peer-deps
+RUN npm install
 
 # Copiar código fuente
 COPY . .
 
 # Build de la aplicación
 RUN npm run build
-
-# Exponer puerto
-EXPOSE 8080
 
 # Comando de inicio
 CMD ["node", "serve.js"]
