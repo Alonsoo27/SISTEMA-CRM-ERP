@@ -17,8 +17,14 @@ const DashboardAsesores = ({
   usuarioActual,
   refreshTrigger = 0
 }) => {
+  // DEBUG CRÍTICO: Ver qué llega en usuarioActual
+  console.log('🚨 VentasMetrics INICIO - usuarioActual:', JSON.stringify(usuarioActual, null, 2));
+
   // Normalizar usuario
   const user = normalizeUser(usuarioActual);
+
+  // DEBUG: Ver resultado de normalización
+  console.log('🚨 VentasMetrics INICIO - user normalizado:', JSON.stringify(user, null, 2));
 
   // Debug en desarrollo
   if (process.env.NODE_ENV === 'development') {
@@ -116,13 +122,21 @@ const DashboardAsesores = ({
 
   // MEJORADO: Determinar modo de vista según permisos del usuario
   const determinarModoVista = useCallback(() => {
+    // DEBUG COMPLETO
+    console.log('🔍 DEBUG - usuarioActual ORIGINAL:', JSON.stringify(usuarioActual, null, 2));
+
     // Normalizar usuario DENTRO del callback para garantizar estructura correcta
     const normalizedUser = normalizeUser(usuarioActual);
     const userVende = canSell(normalizedUser);
     const esEjecutivo = isExecutive(normalizedUser);
     const rolId = normalizedUser?.rol_id;
 
-    console.log('🔍 Determinando modo vista:', { userVende, esEjecutivo, rolId, normalizedUser });
+    console.log('🔍 Determinando modo vista:', {
+      userVende,
+      esEjecutivo,
+      rolId,
+      normalizedUser: JSON.stringify(normalizedUser, null, 2)
+    });
 
     // PRIORIDAD 1: GERENTE (2) y ADMIN (11) NO venden → modo supervisor directo
     if (rolId === 2 || rolId === 11) {
@@ -327,11 +341,18 @@ const DashboardAsesores = ({
 
   // Inicialización del componente
   useEffect(() => {
+    console.log('🔄 useEffect INICIALIZACIÓN - user?.id:', user?.id);
+
     if (user?.id) {
+      console.log('✅ user?.id existe, ejecutando determinarModoVista y cargarAsesores');
       // Determinar modo de vista inicial
-      determinarModoVista();
+      const modoResultante = determinarModoVista();
+      console.log('📊 Modo vista resultante:', modoResultante);
+
       // Cargar lista de asesores supervisables
       cargarAsesores();
+    } else {
+      console.log('❌ user?.id NO existe, saltando inicialización');
     }
   }, [user?.id, determinarModoVista, cargarAsesores]);
 
