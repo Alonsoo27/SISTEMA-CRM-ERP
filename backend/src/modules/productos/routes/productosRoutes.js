@@ -6,6 +6,9 @@ const productosController = require('../controllers/productosController');
 // Middleware de autenticación y autorización
 const { authenticateToken, requireRole } = require('../../../middleware/auth');
 
+// Importar constantes de roles
+const { GRUPOS_ROLES } = require('../../../config/roles');
+
 // CONFIGURACIÓN DE RATE LIMITING PARA UPLOADS
 const uploadRateLimit = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutos
@@ -101,26 +104,27 @@ const monitorearPerformance = (req, res, next) => {
     next();
 };
 
-// MIDDLEWARE DE AUTORIZACIÓN PARA PRODUCTOS (ADMIN/SUPER_ADMIN)
+// MIDDLEWARE DE AUTORIZACIÓN PARA PRODUCTOS
+// ✅ ACTUALIZADO: Usa constantes centralizadas de roles
 const requireProductsAuth = (req, res, next) => {
     // Permitir healthcheck básico sin restricción de rol
     if (req.path === '/health/basic') {
         return next();
     }
-    
+
     // Aplicar restricción de rol para todas las demás rutas
     const rolUsuario = req.user?.rol?.toUpperCase();
-    if (!['ADMIN', 'SUPER_ADMIN'].includes(rolUsuario)) {
+    if (!GRUPOS_ROLES.EJECUTIVOS.includes(rolUsuario)) {
         return res.status(403).json({
             success: false,
             error: 'Sin autorización',
-            message: 'Solo administradores pueden acceder al módulo de productos',
+            message: 'Solo ejecutivos pueden acceder al módulo de productos',
             codigo: 'INSUFFICIENT_PERMISSIONS',
-            rol_requerido: ['ADMIN', 'SUPER_ADMIN'],
+            rol_requerido: GRUPOS_ROLES.EJECUTIVOS,
             rol_actual: req.user?.rol || 'sin_rol'
         });
     }
-    
+
     next();
 };
 
