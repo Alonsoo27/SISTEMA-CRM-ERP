@@ -13,6 +13,13 @@ const PostVentaController = require('../controllers/PostVentaController');
 // Middleware empresarial unificado
 const { authenticateToken, requireRole } = require('../../../middleware/auth');
 
+// Importar constantes de roles
+const { GRUPOS_ROLES } = require('../../../config/roles');
+
+// Middlewares de autorización
+const requirePostVentaAccess = requireRole(GRUPOS_ROLES.VENTAS_COMPLETO); // Acceso a postventa
+const requirePostVentaWrite = requireRole(GRUPOS_ROLES.VENTAS_COMPLETO);  // Crear/modificar seguimientos
+
 // ============================================
 // PROGRAMACIÓN DE SEGUIMIENTOS
 // ============================================

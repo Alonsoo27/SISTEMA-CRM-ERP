@@ -194,7 +194,7 @@ router.get('/analisis-geografico',
  * @desc    Endpoint básico de dashboard ejecutivo
  * @access  Private (Ejecutivos)
  */
-router.get('/', authenticateToken, verificarAccesoEjecutivo, (req, res) => {
+router.get('/', authenticateToken, requireRole(GRUPOS_ROLES.JEFES_Y_EJECUTIVOS), verificarAccesoEjecutivo, (req, res) => {
     res.json({
         success: true,
         message: 'Endpoint de dashboard ejecutivo funcionando',

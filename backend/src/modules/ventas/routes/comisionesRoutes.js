@@ -65,7 +65,7 @@ router.post('/simular-bono',
  * @desc    Endpoint básico de comisiones (retorna mensaje)
  * @access  Private
  */
-router.get('/', authenticateToken, (req, res) => {
+router.get('/', authenticateToken, requireOwnership, (req, res) => {
     res.json({
         success: true,
         message: 'Endpoint de comisiones funcionando',

@@ -96,7 +96,7 @@ router.get('/periodos-disponibles/:asesor_id',
  * @desc    Endpoint básico de dashboard personal
  * @access  Private
  */
-router.get('/', authenticateToken, (req, res) => {
+router.get('/', authenticateToken, requireOwnership, (req, res) => {
     res.json({
         success: true,
         message: 'Endpoint de dashboard personal funcionando',

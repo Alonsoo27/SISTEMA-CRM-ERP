@@ -12,8 +12,24 @@ const ClientesController = require('../controllers/clientesController');
 const ConversionService = require('../services/ConversionService');
 const VentasService = require('../services/ventasService');
 
-// Middleware de autenticación (ajustar según tu sistema)
-const { authenticateToken } = require('../../../middleware/auth');
+// Middleware de autenticación y autorización
+const { authenticateToken, requireRole, requireOwnership } = require('../../../middleware/auth');
+
+// Importar constantes de roles
+const { GRUPOS_ROLES, PERMISOS_OPERACION } = require('../../../config/roles');
+
+// ============================================
+// MIDDLEWARES DE AUTORIZACIÓN POR NIVEL
+// ============================================
+
+// Acceso básico al módulo de ventas (lectura)
+const requireVentasAccess = requireRole(GRUPOS_ROLES.VENTAS_COMPLETO);
+
+// Operaciones de creación y modificación (ventas, clientes, conversiones)
+const requireVentasWrite = requireRole(GRUPOS_ROLES.VENTAS_COMPLETO);
+
+// Dashboards ejecutivos (solo jefes y ejecutivos)
+const requireVentasReports = requireRole(GRUPOS_ROLES.JEFES_Y_EJECUTIVOS);
 
 // ============================================
 // ENDPOINT PÚBLICO
@@ -34,7 +50,7 @@ router.get('/health', (req, res) => {
 // ============================================
 
 // 🔢 Obtener próximos correlativos (NUEVO - CRÍTICO PARA VENTAS)
-router.post('/proximos-correlativos', authenticateToken, async (req, res) => {
+router.post('/proximos-correlativos', authenticateToken, requireVentasWrite, async (req, res) => {
     try {
         const { asesor_id, year } = req.body;
         
@@ -98,7 +114,7 @@ router.post('/proximos-correlativos', authenticateToken, async (req, res) => {
 });
 
 // 📊 Validar disponibilidad de correlativos para el año (NUEVO - MONITOREO)
-router.get('/disponibilidad-correlativos/:year', authenticateToken, async (req, res) => {
+router.get('/disponibilidad-correlativos/:year', authenticateToken, requireVentasAccess, async (req, res) => {
     try {
         const { year } = req.params;
         
@@ -166,7 +182,7 @@ router.get('/disponibilidad-correlativos/:year', authenticateToken, async (req, 
 });
 
 // 📈 Estadísticas de correlativos por asesor (NUEVO - ANÁLISIS)
-router.get('/estadisticas-correlativos/:asesor_id', authenticateToken, async (req, res) => {
+router.get('/estadisticas-correlativos/:asesor_id', authenticateToken, requireVentasAccess, async (req, res) => {
     try {
         const { asesor_id } = req.params;
         const { year } = req.query;
@@ -271,7 +287,7 @@ router.get('/estadisticas-correlativos/:asesor_id', authenticateToken, async (re
 });
 
 // 🔧 Test de funciones de correlativos (NUEVO - DIAGNÓSTICO)
-router.get('/test-correlativos', authenticateToken, async (req, res) => {
+router.get('/test-correlativos', authenticateToken, requireVentasAccess, async (req, res) => {
     try {
         const { query } = require('../../../config/database');
         
@@ -356,10 +372,10 @@ router.get('/test-correlativos', authenticateToken, async (req, res) => {
 // ============================================
 
 // Dashboard personal del asesor
-router.get('/dashboard', authenticateToken, VentasController.dashboard);
+router.get('/dashboard', authenticateToken, requireVentasReports, VentasController.dashboard);
 
 // Dashboard de equipo (solo para managers)
-router.get('/dashboard/equipo', authenticateToken, async (req, res) => {
+router.get('/dashboard/equipo', authenticateToken, requireVentasReports, async (req, res) => {
     try {
         // Verificar si el usuario tiene permisos de manager
         const { query } = require('../../../config/database');
@@ -416,7 +432,7 @@ router.get('/dashboard/equipo', authenticateToken, async (req, res) => {
 // ============================================
 
 // Estadísticas específicas del asesor (NECESARIO PARA DASHBOARD ASESORES)
-router.get('/estadisticas-asesor/:id', authenticateToken, async (req, res) => {
+router.get('/estadisticas-asesor/:id', authenticateToken, requireVentasAccess, async (req, res) => {
     try {
         const { id } = req.params;
         const { fecha_desde, fecha_hasta } = req.query;
@@ -466,7 +482,7 @@ router.get('/estadisticas-asesor/:id', authenticateToken, async (req, res) => {
 
 // REEMPLAZAR el endpoint /metricas-asesor/:id en ventasRoutes.js con este código corregido:
 
-router.get('/metricas-asesor/:id', authenticateToken, async (req, res) => {
+router.get('/metricas-asesor/:id', authenticateToken, requireVentasAccess, async (req, res) => {
     try {
         const { id } = req.params;
         const asesorId = parseInt(id);
@@ -588,10 +604,10 @@ router.get('/metricas-asesor/:id', authenticateToken, async (req, res) => {
     }
 });
 // Estadísticas de ventas
-router.get('/estadisticas', authenticateToken, VentasController.getEstadisticas);
+router.get('/estadisticas', authenticateToken, requireVentasAccess, VentasController.getEstadisticas);
 
 // Análisis de conversiones
-router.get('/analisis-conversiones', authenticateToken, async (req, res) => {
+router.get('/analisis-conversiones', authenticateToken, requireVentasAccess, async (req, res) => {
     try {
         const { fecha_desde, fecha_hasta } = req.query;
         
@@ -640,7 +656,7 @@ router.get('/analisis-conversiones', authenticateToken, async (req, res) => {
 });
 
 // Obtener prospectos listos para conversión
-router.get('/prospectos-listos', authenticateToken, async (req, res) => {
+router.get('/prospectos-listos', authenticateToken, requireVentasAccess, async (req, res) => {
     try {
         const prospectos = await ConversionService.obtenerProspectosListosParaConversion(req.user.id);
         
@@ -666,7 +682,7 @@ router.get('/prospectos-listos', authenticateToken, async (req, res) => {
 // ============================================
 
 // Pipeline de ventas
-router.get('/reportes/pipeline', authenticateToken, async (req, res) => {
+router.get('/reportes/pipeline', authenticateToken, requireVentasReports, async (req, res) => {
     try {
         const { asesor_id } = req.query;
         const targetAsesor = asesor_id || req.user.id;
@@ -710,7 +726,7 @@ router.get('/reportes/pipeline', authenticateToken, async (req, res) => {
 });
 
 // 🆕 Reporte dashboard específico - NUEVA RUTA FALTANTE
-router.get('/reportes/dashboard', authenticateToken, async (req, res) => {
+router.get('/reportes/dashboard', authenticateToken, requireVentasReports, async (req, res) => {
     try {
         const { asesor_id, fecha_desde, fecha_hasta } = req.query;
         const targetAsesor = asesor_id || req.user.id;
@@ -806,7 +822,7 @@ router.get('/reportes/dashboard', authenticateToken, async (req, res) => {
 });
 
 // 🆕 Reporte resumen específico - NUEVA RUTA FALTANTE
-router.get('/reportes/resumen', authenticateToken, async (req, res) => {
+router.get('/reportes/resumen', authenticateToken, requireVentasReports, async (req, res) => {
     try {
         const { fecha_desde, fecha_hasta, asesor_id } = req.query;
         const targetAsesor = asesor_id || req.user.id;
@@ -892,7 +908,7 @@ router.get('/reportes/resumen', authenticateToken, async (req, res) => {
 });
 
 // Reporte de productos más vendidos
-router.get('/reportes/productos-top', authenticateToken, async (req, res) => {
+router.get('/reportes/productos-top', authenticateToken, requireVentasReports, async (req, res) => {
     try {
         const { limit = 10, fecha_desde, fecha_hasta } = req.query;
 
@@ -950,7 +966,7 @@ LIMIT $${params.length}
 // ============================================
 
 // Búsqueda inteligente de ventas
-router.get('/buscar/:termino', authenticateToken, async (req, res) => {
+router.get('/buscar/:termino', authenticateToken, requireVentasAccess, async (req, res) => {
     try {
         const { termino } = req.params;
         const { limite = 20 } = req.query;
@@ -1010,7 +1026,7 @@ AND (
 });
 
 // Búsqueda avanzada con múltiples filtros
-router.post('/busqueda-avanzada', authenticateToken, async (req, res) => {
+router.post('/busqueda-avanzada', authenticateToken, requireVentasWrite, async (req, res) => {
     try {
         const {
             termino,
@@ -1131,7 +1147,7 @@ router.post('/busqueda-avanzada', authenticateToken, async (req, res) => {
 // ============================================
 
 // Convertir prospecto individual
-router.post('/convertir-prospecto/:prospecto_id', authenticateToken, async (req, res) => {
+router.post('/convertir-prospecto/:prospecto_id', authenticateToken, requireVentasWrite, async (req, res) => {
     try {
         const { prospecto_id } = req.params;
         const { valor_estimado, notas } = req.body;
@@ -1178,7 +1194,7 @@ router.post('/convertir-prospecto/:prospecto_id', authenticateToken, async (req,
 });
 
 // Conversión masiva de prospectos
-router.post('/conversion-masiva', authenticateToken, async (req, res) => {
+router.post('/conversion-masiva', authenticateToken, requireVentasWrite, async (req, res) => {
     try {
         const { prospectos } = req.body; // Array de {prospecto_id, valor_estimado}
         
@@ -1238,49 +1254,49 @@ router.get('/clientes', (req, res, next) => {
  * POST /api/ventas/clientes
  * Crear nuevo cliente
  */
-router.post('/clientes', authenticateToken, ClientesController.crear);
+router.post('/clientes', authenticateToken, requireVentasWrite, ClientesController.crear);
 
 /**
  * GET /api/ventas/clientes/estadisticas
  * Obtener estadísticas de clientes
  */
-router.get('/clientes/estadisticas', authenticateToken, ClientesController.obtenerEstadisticas);
+router.get('/clientes/estadisticas', authenticateToken, requireVentasAccess, ClientesController.obtenerEstadisticas);
 
 /**
  * GET /api/ventas/clientes/health
  * Health check del servicio de clientes
  */
-router.get('/clientes/health', authenticateToken, ClientesController.healthCheck);
+router.get('/clientes/health', authenticateToken, requireVentasAccess, ClientesController.healthCheck);
 
 /**
  * GET /api/ventas/clientes/autocomplete
  * Autocompletado para formularios
  */
-router.get('/clientes/autocomplete', authenticateToken, ClientesController.autocomplete);
+router.get('/clientes/autocomplete', authenticateToken, requireVentasAccess, ClientesController.autocomplete);
 
 /**
  * GET /api/ventas/clientes/buscar/:documento
  * Buscar cliente por documento
  */
-router.get('/clientes/buscar/:documento', authenticateToken, ClientesController.buscarPorDocumento);
+router.get('/clientes/buscar/:documento', authenticateToken, requireVentasAccess, ClientesController.buscarPorDocumento);
 
 /**
  * GET /api/ventas/clientes/:id
  * Obtener cliente por ID
  */
-router.get('/clientes/:id', authenticateToken, ClientesController.obtenerPorId);
+router.get('/clientes/:id', authenticateToken, requireVentasAccess, ClientesController.obtenerPorId);
 
 /**
  * PUT /api/ventas/clientes/:id
  * Actualizar cliente
  */
-router.put('/clientes/:id', authenticateToken, ClientesController.actualizar);
+router.put('/clientes/:id', authenticateToken, requireVentasWrite, ClientesController.actualizar);
 
 /**
  * DELETE /api/ventas/clientes/:id
  * Eliminar cliente (soft delete)
  */
-router.delete('/clientes/:id', authenticateToken, ClientesController.eliminar);
+router.delete('/clientes/:id', authenticateToken, requireVentasWrite, ClientesController.eliminar);
 
 
 // ============================================
@@ -1288,28 +1304,28 @@ router.delete('/clientes/:id', authenticateToken, ClientesController.eliminar);
 // ============================================
 
 // 👥 Obtener lista de asesores para filtros
-router.get('/asesores', authenticateToken, VentasController.obtenerAsesores);
+router.get('/asesores', authenticateToken, requireVentasAccess, VentasController.obtenerAsesores);
 
 // 📊 Exportar ventas con filtros
-router.get('/exportar', authenticateToken, VentasController.exportarVentas);
+router.get('/exportar', authenticateToken, requireVentasAccess, VentasController.exportarVentas);
 
 // ============================================
 // RUTAS PRINCIPALES DE VENTAS (CON PARÁMETROS)
 // ============================================
 
 // CRUD Básico - ESTAS DEBEN IR DESPUÉS DE RUTAS ESPECÍFICAS
-router.get('/', authenticateToken, VentasController.listarVentas);
-router.post('/', authenticateToken, VentasController.crearVenta);
-router.get('/:id', authenticateToken, VentasController.obtenerVenta);
-router.put('/:id', authenticateToken, VentasController.actualizarVenta);
-router.delete('/:id', authenticateToken, VentasController.eliminarVenta);
+router.get('/', authenticateToken, requireVentasAccess, VentasController.listarVentas);
+router.post('/', authenticateToken, requireVentasWrite, VentasController.crearVenta);
+router.get('/:id', authenticateToken, requireVentasAccess, VentasController.obtenerVenta);
+router.put('/:id', authenticateToken, requireVentasWrite, VentasController.actualizarVenta);
+router.delete('/:id', authenticateToken, requireVentasWrite, VentasController.eliminarVenta);
 
 // ============================================
 // GESTIÓN DE ESTADOS (CON PARÁMETROS)
 // ============================================
 
 // Cambiar estado de venta
-router.put('/:id/estado', authenticateToken, async (req, res) => {
+router.put('/:id/estado', authenticateToken, requireVentasWrite, async (req, res) => {
     try {
         const { id } = req.params;
         const { nuevo_estado_detallado, notas } = req.body;
@@ -1351,7 +1367,7 @@ router.put('/:id/estado', authenticateToken, async (req, res) => {
 });
 
 // Avanzar fase de venta
-router.put('/:id/fase', authenticateToken, async (req, res) => {
+router.put('/:id/fase', authenticateToken, requireVentasWrite, async (req, res) => {
     try {
         const { id } = req.params;
         const { nueva_fase, probabilidad } = req.body;
@@ -1397,7 +1413,7 @@ router.put('/:id/fase', authenticateToken, async (req, res) => {
 });
 
 // Aprobar venta
-router.post('/:id/aprobar', authenticateToken, async (req, res) => {
+router.post('/:id/aprobar', authenticateToken, requireVentasWrite, async (req, res) => {
     try {
         const { id } = req.params;
         const { notas_aprobacion } = req.body;
@@ -1420,7 +1436,7 @@ router.post('/:id/aprobar', authenticateToken, async (req, res) => {
 // ============================================
 
 // Obtener detalles de productos de una venta
-router.get('/:id/detalles', authenticateToken, async (req, res) => {
+router.get('/:id/detalles', authenticateToken, requireVentasAccess, async (req, res) => {
     try {
         const { id } = req.params;
 
@@ -1466,7 +1482,7 @@ ORDER BY vd.orden_linea
 });
 
 // Agregar producto a venta existente
-router.post('/:id/productos', authenticateToken, async (req, res) => {
+router.post('/:id/productos', authenticateToken, requireVentasWrite, async (req, res) => {
     try {
         const { id } = req.params;
         const { producto_id, cantidad, precio_unitario, descripcion_personalizada } = req.body;

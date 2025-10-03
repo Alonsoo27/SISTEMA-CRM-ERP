@@ -21,7 +21,7 @@ const { authenticateToken } = require('../../../middleware/auth');
  * @logic   - Supervisores pueden ver todos los asesores de ventas
  *          - Jefes de área pueden ver solo su equipo
  */
-router.get('/supervisables', authenticateToken, async (req, res) => {
+router.get('/supervisables', authenticateToken, requireRole(GRUPOS_ROLES.JEFES_Y_EJECUTIVOS), async (req, res) => {
     try {
         const userId = req.user.id || req.user.user_id;
         const userRole = req.user.rol_id || req.user.role_id;
@@ -219,7 +219,7 @@ router.get('/supervisables', authenticateToken, async (req, res) => {
  * @desc    Validar si el usuario puede supervisar a un asesor específico
  * @access  Private
  */
-router.get('/validar-acceso/:asesor_id', authenticateToken, async (req, res) => {
+router.get('/validar-acceso/:asesor_id', authenticateToken, requireRole(GRUPOS_ROLES.JEFES_Y_EJECUTIVOS), async (req, res) => {
     try {
         const { asesor_id } = req.params;
         const userId = req.user.id || req.user.user_id;

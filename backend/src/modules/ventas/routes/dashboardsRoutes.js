@@ -31,7 +31,7 @@ router.get('/health', (req, res) => {
 // DASHBOARD MAESTRO - SIMPLIFICADO
 // ============================================
 
-router.get('/maestro', authenticateToken, async (req, res) => {
+router.get('/maestro', authenticateToken, requireRole(GRUPOS_ROLES.JEFES_Y_EJECUTIVOS), async (req, res) => {
     try {
         const { query } = require('../../../config/database');
         const userId = req.user.id;
@@ -92,7 +92,7 @@ router.get('/maestro', authenticateToken, async (req, res) => {
 // REDIRECCIONES AL SISTEMA PRINCIPAL
 // ============================================
 
-router.get('/geografico', authenticateToken, (req, res) => {
+router.get('/geografico', authenticateToken, requireRole(GRUPOS_ROLES.JEFES_Y_EJECUTIVOS), (req, res) => {
     res.json({
         success: true,
         message: 'Redirigir al sistema principal',
@@ -101,7 +101,7 @@ router.get('/geografico', authenticateToken, (req, res) => {
     });
 });
 
-router.get('/abc-productos', authenticateToken, (req, res) => {
+router.get('/abc-productos', authenticateToken, requireRole(GRUPOS_ROLES.JEFES_Y_EJECUTIVOS), (req, res) => {
     res.json({
         success: true,
         message: 'Redirigir al sistema principal', 
@@ -114,7 +114,7 @@ router.get('/abc-productos', authenticateToken, (req, res) => {
 // ÍNDICE PRINCIPAL
 // ============================================
 
-router.get('/', authenticateToken, (req, res) => {
+router.get('/', authenticateToken, requireRole(GRUPOS_ROLES.JEFES_Y_EJECUTIVOS), (req, res) => {
     const userId = req.user.id;
     const userRole = req.user.rol || '';
     const esAdmin = ['admin', 'manager', 'supervisor'].includes(userRole.toLowerCase());
