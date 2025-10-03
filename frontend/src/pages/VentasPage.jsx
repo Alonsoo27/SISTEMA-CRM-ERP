@@ -605,11 +605,11 @@ const VentasPage = () => {
   case 'maestro':
     return <VistaUnificada usuarioActual={usuarioActual} />;
   case 'geografico':
-    return <AnalisisGeografico />;
+    return <AnalisisGeografico usuarioActual={usuarioActual} />;
   case 'abc-productos':
-    return <ABCProductos usuarioActual={usuarioActual} />;           
+    return <ABCProductos usuarioActual={usuarioActual} />;
   case 'metas-avanzado':
-    return <MetasAvanzado />;  
+    return <MetasAvanzado usuarioActual={usuarioActual} />;  
       default:
         return (
           <div className="text-center py-8">
