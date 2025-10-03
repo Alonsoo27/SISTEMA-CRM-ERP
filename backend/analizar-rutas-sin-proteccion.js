@@ -155,7 +155,9 @@ async function procesarArchivo(rutaArchivo) {
                     contexto.includes('requireVentasManager') ||
                     contexto.includes('requireManagerAccess') ||
                     contexto.includes('requirePostVentaAccess') ||
-                    contexto.includes('requirePostVentaWrite');
+                    contexto.includes('requirePostVentaWrite') ||
+                    contexto.includes('verificarAccesoEjecutivo') ||
+                    contexto.includes('requireAccessoTotal');
 
                 const tieneAuth = contexto.includes('authenticateToken');
 
