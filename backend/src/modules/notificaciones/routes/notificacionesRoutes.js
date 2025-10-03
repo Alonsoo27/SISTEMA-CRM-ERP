@@ -284,10 +284,10 @@ router.use((req, res, next) => {
 /**
  * GET /api/notificaciones/:usuarioId
  * Obtener notificaciones de un usuario con opciones avanzadas
- * 🔐 Requiere rol: asesor, admin, supervisor + ownership
+ * 🔐 Requiere rol: asesor, admin, supervisor, gerente + ownership
  */
-router.get('/:usuarioId', 
-    requireRole(['VENDEDOR', 'ADMIN', 'JEFE_VENTAS', 'SUPER_ADMIN']), 
+router.get('/:usuarioId',
+    requireRole(['VENDEDOR', 'ADMIN', 'JEFE_VENTAS', 'GERENTE', 'SUPER_ADMIN']),
     requireOwnership,
     queryRateLimit,
     NotificacionesController.obtenerNotificaciones
@@ -296,10 +296,10 @@ router.get('/:usuarioId',
 /**
  * GET /api/notificaciones/contador/:usuarioId
  * Obtener contador inteligente con desglose
- * 🔐 Requiere rol: asesor, admin, supervisor + ownership
+ * 🔐 Requiere rol: asesor, admin, supervisor, gerente + ownership
  */
-router.get('/contador/:usuarioId', 
-    requireRole(['VENDEDOR', 'ADMIN', 'JEFE_VENTAS', 'SUPER_ADMIN']), 
+router.get('/contador/:usuarioId',
+    requireRole(['VENDEDOR', 'ADMIN', 'JEFE_VENTAS', 'GERENTE', 'SUPER_ADMIN']),
     requireOwnership,
     queryRateLimit,
     NotificacionesController.obtenerContador
@@ -312,15 +312,15 @@ router.get('/contador/:usuarioId',
 /**
  * 🚀 POST /api/notificaciones/crear
  * Crear notificaciones usando el método UNIFICADO SUPERIOR
- * 🔐 Requiere rol: asesor, admin
- * 
+ * 🔐 Requiere rol: asesor, admin, gerente
+ *
  * Body examples:
  * - Básico: { "tipo": "manual", "data": { "usuario_id": 1, "titulo": "Test", "mensaje": "Mensaje" } }
  * - Inteligente: { "tipo": "seguimiento_vencido", "modo": "inteligente", "data": { "usuario_id": 1, "prospecto_data": {...} }, "auto_prioridad": true }
  * - Masivo: { "tipo": "marketing", "modo": "masivo", "usuarios": [1,2,3], "data": { "titulo": "Promoción", "mensaje": "Nueva campaña" } }
  */
-router.post('/crear', 
-    requireRole(['VENDEDOR', 'ADMIN', 'SUPER_ADMIN']),
+router.post('/crear',
+    requireRole(['VENDEDOR', 'ADMIN', 'GERENTE', 'SUPER_ADMIN']),
     createNotificationsRateLimit,
     NotificacionesController.crearNotificacion
 );
@@ -328,10 +328,10 @@ router.post('/crear',
 /**
  * PUT /api/notificaciones/:id/marcar-leida
  * Marcar notificación como leída
- * 🔐 Requiere rol: asesor, admin, supervisor
+ * 🔐 Requiere rol: asesor, admin, supervisor, gerente
  */
-router.put('/:id/marcar-leida', 
-    requireRole(['VENDEDOR', 'ADMIN', 'JEFE_VENTAS', 'SUPER_ADMIN']),
+router.put('/:id/marcar-leida',
+    requireRole(['VENDEDOR', 'ADMIN', 'JEFE_VENTAS', 'GERENTE', 'SUPER_ADMIN']),
     queryRateLimit,
     NotificacionesController.marcarLeida
 );
@@ -339,10 +339,10 @@ router.put('/:id/marcar-leida',
 /**
  * PUT /api/notificaciones/marcar-todas-leidas/:usuarioId
  * Marcar todas las notificaciones como leídas
- * 🔐 Requiere rol: asesor, admin, supervisor + ownership
+ * 🔐 Requiere rol: asesor, admin, supervisor, gerente + ownership
  */
-router.put('/marcar-todas-leidas/:usuarioId', 
-    requireRole(['VENDEDOR', 'ADMIN', 'JEFE_VENTAS', 'SUPER_ADMIN']),
+router.put('/marcar-todas-leidas/:usuarioId',
+    requireRole(['VENDEDOR', 'ADMIN', 'JEFE_VENTAS', 'GERENTE', 'SUPER_ADMIN']),
     requireOwnership,
     queryRateLimit,
     NotificacionesController.marcarTodasLeidas
