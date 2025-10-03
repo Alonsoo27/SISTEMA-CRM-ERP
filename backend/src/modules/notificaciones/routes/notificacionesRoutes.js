@@ -84,6 +84,7 @@ router.get('/test', (req, res) => {
             ],
             testing: [
                 'GET /test/crear-ejemplo - Crear notificación de prueba',
+                'GET /debug/auth - Debug de autenticación (requiere token)',
                 'GET /health - Health check completo'
             ]
         },
@@ -98,6 +99,96 @@ router.get('/test', (req, res) => {
             'Estadísticas avanzadas'
         ]
     });
+});
+
+/**
+ * GET /api/notificaciones/debug/auth
+ * Endpoint de debug para verificar autenticación
+ * Ayuda a diagnosticar problemas de permisos
+ */
+router.get('/debug/auth', (req, res) => {
+    try {
+        const authHeader = req.headers['authorization'];
+        const token = authHeader && authHeader.split(' ')[1];
+
+        const debugInfo = {
+            success: true,
+            message: 'Debug de autenticación para notificaciones',
+            timestamp: new Date().toISOString(),
+            environment: process.env.NODE_ENV || 'development',
+            request_info: {
+                has_auth_header: !!authHeader,
+                has_token: !!token,
+                token_preview: token ? token.substring(0, 20) + '...' : null,
+                ip: req.ip,
+                user_agent: req.get('User-Agent')
+            }
+        };
+
+        // Si hay token, intentar decodificar
+        if (token) {
+            try {
+                if (process.env.NODE_ENV === 'development' && token.startsWith('fake-')) {
+                    debugInfo.token_info = {
+                        type: 'fake_development_token',
+                        is_valid: true,
+                        user_id: 1,
+                        message: 'Token fake de desarrollo - siempre válido'
+                    };
+                } else {
+                    const jwt = require('jsonwebtoken');
+                    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'default-secret');
+
+                    debugInfo.token_info = {
+                        type: 'jwt',
+                        is_valid: true,
+                        user_id: decoded.user_id || decoded.id,
+                        email: decoded.email,
+                        rol: decoded.rol,
+                        expires_at: new Date(decoded.exp * 1000).toISOString(),
+                        issued_at: new Date(decoded.iat * 1000).toISOString()
+                    };
+                }
+
+                debugInfo.access_test = {
+                    can_access_own_notifications: true,
+                    user_id_to_use: debugInfo.token_info.user_id,
+                    example_url: `/api/notificaciones/${debugInfo.token_info.user_id}`,
+                    message: `Usa esta URL para obtener tus notificaciones: /api/notificaciones/${debugInfo.token_info.user_id}`
+                };
+
+            } catch (jwtError) {
+                debugInfo.token_info = {
+                    type: 'jwt',
+                    is_valid: false,
+                    error: jwtError.message,
+                    error_type: jwtError.name,
+                    message: 'Token inválido o expirado'
+                };
+
+                debugInfo.access_test = {
+                    can_access_own_notifications: false,
+                    message: 'No puedes acceder a notificaciones con un token inválido',
+                    solution: 'Cierra sesión y vuelve a iniciar sesión para obtener un token válido'
+                };
+            }
+        } else {
+            debugInfo.access_test = {
+                can_access_own_notifications: false,
+                message: 'No se proporcionó token de autenticación',
+                solution: 'Incluye el header: Authorization: Bearer <tu_token>'
+            };
+        }
+
+        res.json(debugInfo);
+
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            error: 'Error en debug de autenticación',
+            details: error.message
+        });
+    }
 });
 
 /**

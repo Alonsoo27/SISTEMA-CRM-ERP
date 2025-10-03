@@ -265,6 +265,10 @@ const requireOwnership = (req, res, next) => {
     const correlationId = Date.now() + '-' + Math.random().toString(36).substr(2, 9);
 
     if (!req.user) {
+        logger.error('requireOwnership: Usuario no autenticado', {
+            correlation_id: correlationId,
+            endpoint: req.path
+        });
         return res.status(401).json({
             success: false,
             error: 'Usuario no autenticado',
@@ -274,7 +278,7 @@ const requireOwnership = (req, res, next) => {
     }
 
     // Permitir acceso total a roles administrativos
-    const rolAdministrativo = ['ADMIN', 'SUPER_ADMIN', 'SUPERVISOR', 'GERENTE']
+    const rolAdministrativo = ['ADMIN', 'SUPER_ADMIN', 'SUPERVISOR', 'GERENTE', 'JEFE_VENTAS']
         .includes(req.user.rol?.toUpperCase());
 
     if (rolAdministrativo) {
@@ -302,20 +306,38 @@ const requireOwnership = (req, res, next) => {
     const requestedId = asesorId || usuarioId || userId || id;
     const requestedIdFromQuery = asesorIdQuery || userIdQuery;
 
+    // Log detallado para debugging
+    logger.info('Validando ownership', {
+        correlation_id: correlationId,
+        current_user_id: currentUserId,
+        current_user_rol: req.user.rol,
+        requested_id: requestedId,
+        requested_id_from_query: requestedIdFromQuery,
+        endpoint: req.path,
+        method: req.method
+    });
+
     // Validar ownership para parámetros de ruta
     if (requestedId && requestedId !== 'todos' && !isNaN(requestedId)) {
         if (parseInt(requestedId) !== currentUserId) {
             logger.warn('Acceso denegado por ownership - parámetro de ruta', {
                 correlation_id: correlationId,
                 user_id: currentUserId,
+                user_rol: req.user.rol,
                 requested_id: requestedId,
-                endpoint: req.path
+                endpoint: req.path,
+                message: `Usuario ${currentUserId} (${req.user.rol}) intentó acceder a datos del usuario ${requestedId}`
             });
 
             return res.status(403).json({
                 success: false,
                 error: 'No tienes permisos para acceder a esta información',
                 code: 'OWNERSHIP_REQUIRED',
+                details: process.env.NODE_ENV === 'development' ? {
+                    current_user_id: currentUserId,
+                    requested_user_id: requestedId,
+                    message: 'Solo puedes acceder a tus propios datos'
+                } : undefined,
                 correlation_id: correlationId
             });
         }
@@ -327,14 +349,21 @@ const requireOwnership = (req, res, next) => {
             logger.warn('Acceso denegado por ownership - parámetro query', {
                 correlation_id: correlationId,
                 user_id: currentUserId,
+                user_rol: req.user.rol,
                 requested_id: requestedIdFromQuery,
-                endpoint: req.path
+                endpoint: req.path,
+                message: `Usuario ${currentUserId} (${req.user.rol}) intentó acceder a datos del usuario ${requestedIdFromQuery}`
             });
 
             return res.status(403).json({
                 success: false,
                 error: 'No tienes permisos para acceder a esta información',
                 code: 'OWNERSHIP_REQUIRED',
+                details: process.env.NODE_ENV === 'development' ? {
+                    current_user_id: currentUserId,
+                    requested_user_id: requestedIdFromQuery,
+                    message: 'Solo puedes acceder a tus propios datos'
+                } : undefined,
                 correlation_id: correlationId
             });
         }

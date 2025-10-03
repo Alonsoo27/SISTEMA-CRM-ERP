@@ -11,22 +11,9 @@ class NotificacionesService {
         this.cacheTimeout = 30000; // 30 segundos
     }
 
-    // ✅ CORREGIDO: Obtener usuario actual del localStorage (misma key que authService)
+    // ✅ CORREGIDO: Obtener usuario actual del JWT (FUENTE DE VERDAD)
     getCurrentUserId() {
-        // Opción 1: Obtener del objeto user completo (PRIORIDAD)
-        try {
-            const userStr = localStorage.getItem('user');
-            if (userStr) {
-                const user = JSON.parse(userStr);
-                if (user.id) {
-                    return user.id.toString();
-                }
-            }
-        } catch (error) {
-            console.warn('⚠️ Error obteniendo user desde localStorage:', error);
-        }
-
-        // Opción 2: Decodificar token JWT
+        // PRIORIDAD 1: Decodificar token JWT (es la fuente de verdad más confiable)
         const token = localStorage.getItem('token');
         if (token) {
             try {
@@ -35,17 +22,44 @@ class NotificacionesService {
                 if (parts.length === 3) {
                     const payload = JSON.parse(atob(parts[1]));
                     const userId = payload.user_id || payload.id || payload.sub;
-                    if (userId) return userId.toString();
+                    if (userId) {
+                        console.log('🎫 Usuario obtenido desde JWT:', userId);
+                        return userId.toString();
+                    }
                 } else {
-                    console.warn('⚠️ Token no tiene formato JWT válido');
+                    console.warn('⚠️ Token no tiene formato JWT válido - probablemente token fake de desarrollo');
+                    // Si es token fake, obtener del localStorage
+                    const userStr = localStorage.getItem('user');
+                    if (userStr) {
+                        const user = JSON.parse(userStr);
+                        if (user.id) {
+                            console.log('👤 Usuario obtenido desde localStorage (token fake):', user.id);
+                            return user.id.toString();
+                        }
+                    }
                 }
             } catch (error) {
-                console.warn('⚠️ Error decodificando token:', error);
+                console.warn('⚠️ Error decodificando token, intentando localStorage:', error);
             }
         }
 
-        // Opción 3: Fallback a usuario 1 para desarrollo
-        console.warn('⚠️ No se encontró usuario, usando fallback');
+        // PRIORIDAD 2: Obtener del objeto user completo (fallback)
+        try {
+            const userStr = localStorage.getItem('user');
+            if (userStr) {
+                const user = JSON.parse(userStr);
+                if (user.id) {
+                    console.log('👤 Usuario obtenido desde localStorage:', user.id);
+                    return user.id.toString();
+                }
+            }
+        } catch (error) {
+            console.error('❌ Error obteniendo user desde localStorage:', error);
+        }
+
+        // PRIORIDAD 3: Fallback a usuario 1 para desarrollo
+        console.error('❌ No se pudo obtener usuario de ninguna fuente - usando fallback a usuario 1');
+        console.error('⚠️ ESTO NO DEBERÍA PASAR EN PRODUCCIÓN - verificar autenticación');
         return '1';
     }
 
