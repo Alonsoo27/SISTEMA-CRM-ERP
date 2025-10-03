@@ -285,6 +285,18 @@ router.use((req, res, next) => {
 // =====================================================
 
 /**
+ * GET /api/notificaciones/contador/:usuarioId
+ * Obtener contador inteligente con desglose
+ * 🔐 Requiere: Usuarios autenticados + ownership
+ * IMPORTANTE: Esta ruta DEBE estar ANTES de /:usuarioId para evitar conflictos
+ */
+router.get('/contador/:usuarioId',
+    requireOwnership,  // Ya valida que sea el propietario o ejecutivo/jefe
+    queryRateLimit,
+    NotificacionesController.obtenerContador
+);
+
+/**
  * GET /api/notificaciones/:usuarioId
  * Obtener notificaciones de un usuario con opciones avanzadas
  * 🔐 Requiere: Usuarios autenticados + ownership
@@ -293,17 +305,6 @@ router.get('/:usuarioId',
     requireOwnership,  // Ya valida que sea el propietario o ejecutivo/jefe
     queryRateLimit,
     NotificacionesController.obtenerNotificaciones
-);
-
-/**
- * GET /api/notificaciones/contador/:usuarioId
- * Obtener contador inteligente con desglose
- * 🔐 Requiere: Usuarios autenticados + ownership
- */
-router.get('/contador/:usuarioId',
-    requireOwnership,  // Ya valida que sea el propietario o ejecutivo/jefe
-    queryRateLimit,
-    NotificacionesController.obtenerContador
 );
 
 // =====================================================
