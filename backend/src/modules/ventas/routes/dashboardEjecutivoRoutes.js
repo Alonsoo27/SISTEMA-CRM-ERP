@@ -9,8 +9,11 @@ const router = express.Router();
 // Controllers - MISMO PATRÓN
 const DashboardEjecutivoController = require('../controllers/dashboardEjecutivoController');
 
-// Middleware de autenticación - EXACTAMENTE IGUAL AL PERSONAL
-const { authenticateToken } = require('../../../middleware/auth');
+// Middleware de autenticación y autorización
+const { authenticateToken, requireRole } = require('../../../middleware/auth');
+
+// Importar constantes de roles
+const { GRUPOS_ROLES } = require('../../../config/roles');
 
 // ============================================
 // MIDDLEWARE DE PERMISOS EJECUTIVOS

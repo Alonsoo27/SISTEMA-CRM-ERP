@@ -9,8 +9,11 @@ const router = express.Router();
 // Controllers
 const DashboardController = require('../controllers/dashboardController');
 
-// Middleware de autenticación
-const { authenticateToken } = require('../../../middleware/auth');
+// Middleware de autenticación y autorización
+const { authenticateToken, requireOwnership, requireRole } = require('../../../middleware/auth');
+
+// Importar constantes de roles
+const { GRUPOS_ROLES } = require('../../../config/roles');
 
 // ============================================
 // RUTAS DEL DASHBOARD PERSONAL
@@ -19,71 +22,78 @@ const { authenticateToken } = require('../../../middleware/auth');
 /**
  * @route   GET /api/dashboard/personal/:asesor_id
  * @desc    Dashboard personal del asesor - KPIs principales
- * @access  Private
+ * @access  Private (requireOwnership: propio dashboard o jefes/ejecutivos)
  * @params  asesor_id, periodo (query)
  */
-router.get('/personal/:asesor_id', 
+router.get('/personal/:asesor_id',
     authenticateToken,
+    requireOwnership, // Permite ver propio dashboard o jefes pueden ver cualquiera
     DashboardController.dashboardPersonal
 );
 
 /**
  * @route   GET /api/dashboard/geografia-asesor/:asesor_id
  * @desc    Análisis geográfico por asesor
- * @access  Private
+ * @access  Private (requireOwnership)
  */
-router.get('/geografia-asesor/:asesor_id', 
+router.get('/geografia-asesor/:asesor_id',
     authenticateToken,
+    requireOwnership,
     DashboardController.geografiaPorAsesor
 );
 
 /**
  * @route   GET /api/dashboard/sectores-asesor/:asesor_id
  * @desc    Análisis por sectores por asesor
- * @access  Private
+ * @access  Private (requireOwnership)
  */
-router.get('/sectores-asesor/:asesor_id', 
+router.get('/sectores-asesor/:asesor_id',
     authenticateToken,
+    requireOwnership,
     DashboardController.sectoresPorAsesor
 );
 
 /**
  * @route   GET /api/dashboard/evolucion-asesor/:asesor_id
  * @desc    Evolución temporal por asesor
- * @access  Private
+ * @access  Private (requireOwnership)
  */
-router.get('/evolucion-asesor/:asesor_id', 
+router.get('/evolucion-asesor/:asesor_id',
     authenticateToken,
+    requireOwnership,
     DashboardController.evolucionPorAsesor
 );
 
 /**
  * @route   GET /api/dashboard/ranking-asesor/:asesor_id
  * @desc    Ranking del asesor vs otros asesores
- * @access  Private
+ * @access  Private (requireOwnership)
  */
 router.get('/ranking-asesor/:asesor_id',
     authenticateToken,
+    requireOwnership,
     DashboardController.rankingAsesor
 );
 
 /**
  * @route   GET /api/dashboard/asesores-disponibles
  * @desc    Lista de asesores disponibles (solo para supervisores)
- * @access  Private
+ * @access  Private (JEFES_Y_EJECUTIVOS)
  */
 router.get('/asesores-disponibles',
     authenticateToken,
+    requireRole(GRUPOS_ROLES.JEFES_Y_EJECUTIVOS),
     DashboardController.listarAsesoresDisponibles
 );
 
 /**
  * @route   GET /api/dashboard/periodos-disponibles/:asesor_id
  * @desc    Períodos con datos disponibles para selector dinámico
- * @access  Private
+ * @access  Private (requireOwnership)
  */
 router.get('/periodos-disponibles/:asesor_id',
     authenticateToken,
+    requireOwnership,
     DashboardController.obtenerPeriodosDisponibles
 );
 
