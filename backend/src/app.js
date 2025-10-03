@@ -244,7 +244,10 @@ app.get('/api', (req, res) => {
             autenticacion: '/api/auth',
             usuarios: '/api/usuarios',
             prospectos: '/api/prospectos',
+            ventas: '/api/ventas',
+            actividad: '/api/actividad',
             notificaciones: '/api/notificaciones',
+            soporte: '/api/soporte',
             reportes: '/api/reportes',
             configuracion: '/api/configuracion',
             salud: '/health'
@@ -285,6 +288,8 @@ app.use('/api/ventas', authenticateToken, require('./modules/ventas/routes/venta
 app.use('/api/actividad', authenticateToken, require('./modules/ventas/routes/actividadRoutes'));
 // ✅ RUTAS DE NOTIFICACIONES (sistema superior unificado - protegidas con rate limiting específico)
 app.use('/api/notificaciones', notificacionesRateLimit, authenticateToken, require('./modules/notificaciones/routes/notificacionesRoutes'));
+// ✅ RUTAS DE SOPORTE TÉCNICO (protegidas)
+app.use('/api/soporte', authenticateToken, require('./modules/soporte/routes/soporteRoutes'));
 
 // Rutas de reportes (protegidas)
 app.use('/api/reportes', authenticateToken, require('./routes/reportesRoutes'));
@@ -570,7 +575,9 @@ const startServer = () => {
                 api_health: `http://${HOST}:${PORT}/health`,
                 api_info: `http://${HOST}:${PORT}/api`,
                 prospectos: `http://${HOST}:${PORT}/api/prospectos`,
+                ventas: `http://${HOST}:${PORT}/api/ventas`,
                 notificaciones: `http://${HOST}:${PORT}/api/notificaciones`,
+                soporte: `http://${HOST}:${PORT}/api/soporte`,
                 debug_routes: process.env.NODE_ENV === 'development' ? `http://${HOST}:${PORT}/api/debug/routes` : 'N/A',
                 debug_rate_limits: process.env.NODE_ENV === 'development' ? `http://${HOST}:${PORT}/api/debug/rate-limits` : 'N/A'
             });
