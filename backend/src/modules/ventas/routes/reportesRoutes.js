@@ -12,6 +12,8 @@ const ReportesVentasService = require('../services/ReportesVentasService');
 
 // Middleware empresarial unificado
 const { authenticateToken, requireRole } = require('../../../middleware/auth');
+// Importar constantes de roles
+const { ROLES, GRUPOS_ROLES, PERMISOS_OPERACION } = require('../../../config/roles.js');
 
 // ============================================
 // DASHBOARDS EJECUTIVOS
@@ -24,7 +26,7 @@ const { authenticateToken, requireRole } = require('../../../middleware/auth');
  */
 router.get('/dashboard/ejecutivo',
     authenticateToken,
-    requireRole(['GERENTE', 'ADMIN', 'SUPER_ADMIN']),
+    requireRole(GRUPOS_ROLES.EJECUTIVOS),
     async (req, res) => {
         try {
             const reporte = await ReportesVentasService.generarDashboardEjecutivo(req.query);
@@ -52,7 +54,7 @@ router.get('/dashboard/asesor/:asesor_id',
  */
 router.get('/dashboard/equipo/:gerente_id', 
     authenticateToken,
-    requireRole(['GERENTE', 'ADMIN', 'SUPER_ADMIN']),
+    requireRole(GRUPOS_ROLES.EJECUTIVOS),
     async (req, res) => {
         try {
             const reporte = await ReportesVentasService.dashboardEquipo(req.params.gerente_id, req.query);
@@ -92,7 +94,7 @@ router.get('/ventas/resumen',
  */
 router.get('/ventas/pipeline', 
     authenticateToken,
-    requireRole(['GERENTE', 'ADMIN', 'SUPER_ADMIN']),
+    requireRole(GRUPOS_ROLES.EJECUTIVOS),
     async (req, res) => {
         try {
             const reporte = await ReportesVentasService.reportePipeline(req.query);
@@ -110,7 +112,7 @@ router.get('/ventas/pipeline',
  */
 router.get('/ventas/conversion', 
     authenticateToken,
-    requireRole(['GERENTE', 'ADMIN', 'SUPER_ADMIN']),
+    requireRole(GRUPOS_ROLES.EJECUTIVOS),
     async (req, res) => {
         try {
             const reporte = await ReportesVentasService.reporteConversion(req.query);
@@ -128,7 +130,7 @@ router.get('/ventas/conversion',
  */
 router.get('/ventas/tendencias', 
     authenticateToken,
-    requireRole(['GERENTE', 'ADMIN', 'SUPER_ADMIN']),
+    requireRole(GRUPOS_ROLES.EJECUTIVOS),
     async (req, res) => {
         try {
             const reporte = await ReportesVentasService.reporteTendencias(req.query);
@@ -150,7 +152,7 @@ router.get('/ventas/tendencias',
  */
 router.get('/performance/asesores', 
     authenticateToken,
-    requireRole(['GERENTE', 'ADMIN', 'SUPER_ADMIN']),
+    requireRole(GRUPOS_ROLES.EJECUTIVOS),
     async (req, res) => {
         try {
             const reporte = await ReportesVentasService.rankingAsesores(req.query);
@@ -168,7 +170,7 @@ router.get('/performance/asesores',
  */
 router.get('/performance/productos', 
     authenticateToken,
-    requireRole(['GERENTE', 'ADMIN', 'SUPER_ADMIN']),
+    requireRole(GRUPOS_ROLES.EJECUTIVOS),
     async (req, res) => {
         try {
             const reporte = await ReportesVentasService.performanceProductos(req.query);
@@ -186,7 +188,7 @@ router.get('/performance/productos',
  */
 router.get('/performance/regiones', 
     authenticateToken,
-    requireRole(['GERENTE', 'ADMIN', 'SUPER_ADMIN']),
+    requireRole(GRUPOS_ROLES.EJECUTIVOS),
     async (req, res) => {
         try {
             const reporte = await ReportesVentasService.performanceRegiones(req.query);
@@ -208,7 +210,7 @@ router.get('/performance/regiones',
  */
 router.get('/predictivos/proyecciones', 
     authenticateToken,
-    requireRole(['GERENTE', 'ADMIN', 'SUPER_ADMIN']),
+    requireRole(GRUPOS_ROLES.EJECUTIVOS),
     async (req, res) => {
         try {
             const reporte = await ReportesVentasService.proyeccionesVentas(req.query);
@@ -226,7 +228,7 @@ router.get('/predictivos/proyecciones',
  */
 router.get('/predictivos/metas', 
     authenticateToken,
-    requireRole(['GERENTE', 'ADMIN', 'SUPER_ADMIN']),
+    requireRole(GRUPOS_ROLES.EJECUTIVOS),
     async (req, res) => {
         try {
             const reporte = await ReportesVentasService.prediccionMetas(req.query);
@@ -244,7 +246,7 @@ router.get('/predictivos/metas',
  */
 router.get('/predictivos/demanda', 
     authenticateToken,
-    requireRole(['GERENTE', 'ADMIN', 'SUPER_ADMIN']),
+    requireRole(GRUPOS_ROLES.EJECUTIVOS),
     async (req, res) => {
         try {
             const reporte = await ReportesVentasService.prediccionDemanda(req.query);
@@ -266,7 +268,7 @@ router.get('/predictivos/demanda',
  */
 router.get('/financieros/ingresos', 
     authenticateToken,
-    requireRole(['GERENTE', 'ADMIN', 'SUPER_ADMIN']),
+    requireRole(GRUPOS_ROLES.EJECUTIVOS),
     async (req, res) => {
         try {
             const reporte = await ReportesVentasService.reporteIngresos(req.query);
@@ -284,7 +286,7 @@ router.get('/financieros/ingresos',
  */
 router.get('/financieros/comisiones', 
     authenticateToken,
-    requireRole(['GERENTE', 'ADMIN', 'SUPER_ADMIN']),
+    requireRole(GRUPOS_ROLES.EJECUTIVOS),
     async (req, res) => {
         try {
             const reporte = await ReportesVentasService.reporteComisiones(req.query);
@@ -302,7 +304,7 @@ router.get('/financieros/comisiones',
  */
 router.get('/financieros/roi', 
     authenticateToken,
-    requireRole(['GERENTE', 'ADMIN', 'SUPER_ADMIN']),
+    requireRole(GRUPOS_ROLES.EJECUTIVOS),
     async (req, res) => {
         try {
             const reporte = await ReportesVentasService.analisisROI(req.query);
@@ -324,7 +326,7 @@ router.get('/financieros/roi',
  */
 router.get('/customer-journey/funnel', 
     authenticateToken,
-    requireRole(['GERENTE', 'ADMIN', 'SUPER_ADMIN']),
+    requireRole(GRUPOS_ROLES.EJECUTIVOS),
     async (req, res) => {
         try {
             const reporte = await ReportesVentasService.analisisFunnel(req.query);
@@ -342,7 +344,7 @@ router.get('/customer-journey/funnel',
  */
 router.get('/customer-journey/touchpoints', 
     authenticateToken,
-    requireRole(['GERENTE', 'ADMIN', 'SUPER_ADMIN']),
+    requireRole(GRUPOS_ROLES.EJECUTIVOS),
     async (req, res) => {
         try {
             const reporte = await ReportesVentasService.analisisTouchpoints(req.query);
@@ -431,7 +433,7 @@ router.post('/exportar/csv',
  */
 router.get('/programados', 
     authenticateToken,
-    requireRole(['GERENTE', 'ADMIN', 'SUPER_ADMIN']),
+    requireRole(GRUPOS_ROLES.EJECUTIVOS),
     async (req, res) => {
         try {
             const reportes = await ReportesVentasService.listarReportesProgramados(req.user.id);
@@ -449,7 +451,7 @@ router.get('/programados',
  */
 router.post('/programados', 
     authenticateToken,
-    requireRole(['GERENTE', 'ADMIN', 'SUPER_ADMIN']),
+    requireRole(GRUPOS_ROLES.EJECUTIVOS),
     async (req, res) => {
         try {
             const reporte = await ReportesVentasService.crearReporteProgramado(req.body, req.user.id);
@@ -505,7 +507,7 @@ router.delete('/programados/:id',
  */
 router.post('/personalizado', 
     authenticateToken,
-    requireRole(['GERENTE', 'ADMIN', 'SUPER_ADMIN']),
+    requireRole(GRUPOS_ROLES.EJECUTIVOS),
     async (req, res) => {
         try {
             const reporte = await ReportesVentasService.generarReportePersonalizado(req.body);
@@ -544,7 +546,7 @@ router.get('/plantillas',
  */
 router.get('/comparativos/periodos', 
     authenticateToken,
-    requireRole(['GERENTE', 'ADMIN', 'SUPER_ADMIN']),
+    requireRole(GRUPOS_ROLES.EJECUTIVOS),
     async (req, res) => {
         try {
             const reporte = await ReportesVentasService.comparisonPeriodos(req.query);
@@ -562,7 +564,7 @@ router.get('/comparativos/periodos',
  */
 router.get('/comparativos/asesores', 
     authenticateToken,
-    requireRole(['GERENTE', 'ADMIN', 'SUPER_ADMIN']),
+    requireRole(GRUPOS_ROLES.EJECUTIVOS),
     async (req, res) => {
         try {
             const reporte = await ReportesVentasService.comparisonAsesores(req.query);
@@ -580,7 +582,7 @@ router.get('/comparativos/asesores',
  */
 router.get('/comparativos/equipos', 
     authenticateToken,
-    requireRole(['ADMIN', 'SUPER_ADMIN']),
+    requireRole(GRUPOS_ROLES.EJECUTIVOS),
     async (req, res) => {
         try {
             const reporte = await ReportesVentasService.comparisonEquipos(req.query);

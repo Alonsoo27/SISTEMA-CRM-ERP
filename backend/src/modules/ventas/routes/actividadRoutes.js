@@ -16,10 +16,12 @@ const ActividadDiariaController = require('../controllers/ActividadDiariaControl
 
 // MIDDLEWARE DE AUTENTICACIÓN EMPRESARIAL UNIFICADO
 const { authenticateToken, requireRole, requireOwnership } = require('../../../middleware/auth');
+// Importar constantes de roles
+const { ROLES, GRUPOS_ROLES, PERMISOS_OPERACION } = require('../../../config/roles.js');
 
 // Definir permisos específicos para actividad de ventas
-const requireVentasAccess = requireRole(['VENDEDOR', 'JEFE_VENTAS', 'GERENTE', 'ADMIN', 'SUPER_ADMIN']);
-const requireVentasManager = requireRole(['JEFE_VENTAS', 'GERENTE', 'ADMIN', 'SUPER_ADMIN']);
+const requireVentasAccess = requireRole(GRUPOS_ROLES.VENTAS_COMPLETO);
+const requireVentasManager = requireRole([ROLES.JEFE_VENTAS, ROLES.GERENTE, ROLES.ADMIN, ROLES.SUPER_ADMIN]);
 
 // ============================================
 // MIDDLEWARE DE VALIDACIÓN ESPECÍFICO

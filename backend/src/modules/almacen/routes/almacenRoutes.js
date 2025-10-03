@@ -6,6 +6,8 @@ const almacenValidations = require('../utils/almacenValidations');
 
 // Middleware de autenticación y autorización empresarial unificado
 const { authenticateToken, requireRole } = require('../../../middleware/auth');
+// Importar constantes de roles
+const { ROLES, GRUPOS_ROLES, PERMISOS_OPERACION } = require('../../../config/roles.js');
 
 // Configuración de multer para upload de archivos
 const upload = multer({
@@ -18,13 +20,13 @@ const upload = multer({
 // ==================== NIVELES DE AUTORIZACIÓN ====================
 
 // Acceso básico al módulo de almacén
-const requireAlmacenAccess = requireRole(['ALMACENERO', 'JEFE_ALMACEN', 'GERENTE', 'SUPER_ADMIN', 'ADMIN']);
+const requireAlmacenAccess = requireRole([ROLES.ALMACENERO, ROLES.JEFE_ALMACEN, ROLES.GERENTE, ROLES.SUPER_ADMIN, ROLES.ADMIN]);
 
 // Operaciones críticas (transferencias, ajustes de stock)
-const requireAlmacenOperations = requireRole(['JEFE_ALMACEN', 'GERENTE', 'SUPER_ADMIN', 'ADMIN']);
+const requireAlmacenOperations = requireRole([ROLES.JEFE_ALMACEN, ROLES.GERENTE, ROLES.SUPER_ADMIN, ROLES.ADMIN]);
 
 // Administración del módulo (uploads masivos, configuración) - Solo SUPER_ADMIN
-const requireAlmacenAdmin = requireRole(['SUPER_ADMIN']);
+const requireAlmacenAdmin = requireRole([ROLES.SUPER_ADMIN]);
 
 // ==================== DASHBOARD PRINCIPAL ====================
 

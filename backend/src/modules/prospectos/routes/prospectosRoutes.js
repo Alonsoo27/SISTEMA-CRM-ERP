@@ -471,41 +471,41 @@ router.get('/info/canales', (req, res) => {
 // ============================================================================
 
 router.get('/', 
-    requireRole(['VENDEDOR', 'ADMIN', 'JEFE_VENTAS', 'SUPER_ADMIN']), 
+    requireRole([ROLES.VENDEDOR, ROLES.ADMIN, ROLES.JEFE_VENTAS, ROLES.SUPER_ADMIN]), 
     requireOwnership,
     ProspectosController.obtenerTodos
 );
 
 router.get('/kanban/:asesorId', 
-    requireRole(['VENDEDOR', 'ADMIN', 'JEFE_VENTAS', 'SUPER_ADMIN']), 
+    requireRole([ROLES.VENDEDOR, ROLES.ADMIN, ROLES.JEFE_VENTAS, ROLES.SUPER_ADMIN]), 
     requireOwnership,
     ProspectosController.obtenerKanban
 );
 
 router.get('/kanban', 
-    requireRole(['VENDEDOR', 'ADMIN', 'JEFE_VENTAS', 'SUPER_ADMIN']), 
+    requireRole([ROLES.VENDEDOR, ROLES.ADMIN, ROLES.JEFE_VENTAS, ROLES.SUPER_ADMIN]), 
     ProspectosController.obtenerKanban
 );
 
 // 📊 NUEVAS RUTAS DE MÉTRICAS ENTERPRISE
 router.get('/metricas/canales',
-    requireRole(['VENDEDOR', 'ADMIN', 'JEFE_VENTAS', 'SUPER_ADMIN']),
+    requireRole([ROLES.VENDEDOR, ROLES.ADMIN, ROLES.JEFE_VENTAS, ROLES.SUPER_ADMIN]),
     ProspectosController.obtenerMetricasPorCanal
 );
 
 router.get('/metricas/:asesorId',
-    requireRole(['VENDEDOR', 'ADMIN', 'JEFE_VENTAS', 'SUPER_ADMIN']),
+    requireRole([ROLES.VENDEDOR, ROLES.ADMIN, ROLES.JEFE_VENTAS, ROLES.SUPER_ADMIN]),
     requireOwnership,
     ProspectosController.obtenerMetricas
 );
 
 router.get('/metricas',
-    requireRole(['VENDEDOR', 'ADMIN', 'JEFE_VENTAS', 'SUPER_ADMIN']),
+    requireRole([ROLES.VENDEDOR, ROLES.ADMIN, ROLES.JEFE_VENTAS, ROLES.SUPER_ADMIN]),
     ProspectosController.obtenerMetricas
 );
 
 router.get('/verificar-duplicado/:telefono', 
-    requireRole(['VENDEDOR', 'ADMIN', 'JEFE_VENTAS', 'SUPER_ADMIN']), 
+    requireRole([ROLES.VENDEDOR, ROLES.ADMIN, ROLES.JEFE_VENTAS, ROLES.SUPER_ADMIN]), 
     ProspectosController.verificarDuplicado
 );
 
@@ -514,27 +514,27 @@ router.get('/verificar-duplicado/:telefono',
 // ============================================================================
 
 router.post('/', 
-    requireRole(['VENDEDOR', 'ADMIN', 'SUPER_ADMIN']),
+    requireRole([ROLES.VENDEDOR, ROLES.ADMIN, ROLES.SUPER_ADMIN]),
     createProspectoRateLimit, 
     validarDatosProspecto, 
     ProspectosController.crearProspecto
 );
 
 router.put('/:id', 
-    requireRole(['VENDEDOR', 'ADMIN', 'SUPER_ADMIN']),
+    requireRole([ROLES.VENDEDOR, ROLES.ADMIN, ROLES.SUPER_ADMIN]),
     updateRateLimit, 
     validarDatosProspecto, 
     ProspectosController.actualizarProspecto
 );
 
 router.patch('/:id/estado', 
-    requireRole(['VENDEDOR', 'ADMIN', 'SUPER_ADMIN']),
+    requireRole([ROLES.VENDEDOR, ROLES.ADMIN, ROLES.SUPER_ADMIN]),
     updateRateLimit, 
     ProspectosController.cambiarEstado
 );
 
 router.post('/:id/cerrar-venta', 
-    requireRole(['VENDEDOR', 'ADMIN', 'SUPER_ADMIN']),
+    requireRole([ROLES.VENDEDOR, ROLES.ADMIN, ROLES.SUPER_ADMIN]),
     ProspectosController.cerrarVenta
 );
 
@@ -543,7 +543,7 @@ router.post('/:id/cerrar-venta',
 // ============================================================================
 
 router.delete('/:id', 
-    requireRole(['VENDEDOR', 'ADMIN', 'SUPER_ADMIN']),
+    requireRole([ROLES.VENDEDOR, ROLES.ADMIN, ROLES.SUPER_ADMIN]),
     updateRateLimit, 
     async (req, res) => {
         try {
@@ -596,7 +596,7 @@ router.delete('/:id',
 
 // Dashboard principal de seguimientos (sin filtro de asesor)
 router.get('/dashboard/seguimientos', 
-    requireRole(['VENDEDOR', 'ADMIN', 'JEFE_VENTAS', 'SUPER_ADMIN']),
+    requireRole([ROLES.VENDEDOR, ROLES.ADMIN, ROLES.JEFE_VENTAS, ROLES.SUPER_ADMIN]),
     async (req, res) => {
         try {
             const datosCompletos = await procesarSeguimientos();
@@ -619,7 +619,7 @@ router.get('/dashboard/seguimientos',
 
 // Dashboard de seguimientos filtrado por asesor
 router.get('/dashboard/seguimientos/:asesorId', 
-    requireRole(['VENDEDOR', 'ADMIN', 'JEFE_VENTAS', 'SUPER_ADMIN']),
+    requireRole([ROLES.VENDEDOR, ROLES.ADMIN, ROLES.JEFE_VENTAS, ROLES.SUPER_ADMIN]),
     requireOwnership,
     async (req, res) => {
         try {
@@ -652,7 +652,7 @@ router.get('/dashboard/seguimientos/:asesorId',
 
 // Todos los seguimientos en un solo array
 router.get('/seguimientos', 
-    requireRole(['VENDEDOR', 'ADMIN', 'JEFE_VENTAS', 'SUPER_ADMIN']),
+    requireRole([ROLES.VENDEDOR, ROLES.ADMIN, ROLES.JEFE_VENTAS, ROLES.SUPER_ADMIN]),
     async (req, res) => {
         try {
             const datosCompletos = await procesarSeguimientos();
@@ -685,7 +685,7 @@ router.get('/seguimientos',
 
 // Solo seguimientos pendientes
 router.get('/seguimientos/pendientes', 
-    requireRole(['VENDEDOR', 'ADMIN', 'JEFE_VENTAS', 'SUPER_ADMIN']),
+    requireRole([ROLES.VENDEDOR, ROLES.ADMIN, ROLES.JEFE_VENTAS, ROLES.SUPER_ADMIN]),
     async (req, res) => {
         try {
             const datosCompletos = await procesarSeguimientos();
@@ -711,7 +711,7 @@ router.get('/seguimientos/pendientes',
 
 // Solo seguimientos vencidos
 router.get('/seguimientos/vencidos', 
-    requireRole(['VENDEDOR', 'ADMIN', 'JEFE_VENTAS', 'SUPER_ADMIN']),
+    requireRole([ROLES.VENDEDOR, ROLES.ADMIN, ROLES.JEFE_VENTAS, ROLES.SUPER_ADMIN]),
     async (req, res) => {
         try {
             const datosCompletos = await procesarSeguimientos();
@@ -737,7 +737,7 @@ router.get('/seguimientos/vencidos',
 
 // Solo seguimientos completados hoy
 router.get('/seguimientos/completados', 
-    requireRole(['VENDEDOR', 'ADMIN', 'JEFE_VENTAS', 'SUPER_ADMIN']),
+    requireRole([ROLES.VENDEDOR, ROLES.ADMIN, ROLES.JEFE_VENTAS, ROLES.SUPER_ADMIN]),
     async (req, res) => {
         try {
             const datosCompletos = await procesarSeguimientos();
@@ -766,13 +766,13 @@ router.get('/seguimientos/completados',
 // ============================================================================
 
 router.post('/seguimientos/procesar-vencidos', 
-    requireRole(['VENDEDOR', 'ADMIN', 'JEFE_VENTAS', 'SUPER_ADMIN']),
+    requireRole([ROLES.VENDEDOR, ROLES.ADMIN, ROLES.JEFE_VENTAS, ROLES.SUPER_ADMIN]),
     adminOperationsRateLimit,
     ProspectosController.procesarSeguimientosVencidos
 );
 
 router.post('/seguimientos/corregir-null', 
-    requireRole(['ADMIN', 'JEFE_VENTAS', 'GERENTE', 'SUPER_ADMIN']),
+    requireRole([ROLES.ADMIN, ROLES.JEFE_VENTAS, ROLES.GERENTE, ROLES.SUPER_ADMIN]),
     adminOperationsRateLimit,
     ProspectosController.corregirSeguimientosNull
 );
@@ -782,24 +782,24 @@ router.post('/seguimientos/corregir-null',
 // ============================================================================
 // Ruta para obtener productos de interés de un prospecto
 router.get('/:id/productos-interes', 
-    requireRole(['VENDEDOR', 'ADMIN', 'JEFE_VENTAS', 'SUPER_ADMIN']), 
+    requireRole([ROLES.VENDEDOR, ROLES.ADMIN, ROLES.JEFE_VENTAS, ROLES.SUPER_ADMIN]), 
     ProspectosController.obtenerProductosInteres
 );
 
 // 🚀 ANALYTICS UNIFICADOS - Nueva función que resuelve inconsistencias
 // IMPORTANTE: Debe estar ANTES de '/:id' para evitar conflictos de rutas
 router.get('/analytics-completos',
-    requireRole(['VENDEDOR', 'ADMIN', 'JEFE_VENTAS', 'SUPER_ADMIN']),
+    requireRole([ROLES.VENDEDOR, ROLES.ADMIN, ROLES.JEFE_VENTAS, ROLES.SUPER_ADMIN]),
     ProspectosController.obtenerAnalyticsCompletos
 );
 
 router.get('/analytics-completos/:asesorId',
-    requireRole(['VENDEDOR', 'ADMIN', 'JEFE_VENTAS', 'SUPER_ADMIN']),
+    requireRole([ROLES.VENDEDOR, ROLES.ADMIN, ROLES.JEFE_VENTAS, ROLES.SUPER_ADMIN]),
     ProspectosController.obtenerAnalyticsCompletos
 );
 
 router.get('/:id', 
-    requireRole(['VENDEDOR', 'ADMIN', 'JEFE_VENTAS', 'SUPER_ADMIN']), 
+    requireRole([ROLES.VENDEDOR, ROLES.ADMIN, ROLES.JEFE_VENTAS, ROLES.SUPER_ADMIN]), 
     async (req, res) => {
         try {
             const { id } = req.params;
@@ -877,7 +877,7 @@ router.get('/:id',
 // ============================================================================
 
 router.post('/:id/convertir-a-venta', 
-    requireRole(['VENDEDOR', 'ADMIN', 'SUPER_ADMIN']),
+    requireRole([ROLES.VENDEDOR, ROLES.ADMIN, ROLES.SUPER_ADMIN]),
     updateRateLimit,
     ProspectosController.convertirAVentaManual
 );

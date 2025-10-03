@@ -10,10 +10,12 @@ const CampanasController = require('../controllers/CampanasController');
 
 // Middleware de autenticación
 const { authenticateToken, requireRole } = require('../../../middleware/auth');
+// Importar constantes de roles
+const { ROLES, GRUPOS_ROLES, PERMISOS_OPERACION } = require('../../../config/roles.js');
 
 // Middleware específico para campañas
-const requireVentasAccess = requireRole(['VENDEDOR', 'JEFE_VENTAS', 'GERENTE', 'ADMIN', 'SUPER_ADMIN']);
-const requireManagerAccess = requireRole(['JEFE_VENTAS', 'GERENTE', 'ADMIN', 'SUPER_ADMIN']);
+const requireVentasAccess = requireRole(GRUPOS_ROLES.VENTAS_COMPLETO);
+const requireManagerAccess = requireRole([ROLES.JEFE_VENTAS, ROLES.GERENTE, ROLES.ADMIN, ROLES.SUPER_ADMIN]);
 
 /**
  * @route GET /api/campanas/activas

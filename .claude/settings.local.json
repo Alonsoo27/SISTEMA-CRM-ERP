@@ -42,7 +42,8 @@
       "Bash(git add:*)",
       "Bash(git commit -m \"$(cat <<''EOF''\nPreparación completa para producción en Railway\n\n✨ Nuevas características:\n- Selector de períodos avanzado para dashboards ejecutivos y pipeline\n- Filtros temporales para análisis histórico (meses pasados)\n- Sistema completo listo para deployment\n\n🔧 Configuración Railway:\n- railway.json para backend y frontend\n- CORS dinámico configurado\n- Variables de entorno preparadas\n- Documentación completa de deployment\n\n📊 Mejoras en dashboards:\n- Vista Unificada con filtros temporales\n- Análisis Geográfico con períodos específicos\n- ABC Productos con datos históricos\n- Metas Avanzado con selector de períodos\n- Pipeline con análisis temporal\n\n🐛 Fixes:\n- Corrección de estructura de datos en PeriodSelector\n- Ajustes en controllers para períodos específicos\n- Optimización de queries temporales\n\n📝 Documentación:\n- RAILWAY_DEPLOYMENT.md con guía paso a paso\n- .env.example actualizados\n- Instrucciones de configuración\n\n🤖 Generated with Claude Code\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF\n)\")",
       "Bash(git push:*)",
-      "Bash(git commit:*)"
+      "Bash(git commit:*)",
+      "Bash(git ls-tree:*)"
     ],
     "deny": [],
     "ask": []
