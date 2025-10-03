@@ -11,24 +11,31 @@ class NotificacionesService {
         this.cacheTimeout = 30000; // 30 segundos
     }
 
-    // ✅ CORREGIDO: Obtener usuario actual del token o storage
+    // ✅ CORREGIDO: Obtener usuario actual del localStorage (misma key que authService)
     getCurrentUserId() {
-        // Opción 1: Desde localStorage (si guardas el user ID)
-        const userId = localStorage.getItem('userId');
-        if (userId) return userId;
+        // Opción 1: Obtener del objeto user completo (PRIORIDAD)
+        try {
+            const userStr = localStorage.getItem('user');
+            if (userStr) {
+                const user = JSON.parse(userStr);
+                if (user.id) {
+                    return user.id.toString();
+                }
+            }
+        } catch (error) {
+            console.warn('⚠️ Error obteniendo user desde localStorage:', error);
+        }
 
-        // Opción 2: Obtener token de localStorage con keys correctas
-        const token = localStorage.getItem('token') || localStorage.getItem('authToken');
-
+        // Opción 2: Decodificar token JWT
+        const token = localStorage.getItem('token');
         if (token) {
-
-            // ✅ DECODIFICAR SOLO JWT REALES
             try {
                 // Validar que sea un JWT real (3 partes separadas por puntos)
                 const parts = token.split('.');
                 if (parts.length === 3) {
                     const payload = JSON.parse(atob(parts[1]));
-                    return payload.user_id || payload.id || payload.sub;
+                    const userId = payload.user_id || payload.id || payload.sub;
+                    if (userId) return userId.toString();
                 } else {
                     console.warn('⚠️ Token no tiene formato JWT válido');
                 }
@@ -42,9 +49,9 @@ class NotificacionesService {
         return '1';
     }
 
-    // ✅ CORREGIDO: Headers con keys correctas de localStorage
+    // ✅ CORREGIDO: Headers con token correcto de localStorage
     getHeaders() {
-        const token = localStorage.getItem('token') || localStorage.getItem('authToken');
+        const token = localStorage.getItem('token');
         return {
             'Content-Type': 'application/json',
             ...(token && { 'Authorization': `Bearer ${token}` })
@@ -57,8 +64,7 @@ class NotificacionesService {
                 case 401:
                     console.warn('🚫 Token expirado o inválido');
                     localStorage.removeItem('token');
-                    localStorage.removeItem('authToken');
-                    localStorage.removeItem('userId'); // Limpiar también el userId
+                    localStorage.removeItem('user');
                     throw new Error('Sesión expirada. Inicia sesión nuevamente.');
                 
                 case 403:
