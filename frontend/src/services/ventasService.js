@@ -141,33 +141,37 @@ class VentasService {
     }
 
     try {
-      // 🔥 PARALELO: Obtener ventas Y bonos al mismo tiempo
-      const [ventasResponse, bonosResponse] = await Promise.all([
-        this.apiClient.get(`/ventas?${params.toString()}`),
-        this.apiClient.get(`/comisiones/bono-actual/${filtros.asesor_id || 1}`) // Usuario actual
-      ]);
-      
+      // 🔥 MEJORADO: Obtener ventas SIEMPRE, bonos OPCIONAL (puede fallar sin romper todo)
+      const ventasResponse = await this.apiClient.get(`/ventas?${params.toString()}`);
+
       // Procesar respuesta de ventas
       const ventasData = ventasResponse.data;
       const ventasMetricas = ventasData.metricas || {};
-      
-      // Procesar respuesta de bonos
-      const bonosData = bonosResponse.data;
-      console.log('🔍 DATOS BONOS RECIBIDOS:', bonosData);
-      
+
+      // Intentar obtener bonos (no crítico)
+      let bonosData = { success: false, data: null };
       let bonoActual = 0;
       let porcentajeMeta = 0;
       let faltaParaSiguiente = 0;
       let metaTotal = 0;
       let vendidoTotal = 0;
-      
-      if (bonosData.success && bonosData.data) {
-        const bono = bonosData.data;
-        bonoActual = bono.bono_actual?.bono_usd || 0;
-        porcentajeMeta = bono.bono_actual?.porcentaje || 0;
-        metaTotal = bono.asesor?.meta_usd || 0;
-        vendidoTotal = bono.asesor?.vendido_usd || 0;
-        faltaParaSiguiente = bono.siguiente_nivel?.falta_usd || 0;
+
+      try {
+        const bonosResponse = await this.apiClient.get(`/comisiones/bono-actual/${filtros.asesor_id || 1}`);
+        bonosData = bonosResponse.data;
+        console.log('🔍 DATOS BONOS RECIBIDOS:', bonosData);
+
+        if (bonosData.success && bonosData.data) {
+          const bono = bonosData.data;
+          bonoActual = bono.bono_actual?.bono_usd || 0;
+          porcentajeMeta = bono.bono_actual?.porcentaje || 0;
+          metaTotal = bono.asesor?.meta_usd || 0;
+          vendidoTotal = bono.asesor?.vendido_usd || 0;
+          faltaParaSiguiente = bono.siguiente_nivel?.falta_usd || 0;
+        }
+      } catch (bonosError) {
+        console.warn('⚠️ No se pudieron obtener bonos (usando valores por defecto):', bonosError.response?.data?.message || bonosError.message);
+        // Continuar sin bonos - no es crítico para mostrar ventas
       }
       
       const processed = {
