@@ -116,18 +116,20 @@ const DashboardAsesores = ({
 
   // MEJORADO: Determinar modo de vista según permisos del usuario
   const determinarModoVista = useCallback(() => {
-    const userVende = canSell(user);
-    const esEjecutivo = isExecutive(user);
-    const rolId = user?.rol_id;
+    // Normalizar usuario DENTRO del callback para garantizar estructura correcta
+    const normalizedUser = normalizeUser(usuarioActual);
+    const userVende = canSell(normalizedUser);
+    const esEjecutivo = isExecutive(normalizedUser);
+    const rolId = normalizedUser?.rol_id;
 
-    console.log('🔍 Determinando modo vista:', { userVende, esEjecutivo, rolId });
+    console.log('🔍 Determinando modo vista:', { userVende, esEjecutivo, rolId, normalizedUser });
 
     // PRIORIDAD 1: SUPER_ADMIN (1), GERENTE (2), JEFE_VENTAS (3) SIEMPRE empiezan en modo propio
     // Ellos pueden vender aunque el flag vende no esté presente
     if (rolId === 1 || rolId === 2 || rolId === 3) {
       console.log('✅ SUPER_ADMIN/GERENTE/JEFE_VENTAS → Modo propio');
       setModoVista('propio');
-      setAsesorSeleccionado(user?.id);
+      setAsesorSeleccionado(normalizedUser?.id);
       return 'propio';
     }
 
@@ -135,7 +137,7 @@ const DashboardAsesores = ({
     if (userVende) {
       console.log('✅ Usuario con vende=true → Modo propio');
       setModoVista('propio');
-      setAsesorSeleccionado(user?.id);
+      setAsesorSeleccionado(normalizedUser?.id);
       return 'propio';
     }
 
@@ -150,9 +152,9 @@ const DashboardAsesores = ({
     // PRIORIDAD 4: Por defecto, modo propio
     console.log('📌 Default → Modo propio');
     setModoVista('propio');
-    setAsesorSeleccionado(user?.id);
+    setAsesorSeleccionado(normalizedUser?.id);
     return 'propio';
-  }, [user]);
+  }, [usuarioActual]);
 
   // MEJORADO: Cargar lista de asesores supervisables (con URL completa)
   const cargarAsesores = useCallback(async () => {
