@@ -118,22 +118,37 @@ const DashboardAsesores = ({
   const determinarModoVista = useCallback(() => {
     const userVende = canSell(user);
     const esEjecutivo = isExecutive(user);
+    const rolId = user?.rol_id;
 
-    // Si puede vender, mostrar propio dashboard por defecto
-    if (userVende) {
+    console.log('🔍 Determinando modo vista:', { userVende, esEjecutivo, rolId });
+
+    // PRIORIDAD 1: SUPER_ADMIN (1), GERENTE (2), JEFE_VENTAS (3) SIEMPRE empiezan en modo propio
+    // Ellos pueden vender aunque el flag vende no esté presente
+    if (rolId === 1 || rolId === 2 || rolId === 3) {
+      console.log('✅ SUPER_ADMIN/GERENTE/JEFE_VENTAS → Modo propio');
       setModoVista('propio');
       setAsesorSeleccionado(user?.id);
       return 'propio';
     }
 
-    // Si es ejecutivo pero no vende, forzar modo supervisor
+    // PRIORIDAD 2: Si tiene flag vende=true, modo propio
+    if (userVende) {
+      console.log('✅ Usuario con vende=true → Modo propio');
+      setModoVista('propio');
+      setAsesorSeleccionado(user?.id);
+      return 'propio';
+    }
+
+    // PRIORIDAD 3: Si es ejecutivo pero no vende (ej: ADMIN 11), modo supervisor
     if (esEjecutivo) {
+      console.log('⚠️ Ejecutivo sin vende → Modo supervisor');
       setModoVista('supervisor');
       setAsesorSeleccionado(null);
       return 'supervisor';
     }
 
-    // Por defecto, modo propio
+    // PRIORIDAD 4: Por defecto, modo propio
+    console.log('📌 Default → Modo propio');
     setModoVista('propio');
     setAsesorSeleccionado(user?.id);
     return 'propio';
