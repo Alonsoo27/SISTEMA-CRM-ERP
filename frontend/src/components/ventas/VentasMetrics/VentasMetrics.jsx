@@ -10,11 +10,21 @@ import {
   Building, Briefcase, Timer, BarChart,
   LineChart, Filter, ChevronUp, ChevronDown
 } from 'lucide-react';
+import { API_CONFIG } from '../../../config/apiConfig';
+import { normalizeUser, isExecutive, canSell, debugUser } from '../../../utils/userUtils';
 
 const DashboardAsesores = ({
   usuarioActual,
   refreshTrigger = 0
 }) => {
+  // Normalizar usuario
+  const user = normalizeUser(usuarioActual);
+
+  // Debug en desarrollo
+  if (process.env.NODE_ENV === 'development') {
+    debugUser(user, 'VentasMetrics - Usuario');
+  }
+
   const [metricas, setMetricas] = useState(null);
   const [metasInfo, setMetasInfo] = useState(null);
   const [datosGeografia, setDatosGeografia] = useState([]);
@@ -26,8 +36,8 @@ const DashboardAsesores = ({
   const [periodoSeleccionado, setPeriodoSeleccionado] = useState('mes_actual');
   const [notification, setNotification] = useState(null);
 
-  // NUEVO: Estados para el selector de asesores
-  const [asesorSeleccionado, setAsesorSeleccionado] = useState(usuarioActual?.id);
+  // Estados para el selector de asesores
+  const [asesorSeleccionado, setAsesorSeleccionado] = useState(user?.id);
   const [asesoresDisponibles, setAsesoresDisponibles] = useState([]);
   const [modoVista, setModoVista] = useState('propio'); // 'propio' | 'supervisor'
   const [loadingAsesores, setLoadingAsesores] = useState(false);
@@ -104,39 +114,47 @@ const DashboardAsesores = ({
     setTimeout(() => setNotification(null), 3000);
   }, []);
 
-  // NUEVA: Determinar modo de vista según permisos del usuario
+  // MEJORADO: Determinar modo de vista según permisos del usuario
   const determinarModoVista = useCallback(() => {
-    const userVende = usuarioActual?.vende;
-    const userRole = usuarioActual?.rol_id;
+    const userVende = canSell(user);
+    const esEjecutivo = isExecutive(user);
 
-    // Roles que NO venden pero pueden supervisar
-    const rolesSoloSupervisores = [2, 3]; // GERENTE, JEFE_VENTAS
-
-    if (rolesSoloSupervisores.includes(userRole) || !userVende) {
-      // FORZAR modo supervisor para usuarios que no venden
-      setModoVista('supervisor');
-      setAsesorSeleccionado(null); // No seleccionar ningún asesor por defecto
-      return 'supervisor';
-    } else {
-      // Usuarios que venden inician viendo su propio dashboard
+    // Si puede vender, mostrar propio dashboard por defecto
+    if (userVende) {
       setModoVista('propio');
-      setAsesorSeleccionado(usuarioActual?.id);
+      setAsesorSeleccionado(user?.id);
       return 'propio';
     }
-  }, [usuarioActual]);
 
-  // NUEVA: Cargar lista de asesores supervisables
+    // Si es ejecutivo pero no vende, forzar modo supervisor
+    if (esEjecutivo) {
+      setModoVista('supervisor');
+      setAsesorSeleccionado(null);
+      return 'supervisor';
+    }
+
+    // Por defecto, modo propio
+    setModoVista('propio');
+    setAsesorSeleccionado(user?.id);
+    return 'propio';
+  }, [user]);
+
+  // MEJORADO: Cargar lista de asesores supervisables (con URL completa)
   const cargarAsesores = useCallback(async () => {
     try {
       setLoadingAsesores(true);
       const token = localStorage.getItem('token');
 
       if (!token) {
-        console.error('Token no encontrado');
+        console.error('❌ VentasMetrics: Token no encontrado');
         return;
       }
 
-      const response = await fetch('/api/asesores/supervisables', {
+      // Usar URL completa desde API_CONFIG
+      const url = `${API_CONFIG.BASE_URL}/api/asesores/supervisables`;
+      console.log('📡 VentasMetrics: Cargando asesores desde:', url);
+
+      const response = await fetch(url, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
@@ -145,14 +163,19 @@ const DashboardAsesores = ({
 
       if (response.ok) {
         const data = await response.json();
-        setAsesoresDisponibles(data.data.asesores || []);
-        console.log('✅ Asesores cargados:', data.data.asesores.length);
+        const asesores = data.data?.asesores || [];
+        setAsesoresDisponibles(asesores);
+        console.log('✅ VentasMetrics: Asesores cargados:', asesores.length);
       } else {
-        console.error('Error cargando asesores:', response.status);
+        const errorText = await response.text();
+        console.error('❌ VentasMetrics: Error cargando asesores:', {
+          status: response.status,
+          error: errorText
+        });
       }
 
     } catch (error) {
-      console.error('Error cargando asesores:', error);
+      console.error('❌ VentasMetrics: Error cargando asesores:', error);
     } finally {
       setLoadingAsesores(false);
     }
@@ -170,15 +193,15 @@ const DashboardAsesores = ({
     }
   }, [asesorSeleccionado]);
 
-  // NUEVA: Toggle entre modo propio y supervisor
+  // MEJORADO: Toggle entre modo propio y supervisor
   const toggleModoVista = useCallback(() => {
-    const userVende = usuarioActual?.vende;
-    const userRole = usuarioActual?.rol_id;
-    const rolesSoloSupervisores = [2, 3];
+    const userVende = canSell(user);
+    const esEjecutivo = isExecutive(user);
 
     // Solo permitir toggle si el usuario puede vender
-    if (rolesSoloSupervisores.includes(userRole) || !userVende) {
-      return; // No hacer nada si es un rol que solo supervisa
+    if (!userVende) {
+      console.log('ℹ️ VentasMetrics: Usuario no puede vender, toggle deshabilitado');
+      return;
     }
 
     if (modoVista === 'propio') {
@@ -186,7 +209,7 @@ const DashboardAsesores = ({
       setAsesorSeleccionado(null);
     } else {
       setModoVista('propio');
-      setAsesorSeleccionado(usuarioActual?.id);
+      setAsesorSeleccionado(user?.id);
     }
 
     // Limpiar datos para forzar recarga
@@ -195,7 +218,7 @@ const DashboardAsesores = ({
     setDatosGeografia([]);
     setDatosSectores([]);
     setDatosRanking(null);
-  }, [modoVista, usuarioActual]);
+  }, [modoVista, user]);
 
   // Cargar métricas del asesor
   const cargarMetricas = useCallback(async () => {
@@ -286,15 +309,15 @@ const DashboardAsesores = ({
     }
   }, [asesorSeleccionado, periodoSeleccionado, autoRefresh, showNotification, modoVista]);
 
-  // NUEVO: Inicialización del componente
+  // Inicialización del componente
   useEffect(() => {
-    if (usuarioActual?.id) {
+    if (user?.id) {
       // Determinar modo de vista inicial
       determinarModoVista();
       // Cargar lista de asesores supervisables
       cargarAsesores();
     }
-  }, [usuarioActual?.id, determinarModoVista, cargarAsesores]);
+  }, [user?.id, determinarModoVista, cargarAsesores]);
 
   // ACTUALIZADO: useEffect para cargar métricas cuando cambia el asesor o período
   useEffect(() => {
@@ -457,10 +480,10 @@ const DashboardAsesores = ({
 
   // Determinar nombre del asesor actual
   const asesorActual = asesoresDisponibles.find(a => a.id === asesorSeleccionado);
-  const nombreAsesorActual = asesorActual?.nombre_completo || usuarioActual?.nombre || 'Cargando...';
+  const nombreAsesorActual = asesorActual?.nombre_completo || user?.nombre || 'Cargando...';
 
   // Verificar si el usuario puede alternar entre modos
-  const puedeAlternarModos = usuarioActual?.vende && ![2, 3].includes(usuarioActual?.rol_id);
+  const puedeAlternarModos = canSell(user) && isExecutive(user);
 
   if (!asesorSeleccionado && modoVista === 'supervisor') {
     return (
@@ -513,7 +536,7 @@ const DashboardAsesores = ({
             </h2>
             <p className={`text-blue-100 ${modoFullscreen ? 'text-xl' : ''}`}>
               {modoVista === 'propio'
-                ? `Hola, ${usuarioActual?.nombre}! Aquí tienes tus métricas y progreso`
+                ? `Hola, ${user?.nombre}! Aquí tienes tus métricas y progreso`
                 : `Supervisando el rendimiento de ${nombreAsesorActual}`
               }
             </p>

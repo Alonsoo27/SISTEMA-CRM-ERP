@@ -1,9 +1,15 @@
 import React from 'react';
 import { AlertTriangle, Lock, Users, ArrowLeft } from 'lucide-react';
+import { normalizeUser, isExecutive, isAdmin, isSuperAdmin, debugUser } from '../../utils/userUtils';
 
 /**
  * Guard Component para Dashboard Ejecutivo
  * Controla acceso basado en roles de usuario
+ *
+ * ARQUITECTURA MEJORADA:
+ * - Usa normalización centralizada de usuario
+ * - Maneja inconsistencias de estructura automáticamente
+ * - Logs detallados en desarrollo
  */
 const DashboardEjecutivoGuard = ({
   children,
@@ -13,29 +19,43 @@ const DashboardEjecutivoGuard = ({
 }) => {
 
   // ============================================
+  // NORMALIZACIÓN DE USUARIO
+  // ============================================
+
+  const user = normalizeUser(usuarioActual);
+
+  // Debug en desarrollo
+  if (process.env.NODE_ENV === 'development') {
+    debugUser(user, 'DashboardEjecutivoGuard - Usuario');
+  }
+
+  // ============================================
   // CONFIGURACIÓN DE PERMISOS
   // ============================================
 
   const PERMISOS_CONFIGURACION = {
     // Acceso ejecutivo básico (Jefe Ventas+)
     ejecutivo: {
-      roles_permitidos: [1, 2, 3, 11], // SUPER_ADMIN, GERENTE, JEFE_VENTAS, ADMIN
+      validator: (u) => isExecutive(u),
       nivel_descripcion: 'Ejecutivo (Jefe de Ventas o superior)',
-      mensaje_acceso: 'Dashboard ejecutivo disponible'
+      mensaje_acceso: 'Dashboard ejecutivo disponible',
+      roles_ejemplo: ['SUPER_ADMIN', 'GERENTE', 'JEFE_VENTAS', 'ADMIN']
     },
 
     // Acceso administrativo total (Gerente+)
     admin_total: {
-      roles_permitidos: [1, 2, 11], // SUPER_ADMIN, GERENTE, ADMIN
+      validator: (u) => isAdmin(u),
       nivel_descripcion: 'Administrativo (Gerente o superior)',
-      mensaje_acceso: 'Acceso administrativo completo'
+      mensaje_acceso: 'Acceso administrativo completo',
+      roles_ejemplo: ['SUPER_ADMIN', 'GERENTE', 'ADMIN']
     },
 
     // Solo super usuarios
     super_admin: {
-      roles_permitidos: [1], // Solo SUPER_ADMIN
+      validator: (u) => isSuperAdmin(u),
       nivel_descripcion: 'Super Administrador',
-      mensaje_acceso: 'Acceso de super administrador'
+      mensaje_acceso: 'Acceso de super administrador',
+      roles_ejemplo: ['SUPER_ADMIN']
     }
   };
 
@@ -45,10 +65,15 @@ const DashboardEjecutivoGuard = ({
 
   const verificarAcceso = () => {
     // Verificar si el usuario está autenticado
-    if (!usuarioActual || !usuarioActual.rol_id) {
+    if (!user || !user.rol_id) {
+      console.warn('⚠️ DashboardEjecutivoGuard: Usuario no válido', {
+        usuarioOriginal: usuarioActual,
+        usuarioNormalizado: user
+      });
+
       return {
         tieneAcceso: false,
-        motivo: 'Usuario no autenticado',
+        motivo: 'Usuario no autenticado o rol no definido',
         codigo: 'NOT_AUTHENTICATED'
       };
     }
@@ -56,6 +81,7 @@ const DashboardEjecutivoGuard = ({
     const configuracion = PERMISOS_CONFIGURACION[requiredAccess];
 
     if (!configuracion) {
+      console.error('❌ DashboardEjecutivoGuard: Configuración inválida', { requiredAccess });
       return {
         tieneAcceso: false,
         motivo: 'Configuración de acceso inválida',
@@ -63,10 +89,18 @@ const DashboardEjecutivoGuard = ({
       };
     }
 
-    const userRoleId = usuarioActual.rol_id;
-    const tieneRolPermitido = configuracion.roles_permitidos.includes(userRoleId);
+    // Usar validador funcional en lugar de array de IDs
+    const tienePermiso = configuracion.validator(user);
 
-    if (!tieneRolPermitido) {
+    if (!tienePermiso) {
+      console.warn('⚠️ DashboardEjecutivoGuard: Acceso denegado', {
+        user_id: user.id,
+        rol_id: user.rol_id,
+        rol: user.rol,
+        requiredAccess,
+        roles_permitidos: configuracion.roles_ejemplo
+      });
+
       return {
         tieneAcceso: false,
         motivo: `Se requiere: ${configuracion.nivel_descripcion}`,
@@ -74,6 +108,13 @@ const DashboardEjecutivoGuard = ({
         configuracion
       };
     }
+
+    console.log('✅ DashboardEjecutivoGuard: Acceso autorizado', {
+      user_id: user.id,
+      rol_id: user.rol_id,
+      rol: user.rol,
+      nivel: requiredAccess
+    });
 
     return {
       tieneAcceso: true,
@@ -100,7 +141,7 @@ const DashboardEjecutivoGuard = ({
               <Users className="h-4 w-4" />
               <span>Acceso autorizado: {resultadoAcceso.motivo}</span>
               <span className="text-xs opacity-75">
-                (Rol: {usuarioActual.rol || 'N/A'})
+                (Rol: {user?.rol || 'N/A'})
               </span>
             </div>
           </div>
@@ -135,16 +176,16 @@ const DashboardEjecutivoGuard = ({
         </p>
 
         {/* Información del usuario actual */}
-        {usuarioActual && (
+        {user && (
           <div className="bg-gray-50 rounded-lg p-4 mb-6 text-sm">
             <div className="flex items-center justify-center gap-2 text-gray-700">
               <Users className="h-4 w-4" />
               <span className="font-medium">
-                {usuarioActual.nombre_completo || `${usuarioActual.nombre} ${usuarioActual.apellido}` || 'Usuario'}
+                {user.nombre_completo || 'Usuario'}
               </span>
             </div>
             <div className="text-gray-500 mt-1">
-              Rol actual: {usuarioActual.rol || 'No definido'} (ID: {usuarioActual.rol_id})
+              Rol actual: {user.rol || 'No definido'} (ID: {user.rol_id || 'N/A'})
             </div>
           </div>
         )}
@@ -200,8 +241,8 @@ const DashboardEjecutivoGuard = ({
               <div className="mt-2 p-3 bg-gray-100 rounded text-xs text-gray-600 font-mono">
                 <div>Código: {resultadoAcceso.codigo}</div>
                 <div>Acceso requerido: {requiredAccess}</div>
-                <div>Rol actual: {usuarioActual?.rol_id}</div>
-                <div>Roles permitidos: {resultadoAcceso.configuracion?.roles_permitidos?.join(', ')}</div>
+                <div>Rol actual: {user?.rol_id} ({user?.rol})</div>
+                <div>Roles permitidos: {resultadoAcceso.configuracion?.roles_ejemplo?.join(', ')}</div>
               </div>
             </details>
           )}
