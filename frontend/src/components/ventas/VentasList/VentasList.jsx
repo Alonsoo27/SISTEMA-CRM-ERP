@@ -286,7 +286,11 @@ const VentasList = ({
   const esRolAlto = useCallback(() => {
     if (!usuarioActual?.rol) return false;
     const rolesAltos = ['SUPER_ADMIN', 'ADMIN', 'GERENTE', 'SUPERVISOR'];
-    return rolesAltos.includes(usuarioActual.rol.toUpperCase());
+    // Manejar tanto rol como string o como objeto {id, nombre}
+    const rolNombre = typeof usuarioActual.rol === 'string'
+      ? usuarioActual.rol
+      : usuarioActual.rol?.nombre || '';
+    return rolesAltos.includes(rolNombre.toUpperCase());
   }, [usuarioActual]);
 
   const puedeVerTodasLasVentas = useCallback(() => {

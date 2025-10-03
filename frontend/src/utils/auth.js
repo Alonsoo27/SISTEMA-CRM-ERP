@@ -128,5 +128,35 @@ export const AuthUtils = {
     } catch (error) {
       return 0;
     }
+  },
+
+  /**
+   * Obtener token de autenticación del localStorage
+   * @returns {string|null} Token JWT o null
+   */
+  getAuthToken() {
+    try {
+      const token = localStorage.getItem('token');
+      if (token && this.isTokenValid(token)) {
+        return token;
+      }
+      return null;
+    } catch (error) {
+      console.error('❌ AuthUtils: Error obteniendo token:', error);
+      return null;
+    }
+  },
+
+  /**
+   * Manejar error de autenticación
+   * Redirige al login y limpia el localStorage
+   */
+  handleAuthError() {
+    console.warn('⚠️ AuthUtils: Sesión inválida, redirigiendo a login');
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
+    localStorage.removeItem('currentUser');
+    localStorage.removeItem('authToken');
+    window.location.href = '/login';
   }
 };
