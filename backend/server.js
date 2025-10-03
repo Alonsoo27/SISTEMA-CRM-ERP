@@ -9,6 +9,10 @@ const { getFaltasService } = require('./src/services/FaltasAutomaticasService');
 const app = express();
 const PORT = process.env.PORT || 3001;
 
+// CONFIGURACIÓN PARA RAILWAY/PROXIES
+// Esto soluciona el error de express-rate-limit con X-Forwarded-For
+app.set('trust proxy', 1);
+
 // MIDDLEWARE - CONFIGURACIÓN CORS UNIFICADA Y CORREGIDA
 const allowedOrigins = [
     'http://localhost:5173',
