@@ -11,7 +11,7 @@ const VentasController = require('../controllers/ventasController');
 const ReportesVentasService = require('../services/ReportesVentasService');
 
 // Middleware empresarial unificado
-const { authenticateToken, requireRole } = require('../../../middleware/auth');
+const { authenticateToken, requireRole, requireOwnership } = require('../../../middleware/auth');
 // Importar constantes de roles
 const { ROLES, GRUPOS_ROLES, PERMISOS_OPERACION } = require('../../../config/roles.js');
 
@@ -42,8 +42,9 @@ router.get('/dashboard/ejecutivo',
  * @desc    Dashboard personalizado del asesor
  * @access  Private (Solo el asesor o sus supervisores)
  */
-router.get('/dashboard/asesor/:asesor_id', 
-    authenticateToken, 
+router.get('/dashboard/asesor/:asesor_id',
+    authenticateToken,
+    requireOwnership, // Permite ver propio dashboard o jefes/ejecutivos pueden ver cualquiera
     VentasController.dashboard
 );
 
