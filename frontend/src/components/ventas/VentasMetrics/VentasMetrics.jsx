@@ -124,29 +124,28 @@ const DashboardAsesores = ({
 
     console.log('🔍 Determinando modo vista:', { userVende, esEjecutivo, rolId, normalizedUser });
 
-    // PRIORIDAD 1: SUPER_ADMIN (1), GERENTE (2), JEFE_VENTAS (3) SIEMPRE empiezan en modo propio
-    // Ellos pueden vender aunque el flag vende no esté presente
-    if (rolId === 1 || rolId === 2 || rolId === 3) {
-      console.log('✅ SUPER_ADMIN/GERENTE/JEFE_VENTAS → Modo propio');
+    // PRIORIDAD 1: GERENTE (2) y ADMIN (11) NO venden → modo supervisor directo
+    if (rolId === 2 || rolId === 11) {
+      console.log('⚠️ GERENTE/ADMIN (no venden) → Modo supervisor');
+      setModoVista('supervisor');
+      setAsesorSeleccionado(null);
+      return 'supervisor';
+    }
+
+    // PRIORIDAD 2: SUPER_ADMIN (1) y JEFE_VENTAS (3) SÍ venden → modo propio
+    if (rolId === 1 || rolId === 3) {
+      console.log('✅ SUPER_ADMIN/JEFE_VENTAS (venden) → Modo propio');
       setModoVista('propio');
       setAsesorSeleccionado(normalizedUser?.id);
       return 'propio';
     }
 
-    // PRIORIDAD 2: Si tiene flag vende=true, modo propio
+    // PRIORIDAD 3: Si tiene flag vende=true, modo propio (VENDEDOR y otros)
     if (userVende) {
       console.log('✅ Usuario con vende=true → Modo propio');
       setModoVista('propio');
       setAsesorSeleccionado(normalizedUser?.id);
       return 'propio';
-    }
-
-    // PRIORIDAD 3: Si es ejecutivo pero no vende (ej: ADMIN 11), modo supervisor
-    if (esEjecutivo) {
-      console.log('⚠️ Ejecutivo sin vende → Modo supervisor');
-      setModoVista('supervisor');
-      setAsesorSeleccionado(null);
-      return 'supervisor';
     }
 
     // PRIORIDAD 4: Por defecto, modo propio
