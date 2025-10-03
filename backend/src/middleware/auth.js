@@ -261,6 +261,9 @@ const requireRole = (rolesPermitidos) => {
     };
 };
 
+// Importar constantes de roles
+const { GRUPOS_ROLES } = require('../config/roles');
+
 const requireOwnership = (req, res, next) => {
     const correlationId = Date.now() + '-' + Math.random().toString(36).substr(2, 9);
 
@@ -277,8 +280,9 @@ const requireOwnership = (req, res, next) => {
         });
     }
 
-    // Permitir acceso total a roles administrativos
-    const rolAdministrativo = ['ADMIN', 'SUPER_ADMIN', 'SUPERVISOR', 'GERENTE', 'JEFE_VENTAS']
+    // ✅ CORREGIDO: Permitir acceso total a roles de gestión (jefes y ejecutivos)
+    // Usa constantes centralizadas en lugar de hardcodear roles
+    const rolAdministrativo = GRUPOS_ROLES.JEFES_Y_EJECUTIVOS
         .includes(req.user.rol?.toUpperCase());
 
     if (rolAdministrativo) {

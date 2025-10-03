@@ -6,6 +6,9 @@ const ProspectosController = require('../controllers/prospectosController');
 // IMPORTAR MIDDLEWARES JWT
 const { authenticateToken, requireRole, requireOwnership } = require('../../../middleware/auth');
 
+// IMPORTAR CONSTANTES DE ROLES
+const { ROLES, GRUPOS_ROLES } = require('../../../config/roles');
+
 // APLICAR AUTENTICACIÓN JWT A TODAS LAS RUTAS
 router.use(authenticateToken);
 
@@ -375,7 +378,8 @@ async function procesarSeguimientos(asesorId = null) {
 router.get('/health', ProspectosController.healthCheck);
 
 // ENDPOINT PARA ESTADÍSTICAS DE CACHE
-router.get('/cache/stats', requireRole(['admin', 'supervisor']), async (req, res) => {
+// ✅ CORREGIDO: Usar constantes de roles (jefes y ejecutivos pueden ver stats)
+router.get('/cache/stats', requireRole(GRUPOS_ROLES.JEFES_Y_EJECUTIVOS), async (req, res) => {
     try {
         const cacheService = require('../../../services/CacheService');
         const stats = await cacheService.obtenerEstadisticas();
@@ -399,7 +403,8 @@ router.get('/cache/stats', requireRole(['admin', 'supervisor']), async (req, res
 });
 
 // ENDPOINT PARA LIMPIAR CACHE
-router.post('/cache/clear', requireRole(['admin']), async (req, res) => {
+// ✅ CORREGIDO: Solo SUPER_ADMIN puede limpiar cache (operación crítica)
+router.post('/cache/clear', requireRole([ROLES.SUPER_ADMIN]), async (req, res) => {
     try {
         const cacheService = require('../../../services/CacheService');
         const { tipo, asesor_id } = req.body;

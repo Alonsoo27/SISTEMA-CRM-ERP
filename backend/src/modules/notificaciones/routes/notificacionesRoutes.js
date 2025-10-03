@@ -6,6 +6,9 @@ const NotificacionesController = require('../controllers/notificacionesControlle
 // 🔧 IMPORTAR MIDDLEWARES JWT
 const { authenticateToken, requireRole, requireOwnership } = require('../../../middleware/auth');
 
+// IMPORTAR CONSTANTES DE ROLES
+const { PERMISOS_OPERACION } = require('../../../config/roles');
+
 // RATE LIMITING PARA NOTIFICACIONES MASIVAS
 const massiveNotificationsRateLimit = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutos
@@ -284,11 +287,10 @@ router.use((req, res, next) => {
 /**
  * GET /api/notificaciones/:usuarioId
  * Obtener notificaciones de un usuario con opciones avanzadas
- * 🔐 Requiere rol: asesor, admin, supervisor, gerente + ownership
+ * 🔐 Requiere: Usuarios autenticados + ownership
  */
 router.get('/:usuarioId',
-    requireRole(['VENDEDOR', 'ADMIN', 'JEFE_VENTAS', 'GERENTE', 'SUPER_ADMIN']),
-    requireOwnership,
+    requireOwnership,  // Ya valida que sea el propietario o ejecutivo/jefe
     queryRateLimit,
     NotificacionesController.obtenerNotificaciones
 );
@@ -296,11 +298,10 @@ router.get('/:usuarioId',
 /**
  * GET /api/notificaciones/contador/:usuarioId
  * Obtener contador inteligente con desglose
- * 🔐 Requiere rol: asesor, admin, supervisor, gerente + ownership
+ * 🔐 Requiere: Usuarios autenticados + ownership
  */
 router.get('/contador/:usuarioId',
-    requireRole(['VENDEDOR', 'ADMIN', 'JEFE_VENTAS', 'GERENTE', 'SUPER_ADMIN']),
-    requireOwnership,
+    requireOwnership,  // Ya valida que sea el propietario o ejecutivo/jefe
     queryRateLimit,
     NotificacionesController.obtenerContador
 );
@@ -312,7 +313,7 @@ router.get('/contador/:usuarioId',
 /**
  * 🚀 POST /api/notificaciones/crear
  * Crear notificaciones usando el método UNIFICADO SUPERIOR
- * 🔐 Requiere rol: asesor, admin, gerente
+ * 🔐 Requiere: Vendedores, jefes y ejecutivos
  *
  * Body examples:
  * - Básico: { "tipo": "manual", "data": { "usuario_id": 1, "titulo": "Test", "mensaje": "Mensaje" } }
@@ -320,7 +321,7 @@ router.get('/contador/:usuarioId',
  * - Masivo: { "tipo": "marketing", "modo": "masivo", "usuarios": [1,2,3], "data": { "titulo": "Promoción", "mensaje": "Nueva campaña" } }
  */
 router.post('/crear',
-    requireRole(['VENDEDOR', 'ADMIN', 'GERENTE', 'SUPER_ADMIN']),
+    requireRole(PERMISOS_OPERACION.CREACION.VENTAS),  // Vendedores y superiores
     createNotificationsRateLimit,
     NotificacionesController.crearNotificacion
 );
@@ -328,10 +329,9 @@ router.post('/crear',
 /**
  * PUT /api/notificaciones/:id/marcar-leida
  * Marcar notificación como leída
- * 🔐 Requiere rol: asesor, admin, supervisor, gerente
+ * 🔐 Requiere: Usuario autenticado (se valida ownership en controller)
  */
 router.put('/:id/marcar-leida',
-    requireRole(['VENDEDOR', 'ADMIN', 'JEFE_VENTAS', 'GERENTE', 'SUPER_ADMIN']),
     queryRateLimit,
     NotificacionesController.marcarLeida
 );
@@ -339,11 +339,10 @@ router.put('/:id/marcar-leida',
 /**
  * PUT /api/notificaciones/marcar-todas-leidas/:usuarioId
  * Marcar todas las notificaciones como leídas
- * 🔐 Requiere rol: asesor, admin, supervisor, gerente + ownership
+ * 🔐 Requiere: Usuarios autenticados + ownership
  */
 router.put('/marcar-todas-leidas/:usuarioId',
-    requireRole(['VENDEDOR', 'ADMIN', 'JEFE_VENTAS', 'GERENTE', 'SUPER_ADMIN']),
-    requireOwnership,
+    requireOwnership,  // Ya valida que sea el propietario o ejecutivo/jefe
     queryRateLimit,
     NotificacionesController.marcarTodasLeidas
 );
