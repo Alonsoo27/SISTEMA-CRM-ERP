@@ -8,7 +8,10 @@ const express = require('express');
 const router = express.Router();
 
 // Middleware de autenticación
-const { authenticateToken } = require('../../../middleware/auth');
+const { authenticateToken, requireRole } = require('../../../middleware/auth');
+
+// Importar constantes de roles
+const { GRUPOS_ROLES } = require('../../../config/roles');
 
 // ============================================
 // HEALTH CHECK

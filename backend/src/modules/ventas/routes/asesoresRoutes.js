@@ -8,7 +8,10 @@ const router = express.Router();
 const { query } = require('../../../config/database');
 
 // Middleware de autenticación
-const { authenticateToken } = require('../../../middleware/auth');
+const { authenticateToken, requireRole } = require('../../../middleware/auth');
+
+// Importar constantes de roles
+const { GRUPOS_ROLES } = require('../../../config/roles');
 
 // ============================================
 // ENDPOINT: LISTA DE ASESORES SUPERVISABLES

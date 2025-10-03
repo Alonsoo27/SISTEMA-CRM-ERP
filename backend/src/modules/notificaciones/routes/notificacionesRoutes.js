@@ -7,7 +7,7 @@ const NotificacionesController = require('../controllers/notificacionesControlle
 const { authenticateToken, requireRole, requireOwnership } = require('../../../middleware/auth');
 
 // IMPORTAR CONSTANTES DE ROLES
-const { PERMISOS_OPERACION } = require('../../../config/roles');
+const { PERMISOS_OPERACION, ROLES, GRUPOS_ROLES } = require('../../../config/roles');
 
 // RATE LIMITING PARA NOTIFICACIONES MASIVAS
 const massiveNotificationsRateLimit = rateLimit({
