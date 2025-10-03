@@ -1,0 +1,222 @@
+{
+  "fecha": "2025-10-03T12:45:25.727Z",
+  "estadisticas": {
+    "archivosAnalizados": 22,
+    "rutasEncontradas": 354,
+    "rutasProtegidas": 165,
+    "rutasSinProteccion": 26,
+    "porcentajeProteccion": "46.6"
+  },
+  "archivosSinProteccion": [
+    {
+      "archivo": "modules\\almacen\\routes\\almacenRoutes.js",
+      "rutaCompleta": "C:\\Users\\SUS\\Documents\\SISTEMA-CRM-ERP\\backend\\src\\modules\\almacen\\routes\\almacenRoutes.js",
+      "totalRutas": 40,
+      "rutasProtegidas": 39,
+      "rutasSinProteccion": 1,
+      "rutasSinAuth": 0,
+      "detalleRutasSinProteccion": [
+        {
+          "metodo": "GET",
+          "ruta": "/health/basic",
+          "linea": 383
+        }
+      ]
+    },
+    {
+      "archivo": "modules\\auth\\routes\\authRoutes.js",
+      "rutaCompleta": "C:\\Users\\SUS\\Documents\\SISTEMA-CRM-ERP\\backend\\src\\modules\\auth\\routes\\authRoutes.js",
+      "totalRutas": 8,
+      "rutasProtegidas": 0,
+      "rutasSinProteccion": 2,
+      "rutasSinAuth": 6,
+      "detalleRutasSinProteccion": [
+        {
+          "metodo": "GET",
+          "ruta": "/profile",
+          "linea": 385
+        },
+        {
+          "metodo": "GET",
+          "ruta": "/me",
+          "linea": 457
+        }
+      ]
+    },
+    {
+      "archivo": "modules\\productos\\routes\\productosRoutes.js",
+      "rutaCompleta": "C:\\Users\\SUS\\Documents\\SISTEMA-CRM-ERP\\backend\\src\\modules\\productos\\routes\\productosRoutes.js",
+      "totalRutas": 15,
+      "rutasProtegidas": 14,
+      "rutasSinProteccion": 1,
+      "rutasSinAuth": 0,
+      "detalleRutasSinProteccion": [
+        {
+          "metodo": "GET",
+          "ruta": "/health/basic",
+          "linea": 175
+        }
+      ]
+    },
+    {
+      "archivo": "modules\\usuarios\\routes\\usuariosRoutes.js",
+      "rutaCompleta": "C:\\Users\\SUS\\Documents\\SISTEMA-CRM-ERP\\backend\\src\\modules\\usuarios\\routes\\usuariosRoutes.js",
+      "totalRutas": 8,
+      "rutasProtegidas": 6,
+      "rutasSinProteccion": 2,
+      "rutasSinAuth": 0,
+      "detalleRutasSinProteccion": [
+        {
+          "metodo": "GET",
+          "ruta": "/roles",
+          "linea": 28
+        },
+        {
+          "metodo": "GET",
+          "ruta": "/areas",
+          "linea": 29
+        }
+      ]
+    },
+    {
+      "archivo": "modules\\ventas\\routes\\actividadRoutes.js",
+      "rutaCompleta": "C:\\Users\\SUS\\Documents\\SISTEMA-CRM-ERP\\backend\\src\\modules\\ventas\\routes\\actividadRoutes.js",
+      "totalRutas": 17,
+      "rutasProtegidas": 16,
+      "rutasSinProteccion": 1,
+      "rutasSinAuth": 0,
+      "detalleRutasSinProteccion": [
+        {
+          "metodo": "GET",
+          "ruta": "/test",
+          "linea": 646
+        }
+      ]
+    },
+    {
+      "archivo": "modules\\ventas\\routes\\campanasRoutes.js",
+      "rutaCompleta": "C:\\Users\\SUS\\Documents\\SISTEMA-CRM-ERP\\backend\\src\\modules\\ventas\\routes\\campanasRoutes.js",
+      "totalRutas": 4,
+      "rutasProtegidas": 3,
+      "rutasSinProteccion": 1,
+      "rutasSinAuth": 0,
+      "detalleRutasSinProteccion": [
+        {
+          "metodo": "GET",
+          "ruta": "/test",
+          "linea": 58
+        }
+      ]
+    },
+    {
+      "archivo": "modules\\ventas\\routes\\postventaRoutes.js",
+      "rutaCompleta": "C:\\Users\\SUS\\Documents\\SISTEMA-CRM-ERP\\backend\\src\\modules\\ventas\\routes\\postventaRoutes.js",
+      "totalRutas": 10,
+      "rutasProtegidas": 0,
+      "rutasSinProteccion": 10,
+      "rutasSinAuth": 0,
+      "detalleRutasSinProteccion": [
+        {
+          "metodo": "POST",
+          "ruta": "/seguimientos/:venta_id/programar",
+          "linea": 32
+        },
+        {
+          "metodo": "GET",
+          "ruta": "/seguimientos",
+          "linea": 46
+        },
+        {
+          "metodo": "PUT",
+          "ruta": "/seguimientos/:id/ejecutar",
+          "linea": 56
+        },
+        {
+          "metodo": "GET",
+          "ruta": "/seguimientos/:id",
+          "linea": 66
+        },
+        {
+          "metodo": "GET",
+          "ruta": "/dashboard",
+          "linea": 106
+        },
+        {
+          "metodo": "GET",
+          "ruta": "/dashboard/asesor/:asesor_id",
+          "linea": 116
+        },
+        {
+          "metodo": "POST",
+          "ruta": "/encuesta",
+          "linea": 155
+        },
+        {
+          "metodo": "GET",
+          "ruta": "/configuracion/tipos-seguimiento",
+          "linea": 197
+        },
+        {
+          "metodo": "GET",
+          "ruta": "/test",
+          "linea": 249
+        },
+        {
+          "metodo": "GET",
+          "ruta": "/",
+          "linea": 270
+        }
+      ]
+    },
+    {
+      "archivo": "modules\\ventas\\routes\\reportesRoutes.js",
+      "rutaCompleta": "C:\\Users\\SUS\\Documents\\SISTEMA-CRM-ERP\\backend\\src\\modules\\ventas\\routes\\reportesRoutes.js",
+      "totalRutas": 30,
+      "rutasProtegidas": 22,
+      "rutasSinProteccion": 8,
+      "rutasSinAuth": 0,
+      "detalleRutasSinProteccion": [
+        {
+          "metodo": "GET",
+          "ruta": "/dashboard/asesor/:asesor_id",
+          "linea": 45
+        },
+        {
+          "metodo": "GET",
+          "ruta": "/ventas/resumen",
+          "linea": 78
+        },
+        {
+          "metodo": "POST",
+          "ruta": "/exportar/excel",
+          "linea": 367
+        },
+        {
+          "metodo": "POST",
+          "ruta": "/exportar/pdf",
+          "linea": 388
+        },
+        {
+          "metodo": "POST",
+          "ruta": "/exportar/csv",
+          "linea": 409
+        },
+        {
+          "metodo": "PUT",
+          "ruta": "/programados/:id",
+          "linea": 470
+        },
+        {
+          "metodo": "DELETE",
+          "ruta": "/programados/:id",
+          "linea": 487
+        },
+        {
+          "metodo": "GET",
+          "ruta": "/plantillas",
+          "linea": 526
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,897 @@
+{
+  "fecha": "2025-10-03T05:36:20.292Z",
+  "estadisticas": {
+    "archivosAnalizados": 22,
+    "rutasEncontradas": 354,
+    "rutasProtegidas": 42,
+    "rutasSinProteccion": 149,
+    "porcentajeProteccion": "11.9"
+  },
+  "archivosSinProteccion": [
+    {
+      "archivo": "modules\\almacen\\routes\\almacenRoutes.js",
+      "rutaCompleta": "C:\\Users\\SUS\\Documents\\SISTEMA-CRM-ERP\\backend\\src\\modules\\almacen\\routes\\almacenRoutes.js",
+      "totalRutas": 40,
+      "rutasProtegidas": 0,
+      "rutasSinProteccion": 40,
+      "rutasSinAuth": 0,
+      "detalleRutasSinProteccion": [
+        {
+          "metodo": "GET",
+          "ruta": "/dashboard",
+          "linea": 33
+        },
+        {
+          "metodo": "GET",
+          "ruta": "/inventario",
+          "linea": 42
+        },
+        {
+          "metodo": "GET",
+          "ruta": "/inventario/producto/:producto_id",
+          "linea": 50
+        },
+        {
+          "metodo": "PUT",
+          "ruta": "/inventario/:producto_id/almacen/:almacen_id",
+          "linea": 58
+        },
+        {
+          "metodo": "GET",
+          "ruta": "/movimientos",
+          "linea": 70
+        },
+        {
+          "metodo": "GET",
+          "ruta": "/kardex/:producto_id",
+          "linea": 78
+        },
+        {
+          "metodo": "POST",
+          "ruta": "/transferencias",
+          "linea": 86
+        },
+        {
+          "metodo": "GET",
+          "ruta": "/almacenes",
+          "linea": 96
+        },
+        {
+          "metodo": "GET",
+          "ruta": "/alertas",
+          "linea": 105
+        },
+        {
+          "metodo": "PUT",
+          "ruta": "/alertas/:id/resolver",
+          "linea": 113
+        },
+        {
+          "metodo": "GET",
+          "ruta": "/despachos",
+          "linea": 124
+        },
+        {
+          "metodo": "PUT",
+          "ruta": "/despachos/:id/estado",
+          "linea": 132
+        },
+        {
+          "metodo": "GET",
+          "ruta": "/despachos/:id",
+          "linea": 141
+        },
+        {
+          "metodo": "GET",
+          "ruta": "/analisis/rotacion",
+          "linea": 151
+        },
+        {
+          "metodo": "GET",
+          "ruta": "/analisis/eficiencia",
+          "linea": 159
+        },
+        {
+          "metodo": "GET",
+          "ruta": "/analisis/stock-seguridad",
+          "linea": 167
+        },
+        {
+          "metodo": "GET",
+          "ruta": "/analisis/mapa-calor",
+          "linea": 174
+        },
+        {
+          "metodo": "GET",
+          "ruta": "/analisis/tendencias",
+          "linea": 182
+        },
+        {
+          "metodo": "GET",
+          "ruta": "/analisis/consolidado",
+          "linea": 190
+        },
+        {
+          "metodo": "GET",
+          "ruta": "/reportes/consolidado/:tipo_reporte",
+          "linea": 198
+        },
+        {
+          "metodo": "GET",
+          "ruta": "/reportes/kardex/:producto_id",
+          "linea": 208
+        },
+        {
+          "metodo": "GET",
+          "ruta": "/reportes/valorizacion",
+          "linea": 217
+        },
+        {
+          "metodo": "GET",
+          "ruta": "/reportes/stock-consolidado",
+          "linea": 225
+        },
+        {
+          "metodo": "GET",
+          "ruta": "/reportes/performance-comparativa",
+          "linea": 234
+        },
+        {
+          "metodo": "GET",
+          "ruta": "/reportes/analisis-predictivo",
+          "linea": 242
+        },
+        {
+          "metodo": "GET",
+          "ruta": "/reportes/valorizacion-evolutiva",
+          "linea": 250
+        },
+        {
+          "metodo": "GET",
+          "ruta": "/reportes/kardex-inteligente",
+          "linea": 258
+        },
+        {
+          "metodo": "GET",
+          "ruta": "/reportes/eficiencia-despachos",
+          "linea": 266
+        },
+        {
+          "metodo": "POST",
+          "ruta": "/query/ejecutar",
+          "linea": 276
+        },
+        {
+          "metodo": "GET",
+          "ruta": "/upload/plantilla",
+          "linea": 320
+        },
+        {
+          "metodo": "POST",
+          "ruta": "/upload/preview",
+          "linea": 327
+        },
+        {
+          "metodo": "POST",
+          "ruta": "/upload/ejecutar",
+          "linea": 336
+        },
+        {
+          "metodo": "POST",
+          "ruta": "/verificar-stock",
+          "linea": 347
+        },
+        {
+          "metodo": "POST",
+          "ruta": "/descontar-stock",
+          "linea": 354
+        },
+        {
+          "metodo": "POST",
+          "ruta": "/despachos/desde-venta",
+          "linea": 361
+        },
+        {
+          "metodo": "GET",
+          "ruta": "/health",
+          "linea": 370
+        },
+        {
+          "metodo": "GET",
+          "ruta": "/health/basic",
+          "linea": 377
+        },
+        {
+          "metodo": "POST",
+          "ruta": "/mantenimiento/generar-alertas",
+          "linea": 396
+        },
+        {
+          "metodo": "DELETE",
+          "ruta": "/mantenimiento/limpiar-alertas",
+          "linea": 403
+        },
+        {
+          "metodo": "GET",
+          "ruta": "/config",
+          "linea": 412
+        }
+      ]
+    },
+    {
+      "archivo": "modules\\auth\\routes\\authRoutes.js",
+      "rutaCompleta": "C:\\Users\\SUS\\Documents\\SISTEMA-CRM-ERP\\backend\\src\\modules\\auth\\routes\\authRoutes.js",
+      "totalRutas": 8,
+      "rutasProtegidas": 0,
+      "rutasSinProteccion": 2,
+      "rutasSinAuth": 6,
+      "detalleRutasSinProteccion": [
+        {
+          "metodo": "GET",
+          "ruta": "/profile",
+          "linea": 385
+        },
+        {
+          "metodo": "GET",
+          "ruta": "/me",
+          "linea": 457
+        }
+      ]
+    },
+    {
+      "archivo": "modules\\productos\\routes\\productosRoutes.js",
+      "rutaCompleta": "C:\\Users\\SUS\\Documents\\SISTEMA-CRM-ERP\\backend\\src\\modules\\productos\\routes\\productosRoutes.js",
+      "totalRutas": 15,
+      "rutasProtegidas": 14,
+      "rutasSinProteccion": 1,
+      "rutasSinAuth": 0,
+      "detalleRutasSinProteccion": [
+        {
+          "metodo": "GET",
+          "ruta": "/health/basic",
+          "linea": 175
+        }
+      ]
+    },
+    {
+      "archivo": "modules\\usuarios\\routes\\usuariosRoutes.js",
+      "rutaCompleta": "C:\\Users\\SUS\\Documents\\SISTEMA-CRM-ERP\\backend\\src\\modules\\usuarios\\routes\\usuariosRoutes.js",
+      "totalRutas": 8,
+      "rutasProtegidas": 6,
+      "rutasSinProteccion": 2,
+      "rutasSinAuth": 0,
+      "detalleRutasSinProteccion": [
+        {
+          "metodo": "GET",
+          "ruta": "/roles",
+          "linea": 28
+        },
+        {
+          "metodo": "GET",
+          "ruta": "/areas",
+          "linea": 29
+        }
+      ]
+    },
+    {
+      "archivo": "modules\\ventas\\routes\\actividadRoutes.js",
+      "rutaCompleta": "C:\\Users\\SUS\\Documents\\SISTEMA-CRM-ERP\\backend\\src\\modules\\ventas\\routes\\actividadRoutes.js",
+      "totalRutas": 17,
+      "rutasProtegidas": 0,
+      "rutasSinProteccion": 17,
+      "rutasSinAuth": 0,
+      "detalleRutasSinProteccion": [
+        {
+          "metodo": "POST",
+          "ruta": "/check-in",
+          "linea": 210
+        },
+        {
+          "metodo": "POST",
+          "ruta": "/check-out",
+          "linea": 223
+        },
+        {
+          "metodo": "GET",
+          "ruta": "/estado-hoy",
+          "linea": 236
+        },
+        {
+          "metodo": "GET",
+          "ruta": "/",
+          "linea": 248
+        },
+        {
+          "metodo": "GET",
+          "ruta": "/dashboard",
+          "linea": 261
+        },
+        {
+          "metodo": "GET",
+          "ruta": "/historial",
+          "linea": 274
+        },
+        {
+          "metodo": "GET",
+          "ruta": "/estadisticas-rapidas",
+          "linea": 287
+        },
+        {
+          "metodo": "GET",
+          "ruta": "/resumen-semanal",
+          "linea": 299
+        },
+        {
+          "metodo": "GET",
+          "ruta": "/datos-graficos",
+          "linea": 311
+        },
+        {
+          "metodo": "GET",
+          "ruta": "/validar-checkin",
+          "linea": 328
+        },
+        {
+          "metodo": "GET",
+          "ruta": "/validar-checkout",
+          "linea": 363
+        },
+        {
+          "metodo": "GET",
+          "ruta": "/configuracion",
+          "linea": 398
+        },
+        {
+          "metodo": "GET",
+          "ruta": "/actividad-completa/:usuario_id",
+          "linea": 452
+        },
+        {
+          "metodo": "GET",
+          "ruta": "/metricas-empresariales/:usuario_id",
+          "linea": 493
+        },
+        {
+          "metodo": "POST",
+          "ruta": "/dashboard-equipo",
+          "linea": 539
+        },
+        {
+          "metodo": "GET",
+          "ruta": "/info",
+          "linea": 598
+        },
+        {
+          "metodo": "GET",
+          "ruta": "/test",
+          "linea": 646
+        }
+      ]
+    },
+    {
+      "archivo": "modules\\ventas\\routes\\asesoresRoutes.js",
+      "rutaCompleta": "C:\\Users\\SUS\\Documents\\SISTEMA-CRM-ERP\\backend\\src\\modules\\ventas\\routes\\asesoresRoutes.js",
+      "totalRutas": 3,
+      "rutasProtegidas": 0,
+      "rutasSinProteccion": 2,
+      "rutasSinAuth": 1,
+      "detalleRutasSinProteccion": [
+        {
+          "metodo": "GET",
+          "ruta": "/supervisables",
+          "linea": 24
+        },
+        {
+          "metodo": "GET",
+          "ruta": "/validar-acceso/:asesor_id",
+          "linea": 222
+        }
+      ]
+    },
+    {
+      "archivo": "modules\\ventas\\routes\\campanasRoutes.js",
+      "rutaCompleta": "C:\\Users\\SUS\\Documents\\SISTEMA-CRM-ERP\\backend\\src\\modules\\ventas\\routes\\campanasRoutes.js",
+      "totalRutas": 4,
+      "rutasProtegidas": 0,
+      "rutasSinProteccion": 4,
+      "rutasSinAuth": 0,
+      "detalleRutasSinProteccion": [
+        {
+          "metodo": "GET",
+          "ruta": "/activas",
+          "linea": 25
+        },
+        {
+          "metodo": "POST",
+          "ruta": "/",
+          "linea": 36
+        },
+        {
+          "metodo": "GET",
+          "ruta": "/:campana_id/progreso",
+          "linea": 47
+        },
+        {
+          "metodo": "GET",
+          "ruta": "/test",
+          "linea": 58
+        }
+      ]
+    },
+    {
+      "archivo": "modules\\ventas\\routes\\comisionesRoutes.js",
+      "rutaCompleta": "C:\\Users\\SUS\\Documents\\SISTEMA-CRM-ERP\\backend\\src\\modules\\ventas\\routes\\comisionesRoutes.js",
+      "totalRutas": 6,
+      "rutasProtegidas": 0,
+      "rutasSinProteccion": 6,
+      "rutasSinAuth": 0,
+      "detalleRutasSinProteccion": [
+        {
+          "metodo": "GET",
+          "ruta": "/bono-actual/:asesor_id",
+          "linea": 24
+        },
+        {
+          "metodo": "GET",
+          "ruta": "/dashboard-equipo",
+          "linea": 34
+        },
+        {
+          "metodo": "GET",
+          "ruta": "/configuracion-bonos",
+          "linea": 44
+        },
+        {
+          "metodo": "POST",
+          "ruta": "/simular-bono",
+          "linea": 54
+        },
+        {
+          "metodo": "GET",
+          "ruta": "/",
+          "linea": 68
+        },
+        {
+          "metodo": "GET",
+          "ruta": "/dashboard/:asesor_id",
+          "linea": 89
+        }
+      ]
+    },
+    {
+      "archivo": "modules\\ventas\\routes\\dashboardEjecutivoRoutes.js",
+      "rutaCompleta": "C:\\Users\\SUS\\Documents\\SISTEMA-CRM-ERP\\backend\\src\\modules\\ventas\\routes\\dashboardEjecutivoRoutes.js",
+      "totalRutas": 7,
+      "rutasProtegidas": 0,
+      "rutasSinProteccion": 6,
+      "rutasSinAuth": 1,
+      "detalleRutasSinProteccion": [
+        {
+          "metodo": "GET",
+          "ruta": "/vista-unificada",
+          "linea": 136
+        },
+        {
+          "metodo": "GET",
+          "ruta": "/metas-avanzado",
+          "linea": 147
+        },
+        {
+          "metodo": "GET",
+          "ruta": "/sectores-strategy",
+          "linea": 158
+        },
+        {
+          "metodo": "GET",
+          "ruta": "/abc-productos",
+          "linea": 169
+        },
+        {
+          "metodo": "GET",
+          "ruta": "/analisis-geografico",
+          "linea": 181
+        },
+        {
+          "metodo": "GET",
+          "ruta": "/",
+          "linea": 197
+        }
+      ]
+    },
+    {
+      "archivo": "modules\\ventas\\routes\\dashboardPersonalRoutes.js",
+      "rutaCompleta": "C:\\Users\\SUS\\Documents\\SISTEMA-CRM-ERP\\backend\\src\\modules\\ventas\\routes\\dashboardPersonalRoutes.js",
+      "totalRutas": 9,
+      "rutasProtegidas": 0,
+      "rutasSinProteccion": 8,
+      "rutasSinAuth": 1,
+      "detalleRutasSinProteccion": [
+        {
+          "metodo": "GET",
+          "ruta": "/personal/:asesor_id",
+          "linea": 25
+        },
+        {
+          "metodo": "GET",
+          "ruta": "/geografia-asesor/:asesor_id",
+          "linea": 35
+        },
+        {
+          "metodo": "GET",
+          "ruta": "/sectores-asesor/:asesor_id",
+          "linea": 45
+        },
+        {
+          "metodo": "GET",
+          "ruta": "/evolucion-asesor/:asesor_id",
+          "linea": 55
+        },
+        {
+          "metodo": "GET",
+          "ruta": "/ranking-asesor/:asesor_id",
+          "linea": 65
+        },
+        {
+          "metodo": "GET",
+          "ruta": "/asesores-disponibles",
+          "linea": 75
+        },
+        {
+          "metodo": "GET",
+          "ruta": "/periodos-disponibles/:asesor_id",
+          "linea": 85
+        },
+        {
+          "metodo": "GET",
+          "ruta": "/",
+          "linea": 99
+        }
+      ]
+    },
+    {
+      "archivo": "modules\\ventas\\routes\\dashboardsRoutes.js",
+      "rutaCompleta": "C:\\Users\\SUS\\Documents\\SISTEMA-CRM-ERP\\backend\\src\\modules\\ventas\\routes\\dashboardsRoutes.js",
+      "totalRutas": 5,
+      "rutasProtegidas": 0,
+      "rutasSinProteccion": 4,
+      "rutasSinAuth": 1,
+      "detalleRutasSinProteccion": [
+        {
+          "metodo": "GET",
+          "ruta": "/maestro",
+          "linea": 34
+        },
+        {
+          "metodo": "GET",
+          "ruta": "/geografico",
+          "linea": 95
+        },
+        {
+          "metodo": "GET",
+          "ruta": "/abc-productos",
+          "linea": 104
+        },
+        {
+          "metodo": "GET",
+          "ruta": "/",
+          "linea": 117
+        }
+      ]
+    },
+    {
+      "archivo": "modules\\ventas\\routes\\postventaRoutes.js",
+      "rutaCompleta": "C:\\Users\\SUS\\Documents\\SISTEMA-CRM-ERP\\backend\\src\\modules\\ventas\\routes\\postventaRoutes.js",
+      "totalRutas": 10,
+      "rutasProtegidas": 0,
+      "rutasSinProteccion": 10,
+      "rutasSinAuth": 0,
+      "detalleRutasSinProteccion": [
+        {
+          "metodo": "POST",
+          "ruta": "/seguimientos/:venta_id/programar",
+          "linea": 25
+        },
+        {
+          "metodo": "GET",
+          "ruta": "/seguimientos",
+          "linea": 39
+        },
+        {
+          "metodo": "PUT",
+          "ruta": "/seguimientos/:id/ejecutar",
+          "linea": 49
+        },
+        {
+          "metodo": "GET",
+          "ruta": "/seguimientos/:id",
+          "linea": 59
+        },
+        {
+          "metodo": "GET",
+          "ruta": "/dashboard",
+          "linea": 99
+        },
+        {
+          "metodo": "GET",
+          "ruta": "/dashboard/asesor/:asesor_id",
+          "linea": 109
+        },
+        {
+          "metodo": "POST",
+          "ruta": "/encuesta",
+          "linea": 148
+        },
+        {
+          "metodo": "GET",
+          "ruta": "/configuracion/tipos-seguimiento",
+          "linea": 190
+        },
+        {
+          "metodo": "GET",
+          "ruta": "/test",
+          "linea": 242
+        },
+        {
+          "metodo": "GET",
+          "ruta": "/",
+          "linea": 263
+        }
+      ]
+    },
+    {
+      "archivo": "modules\\ventas\\routes\\reportesRoutes.js",
+      "rutaCompleta": "C:\\Users\\SUS\\Documents\\SISTEMA-CRM-ERP\\backend\\src\\modules\\ventas\\routes\\reportesRoutes.js",
+      "totalRutas": 30,
+      "rutasProtegidas": 22,
+      "rutasSinProteccion": 8,
+      "rutasSinAuth": 0,
+      "detalleRutasSinProteccion": [
+        {
+          "metodo": "GET",
+          "ruta": "/dashboard/asesor/:asesor_id",
+          "linea": 45
+        },
+        {
+          "metodo": "GET",
+          "ruta": "/ventas/resumen",
+          "linea": 78
+        },
+        {
+          "metodo": "POST",
+          "ruta": "/exportar/excel",
+          "linea": 367
+        },
+        {
+          "metodo": "POST",
+          "ruta": "/exportar/pdf",
+          "linea": 388
+        },
+        {
+          "metodo": "POST",
+          "ruta": "/exportar/csv",
+          "linea": 409
+        },
+        {
+          "metodo": "PUT",
+          "ruta": "/programados/:id",
+          "linea": 470
+        },
+        {
+          "metodo": "DELETE",
+          "ruta": "/programados/:id",
+          "linea": 487
+        },
+        {
+          "metodo": "GET",
+          "ruta": "/plantillas",
+          "linea": 526
+        }
+      ]
+    },
+    {
+      "archivo": "modules\\ventas\\routes\\ventasRoutes.js",
+      "rutaCompleta": "C:\\Users\\SUS\\Documents\\SISTEMA-CRM-ERP\\backend\\src\\modules\\ventas\\routes\\ventasRoutes.js",
+      "totalRutas": 41,
+      "rutasProtegidas": 0,
+      "rutasSinProteccion": 39,
+      "rutasSinAuth": 2,
+      "detalleRutasSinProteccion": [
+        {
+          "metodo": "POST",
+          "ruta": "/proximos-correlativos",
+          "linea": 37
+        },
+        {
+          "metodo": "GET",
+          "ruta": "/disponibilidad-correlativos/:year",
+          "linea": 101
+        },
+        {
+          "metodo": "GET",
+          "ruta": "/estadisticas-correlativos/:asesor_id",
+          "linea": 169
+        },
+        {
+          "metodo": "GET",
+          "ruta": "/test-correlativos",
+          "linea": 274
+        },
+        {
+          "metodo": "GET",
+          "ruta": "/dashboard",
+          "linea": 359
+        },
+        {
+          "metodo": "GET",
+          "ruta": "/dashboard/equipo",
+          "linea": 362
+        },
+        {
+          "metodo": "GET",
+          "ruta": "/estadisticas-asesor/:id",
+          "linea": 419
+        },
+        {
+          "metodo": "GET",
+          "ruta": "/metricas-asesor/:id",
+          "linea": 469
+        },
+        {
+          "metodo": "GET",
+          "ruta": "/estadisticas",
+          "linea": 591
+        },
+        {
+          "metodo": "GET",
+          "ruta": "/analisis-conversiones",
+          "linea": 594
+        },
+        {
+          "metodo": "GET",
+          "ruta": "/prospectos-listos",
+          "linea": 643
+        },
+        {
+          "metodo": "GET",
+          "ruta": "/reportes/pipeline",
+          "linea": 669
+        },
+        {
+          "metodo": "GET",
+          "ruta": "/reportes/dashboard",
+          "linea": 713
+        },
+        {
+          "metodo": "GET",
+          "ruta": "/reportes/resumen",
+          "linea": 809
+        },
+        {
+          "metodo": "GET",
+          "ruta": "/reportes/productos-top",
+          "linea": 895
+        },
+        {
+          "metodo": "GET",
+          "ruta": "/buscar/:termino",
+          "linea": 953
+        },
+        {
+          "metodo": "POST",
+          "ruta": "/busqueda-avanzada",
+          "linea": 1013
+        },
+        {
+          "metodo": "POST",
+          "ruta": "/convertir-prospecto/:prospecto_id",
+          "linea": 1134
+        },
+        {
+          "metodo": "POST",
+          "ruta": "/conversion-masiva",
+          "linea": 1181
+        },
+        {
+          "metodo": "POST",
+          "ruta": "/clientes",
+          "linea": 1241
+        },
+        {
+          "metodo": "GET",
+          "ruta": "/clientes/estadisticas",
+          "linea": 1247
+        },
+        {
+          "metodo": "GET",
+          "ruta": "/clientes/health",
+          "linea": 1253
+        },
+        {
+          "metodo": "GET",
+          "ruta": "/clientes/autocomplete",
+          "linea": 1259
+        },
+        {
+          "metodo": "GET",
+          "ruta": "/clientes/buscar/:documento",
+          "linea": 1265
+        },
+        {
+          "metodo": "GET",
+          "ruta": "/clientes/:id",
+          "linea": 1271
+        },
+        {
+          "metodo": "PUT",
+          "ruta": "/clientes/:id",
+          "linea": 1277
+        },
+        {
+          "metodo": "DELETE",
+          "ruta": "/clientes/:id",
+          "linea": 1283
+        },
+        {
+          "metodo": "GET",
+          "ruta": "/asesores",
+          "linea": 1291
+        },
+        {
+          "metodo": "GET",
+          "ruta": "/exportar",
+          "linea": 1294
+        },
+        {
+          "metodo": "GET",
+          "ruta": "/",
+          "linea": 1301
+        },
+        {
+          "metodo": "POST",
+          "ruta": "/",
+          "linea": 1302
+        },
+        {
+          "metodo": "GET",
+          "ruta": "/:id",
+          "linea": 1303
+        },
+        {
+          "metodo": "PUT",
+          "ruta": "/:id",
+          "linea": 1304
+        },
+        {
+          "metodo": "DELETE",
+          "ruta": "/:id",
+          "linea": 1305
+        },
+        {
+          "metodo": "PUT",
+          "ruta": "/:id/estado",
+          "linea": 1312
+        },
+        {
+          "metodo": "PUT",
+          "ruta": "/:id/fase",
+          "linea": 1354
+        },
+        {
+          "metodo": "POST",
+          "ruta": "/:id/aprobar",
+          "linea": 1400
+        },
+        {
+          "metodo": "GET",
+          "ruta": "/:id/detalles",
+          "linea": 1423
+        },
+        {
+          "metodo": "POST",
+          "ruta": "/:id/productos",
+          "linea": 1469
+        }
+      ]
+    }
+  ]
+}

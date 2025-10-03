@@ -197,21 +197,49 @@ export const obtenerColorProgreso = (porcentaje) => {
 // ============================================
 
 export const determinarModoVistaInicial = (usuarioActual) => {
-  const userVende = usuarioActual?.vende;
-  const userRole = usuarioActual?.rol_id;
-  const rolesSoloSupervisores = [2, 3]; // GERENTE, JEFE_VENTAS
+  // Normalizar usuario para extraer rol_id correctamente
+  const normalizedUser = usuarioActual?.rol_id ? usuarioActual : {
+    ...usuarioActual,
+    rol_id: usuarioActual?.rol?.id || usuarioActual?.rol_id
+  };
 
-  if (rolesSoloSupervisores.includes(userRole) || !userVende) {
+  const userRole = normalizedUser?.rol_id;
+
+  console.log('🔍 determinarModoVistaInicial:', { userRole, usuarioActual: normalizedUser });
+
+  // PRIORIDAD 1: GERENTE (2) y ADMIN (11) NO venden → modo supervisor directo
+  if (userRole === 2 || userRole === 11) {
+    console.log('⚠️ GERENTE/ADMIN (no venden) → Modo supervisor');
     return {
       modo: 'supervisor',
       asesorSeleccionado: null
     };
-  } else {
+  }
+
+  // PRIORIDAD 2: SUPER_ADMIN (1) y JEFE_VENTAS (3) SÍ venden → modo propio
+  if (userRole === 1 || userRole === 3) {
+    console.log('✅ SUPER_ADMIN/JEFE_VENTAS (venden) → Modo propio');
     return {
       modo: 'propio',
-      asesorSeleccionado: usuarioActual?.id
+      asesorSeleccionado: normalizedUser?.id
     };
   }
+
+  // PRIORIDAD 3: Si tiene flag vende=true, modo propio (VENDEDOR y otros)
+  if (normalizedUser?.vende === true) {
+    console.log('✅ Usuario con vende=true → Modo propio');
+    return {
+      modo: 'propio',
+      asesorSeleccionado: normalizedUser?.id
+    };
+  }
+
+  // PRIORIDAD 4: Por defecto, modo propio
+  console.log('📌 Default → Modo propio');
+  return {
+    modo: 'propio',
+    asesorSeleccionado: normalizedUser?.id
+  };
 };
 
 export const puedeAlternarModos = (usuarioActual) => {

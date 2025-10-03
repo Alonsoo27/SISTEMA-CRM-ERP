@@ -1,0 +1,53 @@
+{
+  "fecha": "2025-10-03T05:27:16.872Z",
+  "modo": "aplicado",
+  "estadisticas": {
+    "archivosAnalizados": 22,
+    "archivosModificados": 6,
+    "archivosOmitidos": 16,
+    "errores": 0
+  },
+  "cambios": [
+    {
+      "archivo": "modules\\almacen\\routes\\almacenRoutes.js",
+      "cambios": [
+        "Agregado import de roles",
+        "Reemplazados 3 requireRole"
+      ]
+    },
+    {
+      "archivo": "modules\\notificaciones\\routes\\notificacionesRoutes.js",
+      "cambios": [
+        "Reemplazados 4 requireRole"
+      ]
+    },
+    {
+      "archivo": "modules\\prospectos\\routes\\prospectosRoutes.js",
+      "cambios": [
+        "Reemplazados 26 requireRole"
+      ]
+    },
+    {
+      "archivo": "modules\\ventas\\routes\\actividadRoutes.js",
+      "cambios": [
+        "Agregado import de roles",
+        "Reemplazados 2 requireRole"
+      ]
+    },
+    {
+      "archivo": "modules\\ventas\\routes\\campanasRoutes.js",
+      "cambios": [
+        "Agregado import de roles",
+        "Reemplazados 2 requireRole"
+      ]
+    },
+    {
+      "archivo": "modules\\ventas\\routes\\reportesRoutes.js",
+      "cambios": [
+        "Agregado import de roles",
+        "Reemplazados 22 requireRole"
+      ]
+    }
+  ],
+  "errores": []
+}

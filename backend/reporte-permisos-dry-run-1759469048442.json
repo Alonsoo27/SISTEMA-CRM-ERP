@@ -1,0 +1,37 @@
+{
+  "fecha": "2025-10-03T05:24:08.441Z",
+  "modo": "dry-run",
+  "estadisticas": {
+    "archivosAnalizados": 22,
+    "archivosModificados": 0,
+    "archivosOmitidos": 16,
+    "errores": 6
+  },
+  "cambios": [],
+  "errores": [
+    {
+      "archivo": "modules\\almacen\\routes\\almacenRoutes.js",
+      "error": "Unexpected token ''', \"['VENDEDOR'\"... is not valid JSON"
+    },
+    {
+      "archivo": "modules\\notificaciones\\routes\\notificacionesRoutes.js",
+      "error": "Unexpected token ''', \"['VENDEDOR'\"... is not valid JSON"
+    },
+    {
+      "archivo": "modules\\prospectos\\routes\\prospectosRoutes.js",
+      "error": "Unexpected token ''', \"['VENDEDOR'\"... is not valid JSON"
+    },
+    {
+      "archivo": "modules\\ventas\\routes\\actividadRoutes.js",
+      "error": "Unexpected token ''', \"['VENDEDOR'\"... is not valid JSON"
+    },
+    {
+      "archivo": "modules\\ventas\\routes\\campanasRoutes.js",
+      "error": "Unexpected token ''', \"['VENDEDOR'\"... is not valid JSON"
+    },
+    {
+      "archivo": "modules\\ventas\\routes\\reportesRoutes.js",
+      "error": "Unexpected token ''', \"['VENDEDOR'\"... is not valid JSON"
+    }
+  ]
+}

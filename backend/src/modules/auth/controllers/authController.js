@@ -48,6 +48,15 @@ const login = async (req, res) => {
 
         const user = userResult.rows[0];
 
+        // DEBUG: Ver qué campos retorna la BD
+        console.log('🔍 Usuario de BD:', JSON.stringify({
+            id: user.id,
+            rol_id: user.rol_id,
+            es_jefe: user.es_jefe,
+            vende: user.vende,
+            jefe_id: user.jefe_id
+        }, null, 2));
+
         // Verificar contraseña
         const isValidPassword = await bcrypt.compare(password, user.password_hash);
         if (!isValidPassword) {

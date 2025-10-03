@@ -1,0 +1,2670 @@
+{
+  "rutas_con_requireRole": [
+    {
+      "archivo": "prospectosRoutes.js",
+      "modulo": "prospectos/routes",
+      "metodo": "POST",
+      "ruta": "/cache/clear",
+      "roles": [
+        "admin"
+      ],
+      "ruta_completa": "/api/prospectos/cache/clear"
+    },
+    {
+      "archivo": "prospectosRoutes.js",
+      "modulo": "prospectos/routes",
+      "metodo": "GET",
+      "ruta": "/cache/stats",
+      "roles": [
+        "admin",
+        "supervisor"
+      ],
+      "ruta_completa": "/api/prospectos/cache/stats"
+    }
+  ],
+  "rutas_con_requireOwnership": [],
+  "rutas_sin_proteccion": [
+    {
+      "archivo": "almacenRoutes.js",
+      "modulo": "almacen/routes",
+      "metodo": "GET",
+      "ruta": "/alertas",
+      "ruta_completa": "/api/almacen/alertas",
+      "proteccion": "Solo authenticateToken (sin roles específicos)"
+    },
+    {
+      "archivo": "almacenRoutes.js",
+      "modulo": "almacen/routes",
+      "metodo": "PUT",
+      "ruta": "/alertas/:id/resolver",
+      "ruta_completa": "/api/almacen/alertas/:id/resolver",
+      "proteccion": "Solo authenticateToken (sin roles específicos)"
+    },
+    {
+      "archivo": "almacenRoutes.js",
+      "modulo": "almacen/routes",
+      "metodo": "GET",
+      "ruta": "/almacenes",
+      "ruta_completa": "/api/almacen/almacenes",
+      "proteccion": "Solo authenticateToken (sin roles específicos)"
+    },
+    {
+      "archivo": "almacenRoutes.js",
+      "modulo": "almacen/routes",
+      "metodo": "GET",
+      "ruta": "/analisis/consolidado",
+      "ruta_completa": "/api/almacen/analisis/consolidado",
+      "proteccion": "Solo authenticateToken (sin roles específicos)"
+    },
+    {
+      "archivo": "almacenRoutes.js",
+      "modulo": "almacen/routes",
+      "metodo": "GET",
+      "ruta": "/analisis/eficiencia",
+      "ruta_completa": "/api/almacen/analisis/eficiencia",
+      "proteccion": "Solo authenticateToken (sin roles específicos)"
+    },
+    {
+      "archivo": "almacenRoutes.js",
+      "modulo": "almacen/routes",
+      "metodo": "GET",
+      "ruta": "/analisis/mapa-calor",
+      "ruta_completa": "/api/almacen/analisis/mapa-calor",
+      "proteccion": "Solo authenticateToken (sin roles específicos)"
+    },
+    {
+      "archivo": "almacenRoutes.js",
+      "modulo": "almacen/routes",
+      "metodo": "GET",
+      "ruta": "/analisis/rotacion",
+      "ruta_completa": "/api/almacen/analisis/rotacion",
+      "proteccion": "Solo authenticateToken (sin roles específicos)"
+    },
+    {
+      "archivo": "almacenRoutes.js",
+      "modulo": "almacen/routes",
+      "metodo": "GET",
+      "ruta": "/analisis/stock-seguridad",
+      "ruta_completa": "/api/almacen/analisis/stock-seguridad",
+      "proteccion": "Solo authenticateToken (sin roles específicos)"
+    },
+    {
+      "archivo": "almacenRoutes.js",
+      "modulo": "almacen/routes",
+      "metodo": "GET",
+      "ruta": "/analisis/tendencias",
+      "ruta_completa": "/api/almacen/analisis/tendencias",
+      "proteccion": "Solo authenticateToken (sin roles específicos)"
+    },
+    {
+      "archivo": "almacenRoutes.js",
+      "modulo": "almacen/routes",
+      "metodo": "GET",
+      "ruta": "/config",
+      "ruta_completa": "/api/almacen/config",
+      "proteccion": "Solo authenticateToken (sin roles específicos)"
+    },
+    {
+      "archivo": "almacenRoutes.js",
+      "modulo": "almacen/routes",
+      "metodo": "GET",
+      "ruta": "/dashboard",
+      "ruta_completa": "/api/almacen/dashboard",
+      "proteccion": "Solo authenticateToken (sin roles específicos)"
+    },
+    {
+      "archivo": "almacenRoutes.js",
+      "modulo": "almacen/routes",
+      "metodo": "POST",
+      "ruta": "/descontar-stock",
+      "ruta_completa": "/api/almacen/descontar-stock",
+      "proteccion": "Solo authenticateToken (sin roles específicos)"
+    },
+    {
+      "archivo": "almacenRoutes.js",
+      "modulo": "almacen/routes",
+      "metodo": "GET",
+      "ruta": "/despachos",
+      "ruta_completa": "/api/almacen/despachos",
+      "proteccion": "Solo authenticateToken (sin roles específicos)"
+    },
+    {
+      "archivo": "almacenRoutes.js",
+      "modulo": "almacen/routes",
+      "metodo": "GET",
+      "ruta": "/despachos/:id",
+      "ruta_completa": "/api/almacen/despachos/:id",
+      "proteccion": "Solo authenticateToken (sin roles específicos)"
+    },
+    {
+      "archivo": "almacenRoutes.js",
+      "modulo": "almacen/routes",
+      "metodo": "PUT",
+      "ruta": "/despachos/:id/estado",
+      "ruta_completa": "/api/almacen/despachos/:id/estado",
+      "proteccion": "Solo authenticateToken (sin roles específicos)"
+    },
+    {
+      "archivo": "almacenRoutes.js",
+      "modulo": "almacen/routes",
+      "metodo": "POST",
+      "ruta": "/despachos/desde-venta",
+      "ruta_completa": "/api/almacen/despachos/desde-venta",
+      "proteccion": "Solo authenticateToken (sin roles específicos)"
+    },
+    {
+      "archivo": "almacenRoutes.js",
+      "modulo": "almacen/routes",
+      "metodo": "GET",
+      "ruta": "/inventario",
+      "ruta_completa": "/api/almacen/inventario",
+      "proteccion": "Solo authenticateToken (sin roles específicos)"
+    },
+    {
+      "archivo": "almacenRoutes.js",
+      "modulo": "almacen/routes",
+      "metodo": "PUT",
+      "ruta": "/inventario/:producto_id/almacen/:almacen_id",
+      "ruta_completa": "/api/almacen/inventario/:producto_id/almacen/:almacen_id",
+      "proteccion": "Solo authenticateToken (sin roles específicos)"
+    },
+    {
+      "archivo": "almacenRoutes.js",
+      "modulo": "almacen/routes",
+      "metodo": "GET",
+      "ruta": "/inventario/producto/:producto_id",
+      "ruta_completa": "/api/almacen/inventario/producto/:producto_id",
+      "proteccion": "Solo authenticateToken (sin roles específicos)"
+    },
+    {
+      "archivo": "almacenRoutes.js",
+      "modulo": "almacen/routes",
+      "metodo": "GET",
+      "ruta": "/kardex/:producto_id",
+      "ruta_completa": "/api/almacen/kardex/:producto_id",
+      "proteccion": "Solo authenticateToken (sin roles específicos)"
+    },
+    {
+      "archivo": "almacenRoutes.js",
+      "modulo": "almacen/routes",
+      "metodo": "POST",
+      "ruta": "/mantenimiento/generar-alertas",
+      "ruta_completa": "/api/almacen/mantenimiento/generar-alertas",
+      "proteccion": "Solo authenticateToken (sin roles específicos)"
+    },
+    {
+      "archivo": "almacenRoutes.js",
+      "modulo": "almacen/routes",
+      "metodo": "DELETE",
+      "ruta": "/mantenimiento/limpiar-alertas",
+      "ruta_completa": "/api/almacen/mantenimiento/limpiar-alertas",
+      "proteccion": "Solo authenticateToken (sin roles específicos)"
+    },
+    {
+      "archivo": "almacenRoutes.js",
+      "modulo": "almacen/routes",
+      "metodo": "GET",
+      "ruta": "/movimientos",
+      "ruta_completa": "/api/almacen/movimientos",
+      "proteccion": "Solo authenticateToken (sin roles específicos)"
+    },
+    {
+      "archivo": "almacenRoutes.js",
+      "modulo": "almacen/routes",
+      "metodo": "POST",
+      "ruta": "/query/ejecutar",
+      "ruta_completa": "/api/almacen/query/ejecutar",
+      "proteccion": "Solo authenticateToken (sin roles específicos)"
+    },
+    {
+      "archivo": "almacenRoutes.js",
+      "modulo": "almacen/routes",
+      "metodo": "GET",
+      "ruta": "/reportes/analisis-predictivo",
+      "ruta_completa": "/api/almacen/reportes/analisis-predictivo",
+      "proteccion": "Solo authenticateToken (sin roles específicos)"
+    },
+    {
+      "archivo": "almacenRoutes.js",
+      "modulo": "almacen/routes",
+      "metodo": "GET",
+      "ruta": "/reportes/consolidado/:tipo_reporte",
+      "ruta_completa": "/api/almacen/reportes/consolidado/:tipo_reporte",
+      "proteccion": "Solo authenticateToken (sin roles específicos)"
+    },
+    {
+      "archivo": "almacenRoutes.js",
+      "modulo": "almacen/routes",
+      "metodo": "GET",
+      "ruta": "/reportes/eficiencia-despachos",
+      "ruta_completa": "/api/almacen/reportes/eficiencia-despachos",
+      "proteccion": "Solo authenticateToken (sin roles específicos)"
+    },
+    {
+      "archivo": "almacenRoutes.js",
+      "modulo": "almacen/routes",
+      "metodo": "GET",
+      "ruta": "/reportes/kardex-inteligente",
+      "ruta_completa": "/api/almacen/reportes/kardex-inteligente",
+      "proteccion": "Solo authenticateToken (sin roles específicos)"
+    },
+    {
+      "archivo": "almacenRoutes.js",
+      "modulo": "almacen/routes",
+      "metodo": "GET",
+      "ruta": "/reportes/kardex/:producto_id",
+      "ruta_completa": "/api/almacen/reportes/kardex/:producto_id",
+      "proteccion": "Solo authenticateToken (sin roles específicos)"
+    },
+    {
+      "archivo": "almacenRoutes.js",
+      "modulo": "almacen/routes",
+      "metodo": "GET",
+      "ruta": "/reportes/performance-comparativa",
+      "ruta_completa": "/api/almacen/reportes/performance-comparativa",
+      "proteccion": "Solo authenticateToken (sin roles específicos)"
+    },
+    {
+      "archivo": "almacenRoutes.js",
+      "modulo": "almacen/routes",
+      "metodo": "GET",
+      "ruta": "/reportes/stock-consolidado",
+      "ruta_completa": "/api/almacen/reportes/stock-consolidado",
+      "proteccion": "Solo authenticateToken (sin roles específicos)"
+    },
+    {
+      "archivo": "almacenRoutes.js",
+      "modulo": "almacen/routes",
+      "metodo": "GET",
+      "ruta": "/reportes/valorizacion",
+      "ruta_completa": "/api/almacen/reportes/valorizacion",
+      "proteccion": "Solo authenticateToken (sin roles específicos)"
+    },
+    {
+      "archivo": "almacenRoutes.js",
+      "modulo": "almacen/routes",
+      "metodo": "GET",
+      "ruta": "/reportes/valorizacion-evolutiva",
+      "ruta_completa": "/api/almacen/reportes/valorizacion-evolutiva",
+      "proteccion": "Solo authenticateToken (sin roles específicos)"
+    },
+    {
+      "archivo": "almacenRoutes.js",
+      "modulo": "almacen/routes",
+      "metodo": "POST",
+      "ruta": "/transferencias",
+      "ruta_completa": "/api/almacen/transferencias",
+      "proteccion": "Solo authenticateToken (sin roles específicos)"
+    },
+    {
+      "archivo": "almacenRoutes.js",
+      "modulo": "almacen/routes",
+      "metodo": "POST",
+      "ruta": "/upload/ejecutar",
+      "ruta_completa": "/api/almacen/upload/ejecutar",
+      "proteccion": "Solo authenticateToken (sin roles específicos)"
+    },
+    {
+      "archivo": "almacenRoutes.js",
+      "modulo": "almacen/routes",
+      "metodo": "GET",
+      "ruta": "/upload/plantilla",
+      "ruta_completa": "/api/almacen/upload/plantilla",
+      "proteccion": "Solo authenticateToken (sin roles específicos)"
+    },
+    {
+      "archivo": "almacenRoutes.js",
+      "modulo": "almacen/routes",
+      "metodo": "POST",
+      "ruta": "/upload/preview",
+      "ruta_completa": "/api/almacen/upload/preview",
+      "proteccion": "Solo authenticateToken (sin roles específicos)"
+    },
+    {
+      "archivo": "almacenRoutes.js",
+      "modulo": "almacen/routes",
+      "metodo": "POST",
+      "ruta": "/verificar-stock",
+      "ruta_completa": "/api/almacen/verificar-stock",
+      "proteccion": "Solo authenticateToken (sin roles específicos)"
+    },
+    {
+      "archivo": "authRoutes.js",
+      "modulo": "auth/routes",
+      "metodo": "GET",
+      "ruta": "/me",
+      "ruta_completa": "/api/auth/me",
+      "proteccion": "Solo authenticateToken (sin roles específicos)"
+    },
+    {
+      "archivo": "authRoutes.js",
+      "modulo": "auth/routes",
+      "metodo": "GET",
+      "ruta": "/profile",
+      "ruta_completa": "/api/auth/profile",
+      "proteccion": "Solo authenticateToken (sin roles específicos)"
+    },
+    {
+      "archivo": "productosRoutes.js",
+      "modulo": "productos/routes",
+      "metodo": "GET",
+      "ruta": "/",
+      "ruta_completa": "/api/productos/",
+      "proteccion": "Solo authenticateToken (sin roles específicos)"
+    },
+    {
+      "archivo": "productosRoutes.js",
+      "modulo": "productos/routes",
+      "metodo": "POST",
+      "ruta": "/",
+      "ruta_completa": "/api/productos/",
+      "proteccion": "Solo authenticateToken (sin roles específicos)"
+    },
+    {
+      "archivo": "productosRoutes.js",
+      "modulo": "productos/routes",
+      "metodo": "GET",
+      "ruta": "/:id",
+      "ruta_completa": "/api/productos/:id",
+      "proteccion": "Solo authenticateToken (sin roles específicos)"
+    },
+    {
+      "archivo": "productosRoutes.js",
+      "modulo": "productos/routes",
+      "metodo": "PUT",
+      "ruta": "/:id",
+      "ruta_completa": "/api/productos/:id",
+      "proteccion": "Solo authenticateToken (sin roles específicos)"
+    },
+    {
+      "archivo": "productosRoutes.js",
+      "modulo": "productos/routes",
+      "metodo": "DELETE",
+      "ruta": "/:id",
+      "ruta_completa": "/api/productos/:id",
+      "proteccion": "Solo authenticateToken (sin roles específicos)"
+    },
+    {
+      "archivo": "productosRoutes.js",
+      "modulo": "productos/routes",
+      "metodo": "POST",
+      "ruta": "/buscar-codigo",
+      "ruta_completa": "/api/productos/buscar-codigo",
+      "proteccion": "Solo authenticateToken (sin roles específicos)"
+    },
+    {
+      "archivo": "productosRoutes.js",
+      "modulo": "productos/routes",
+      "metodo": "GET",
+      "ruta": "/categorias",
+      "ruta_completa": "/api/productos/categorias",
+      "proteccion": "Solo authenticateToken (sin roles específicos)"
+    },
+    {
+      "archivo": "productosRoutes.js",
+      "modulo": "productos/routes",
+      "metodo": "GET",
+      "ruta": "/dashboard",
+      "ruta_completa": "/api/productos/dashboard",
+      "proteccion": "Solo authenticateToken (sin roles específicos)"
+    },
+    {
+      "archivo": "productosRoutes.js",
+      "modulo": "productos/routes",
+      "metodo": "GET",
+      "ruta": "/lineas",
+      "ruta_completa": "/api/productos/lineas",
+      "proteccion": "Solo authenticateToken (sin roles específicos)"
+    },
+    {
+      "archivo": "productosRoutes.js",
+      "modulo": "productos/routes",
+      "metodo": "GET",
+      "ruta": "/plantilla/premium",
+      "ruta_completa": "/api/productos/plantilla/premium",
+      "proteccion": "Solo authenticateToken (sin roles específicos)"
+    },
+    {
+      "archivo": "productosRoutes.js",
+      "modulo": "productos/routes",
+      "metodo": "GET",
+      "ruta": "/stats",
+      "ruta_completa": "/api/productos/stats",
+      "proteccion": "Solo authenticateToken (sin roles específicos)"
+    },
+    {
+      "archivo": "productosRoutes.js",
+      "modulo": "productos/routes",
+      "metodo": "POST",
+      "ruta": "/upload/masivo",
+      "ruta_completa": "/api/productos/upload/masivo",
+      "proteccion": "Solo authenticateToken (sin roles específicos)"
+    },
+    {
+      "archivo": "productosRoutes.js",
+      "modulo": "productos/routes",
+      "metodo": "POST",
+      "ruta": "/upload/preview",
+      "ruta_completa": "/api/productos/upload/preview",
+      "proteccion": "Solo authenticateToken (sin roles específicos)"
+    },
+    {
+      "archivo": "usuariosRoutes.js",
+      "modulo": "usuarios/routes",
+      "metodo": "GET",
+      "ruta": "/",
+      "ruta_completa": "/api/usuarios/",
+      "proteccion": "Solo authenticateToken (sin roles específicos)"
+    },
+    {
+      "archivo": "usuariosRoutes.js",
+      "modulo": "usuarios/routes",
+      "metodo": "POST",
+      "ruta": "/",
+      "ruta_completa": "/api/usuarios/",
+      "proteccion": "Solo authenticateToken (sin roles específicos)"
+    },
+    {
+      "archivo": "usuariosRoutes.js",
+      "modulo": "usuarios/routes",
+      "metodo": "GET",
+      "ruta": "/:id",
+      "ruta_completa": "/api/usuarios/:id",
+      "proteccion": "Solo authenticateToken (sin roles específicos)"
+    },
+    {
+      "archivo": "usuariosRoutes.js",
+      "modulo": "usuarios/routes",
+      "metodo": "PUT",
+      "ruta": "/:id",
+      "ruta_completa": "/api/usuarios/:id",
+      "proteccion": "Solo authenticateToken (sin roles específicos)"
+    },
+    {
+      "archivo": "usuariosRoutes.js",
+      "modulo": "usuarios/routes",
+      "metodo": "DELETE",
+      "ruta": "/:id",
+      "ruta_completa": "/api/usuarios/:id",
+      "proteccion": "Solo authenticateToken (sin roles específicos)"
+    },
+    {
+      "archivo": "usuariosRoutes.js",
+      "modulo": "usuarios/routes",
+      "metodo": "PUT",
+      "ruta": "/:id/password",
+      "ruta_completa": "/api/usuarios/:id/password",
+      "proteccion": "Solo authenticateToken (sin roles específicos)"
+    },
+    {
+      "archivo": "usuariosRoutes.js",
+      "modulo": "usuarios/routes",
+      "metodo": "GET",
+      "ruta": "/areas",
+      "ruta_completa": "/api/usuarios/areas",
+      "proteccion": "Solo authenticateToken (sin roles específicos)"
+    },
+    {
+      "archivo": "usuariosRoutes.js",
+      "modulo": "usuarios/routes",
+      "metodo": "GET",
+      "ruta": "/roles",
+      "ruta_completa": "/api/usuarios/roles",
+      "proteccion": "Solo authenticateToken (sin roles específicos)"
+    },
+    {
+      "archivo": "actividadRoutes.js",
+      "modulo": "ventas/routes",
+      "metodo": "GET",
+      "ruta": "/",
+      "ruta_completa": "/api/ventas/",
+      "proteccion": "Solo authenticateToken (sin roles específicos)"
+    },
+    {
+      "archivo": "campanasRoutes.js",
+      "modulo": "ventas/routes",
+      "metodo": "POST",
+      "ruta": "/",
+      "ruta_completa": "/api/ventas/",
+      "proteccion": "Solo authenticateToken (sin roles específicos)"
+    },
+    {
+      "archivo": "comisionesRoutes.js",
+      "modulo": "ventas/routes",
+      "metodo": "GET",
+      "ruta": "/",
+      "ruta_completa": "/api/ventas/",
+      "proteccion": "Solo authenticateToken (sin roles específicos)"
+    },
+    {
+      "archivo": "dashboardEjecutivoRoutes.js",
+      "modulo": "ventas/routes",
+      "metodo": "GET",
+      "ruta": "/",
+      "ruta_completa": "/api/ventas/",
+      "proteccion": "Solo authenticateToken (sin roles específicos)"
+    },
+    {
+      "archivo": "dashboardPersonalRoutes.js",
+      "modulo": "ventas/routes",
+      "metodo": "GET",
+      "ruta": "/",
+      "ruta_completa": "/api/ventas/",
+      "proteccion": "Solo authenticateToken (sin roles específicos)"
+    },
+    {
+      "archivo": "dashboardsRoutes.js",
+      "modulo": "ventas/routes",
+      "metodo": "GET",
+      "ruta": "/",
+      "ruta_completa": "/api/ventas/",
+      "proteccion": "Solo authenticateToken (sin roles específicos)"
+    },
+    {
+      "archivo": "postventaRoutes.js",
+      "modulo": "ventas/routes",
+      "metodo": "GET",
+      "ruta": "/",
+      "ruta_completa": "/api/ventas/",
+      "proteccion": "Solo authenticateToken (sin roles específicos)"
+    },
+    {
+      "archivo": "ventasRoutes.js",
+      "modulo": "ventas/routes",
+      "metodo": "GET",
+      "ruta": "/",
+      "ruta_completa": "/api/ventas/",
+      "proteccion": "Solo authenticateToken (sin roles específicos)"
+    },
+    {
+      "archivo": "ventasRoutes.js",
+      "modulo": "ventas/routes",
+      "metodo": "POST",
+      "ruta": "/",
+      "ruta_completa": "/api/ventas/",
+      "proteccion": "Solo authenticateToken (sin roles específicos)"
+    },
+    {
+      "archivo": "campanasRoutes.js",
+      "modulo": "ventas/routes",
+      "metodo": "GET",
+      "ruta": "/:campana_id/progreso",
+      "ruta_completa": "/api/ventas/:campana_id/progreso",
+      "proteccion": "Solo authenticateToken (sin roles específicos)"
+    },
+    {
+      "archivo": "ventasRoutes.js",
+      "modulo": "ventas/routes",
+      "metodo": "GET",
+      "ruta": "/:id",
+      "ruta_completa": "/api/ventas/:id",
+      "proteccion": "Solo authenticateToken (sin roles específicos)"
+    },
+    {
+      "archivo": "ventasRoutes.js",
+      "modulo": "ventas/routes",
+      "metodo": "PUT",
+      "ruta": "/:id",
+      "ruta_completa": "/api/ventas/:id",
+      "proteccion": "Solo authenticateToken (sin roles específicos)"
+    },
+    {
+      "archivo": "ventasRoutes.js",
+      "modulo": "ventas/routes",
+      "metodo": "DELETE",
+      "ruta": "/:id",
+      "ruta_completa": "/api/ventas/:id",
+      "proteccion": "Solo authenticateToken (sin roles específicos)"
+    },
+    {
+      "archivo": "ventasRoutes.js",
+      "modulo": "ventas/routes",
+      "metodo": "POST",
+      "ruta": "/:id/aprobar",
+      "ruta_completa": "/api/ventas/:id/aprobar",
+      "proteccion": "Solo authenticateToken (sin roles específicos)"
+    },
+    {
+      "archivo": "ventasRoutes.js",
+      "modulo": "ventas/routes",
+      "metodo": "GET",
+      "ruta": "/:id/detalles",
+      "ruta_completa": "/api/ventas/:id/detalles",
+      "proteccion": "Solo authenticateToken (sin roles específicos)"
+    },
+    {
+      "archivo": "ventasRoutes.js",
+      "modulo": "ventas/routes",
+      "metodo": "PUT",
+      "ruta": "/:id/estado",
+      "ruta_completa": "/api/ventas/:id/estado",
+      "proteccion": "Solo authenticateToken (sin roles específicos)"
+    },
+    {
+      "archivo": "ventasRoutes.js",
+      "modulo": "ventas/routes",
+      "metodo": "PUT",
+      "ruta": "/:id/fase",
+      "ruta_completa": "/api/ventas/:id/fase",
+      "proteccion": "Solo authenticateToken (sin roles específicos)"
+    },
+    {
+      "archivo": "ventasRoutes.js",
+      "modulo": "ventas/routes",
+      "metodo": "POST",
+      "ruta": "/:id/productos",
+      "ruta_completa": "/api/ventas/:id/productos",
+      "proteccion": "Solo authenticateToken (sin roles específicos)"
+    },
+    {
+      "archivo": "dashboardEjecutivoRoutes.js",
+      "modulo": "ventas/routes",
+      "metodo": "GET",
+      "ruta": "/abc-productos",
+      "ruta_completa": "/api/ventas/abc-productos",
+      "proteccion": "Solo authenticateToken (sin roles específicos)"
+    },
+    {
+      "archivo": "dashboardsRoutes.js",
+      "modulo": "ventas/routes",
+      "metodo": "GET",
+      "ruta": "/abc-productos",
+      "ruta_completa": "/api/ventas/abc-productos",
+      "proteccion": "Solo authenticateToken (sin roles específicos)"
+    },
+    {
+      "archivo": "campanasRoutes.js",
+      "modulo": "ventas/routes",
+      "metodo": "GET",
+      "ruta": "/activas",
+      "ruta_completa": "/api/ventas/activas",
+      "proteccion": "Solo authenticateToken (sin roles específicos)"
+    },
+    {
+      "archivo": "actividadRoutes.js",
+      "modulo": "ventas/routes",
+      "metodo": "GET",
+      "ruta": "/actividad-completa/:usuario_id",
+      "ruta_completa": "/api/ventas/actividad-completa/:usuario_id",
+      "proteccion": "Solo authenticateToken (sin roles específicos)"
+    },
+    {
+      "archivo": "ventasRoutes.js",
+      "modulo": "ventas/routes",
+      "metodo": "GET",
+      "ruta": "/analisis-conversiones",
+      "ruta_completa": "/api/ventas/analisis-conversiones",
+      "proteccion": "Solo authenticateToken (sin roles específicos)"
+    },
+    {
+      "archivo": "dashboardEjecutivoRoutes.js",
+      "modulo": "ventas/routes",
+      "metodo": "GET",
+      "ruta": "/analisis-geografico",
+      "ruta_completa": "/api/ventas/analisis-geografico",
+      "proteccion": "Solo authenticateToken (sin roles específicos)"
+    },
+    {
+      "archivo": "ventasRoutes.js",
+      "modulo": "ventas/routes",
+      "metodo": "GET",
+      "ruta": "/asesores",
+      "ruta_completa": "/api/ventas/asesores",
+      "proteccion": "Solo authenticateToken (sin roles específicos)"
+    },
+    {
+      "archivo": "dashboardPersonalRoutes.js",
+      "modulo": "ventas/routes",
+      "metodo": "GET",
+      "ruta": "/asesores-disponibles",
+      "ruta_completa": "/api/ventas/asesores-disponibles",
+      "proteccion": "Solo authenticateToken (sin roles específicos)"
+    },
+    {
+      "archivo": "comisionesRoutes.js",
+      "modulo": "ventas/routes",
+      "metodo": "GET",
+      "ruta": "/bono-actual/:asesor_id",
+      "ruta_completa": "/api/ventas/bono-actual/:asesor_id",
+      "proteccion": "Solo authenticateToken (sin roles específicos)"
+    },
+    {
+      "archivo": "ventasRoutes.js",
+      "modulo": "ventas/routes",
+      "metodo": "GET",
+      "ruta": "/buscar/:termino",
+      "ruta_completa": "/api/ventas/buscar/:termino",
+      "proteccion": "Solo authenticateToken (sin roles específicos)"
+    },
+    {
+      "archivo": "ventasRoutes.js",
+      "modulo": "ventas/routes",
+      "metodo": "POST",
+      "ruta": "/busqueda-avanzada",
+      "ruta_completa": "/api/ventas/busqueda-avanzada",
+      "proteccion": "Solo authenticateToken (sin roles específicos)"
+    },
+    {
+      "archivo": "actividadRoutes.js",
+      "modulo": "ventas/routes",
+      "metodo": "POST",
+      "ruta": "/check-in",
+      "ruta_completa": "/api/ventas/check-in",
+      "proteccion": "Solo authenticateToken (sin roles específicos)"
+    },
+    {
+      "archivo": "actividadRoutes.js",
+      "modulo": "ventas/routes",
+      "metodo": "POST",
+      "ruta": "/check-out",
+      "ruta_completa": "/api/ventas/check-out",
+      "proteccion": "Solo authenticateToken (sin roles específicos)"
+    },
+    {
+      "archivo": "ventasRoutes.js",
+      "modulo": "ventas/routes",
+      "metodo": "POST",
+      "ruta": "/clientes",
+      "ruta_completa": "/api/ventas/clientes",
+      "proteccion": "Solo authenticateToken (sin roles específicos)"
+    },
+    {
+      "archivo": "ventasRoutes.js",
+      "modulo": "ventas/routes",
+      "metodo": "GET",
+      "ruta": "/clientes/:id",
+      "ruta_completa": "/api/ventas/clientes/:id",
+      "proteccion": "Solo authenticateToken (sin roles específicos)"
+    },
+    {
+      "archivo": "ventasRoutes.js",
+      "modulo": "ventas/routes",
+      "metodo": "PUT",
+      "ruta": "/clientes/:id",
+      "ruta_completa": "/api/ventas/clientes/:id",
+      "proteccion": "Solo authenticateToken (sin roles específicos)"
+    },
+    {
+      "archivo": "ventasRoutes.js",
+      "modulo": "ventas/routes",
+      "metodo": "DELETE",
+      "ruta": "/clientes/:id",
+      "ruta_completa": "/api/ventas/clientes/:id",
+      "proteccion": "Solo authenticateToken (sin roles específicos)"
+    },
+    {
+      "archivo": "ventasRoutes.js",
+      "modulo": "ventas/routes",
+      "metodo": "GET",
+      "ruta": "/clientes/autocomplete",
+      "ruta_completa": "/api/ventas/clientes/autocomplete",
+      "proteccion": "Solo authenticateToken (sin roles específicos)"
+    },
+    {
+      "archivo": "ventasRoutes.js",
+      "modulo": "ventas/routes",
+      "metodo": "GET",
+      "ruta": "/clientes/buscar/:documento",
+      "ruta_completa": "/api/ventas/clientes/buscar/:documento",
+      "proteccion": "Solo authenticateToken (sin roles específicos)"
+    },
+    {
+      "archivo": "ventasRoutes.js",
+      "modulo": "ventas/routes",
+      "metodo": "GET",
+      "ruta": "/clientes/estadisticas",
+      "ruta_completa": "/api/ventas/clientes/estadisticas",
+      "proteccion": "Solo authenticateToken (sin roles específicos)"
+    },
+    {
+      "archivo": "actividadRoutes.js",
+      "modulo": "ventas/routes",
+      "metodo": "GET",
+      "ruta": "/configuracion",
+      "ruta_completa": "/api/ventas/configuracion",
+      "proteccion": "Solo authenticateToken (sin roles específicos)"
+    },
+    {
+      "archivo": "comisionesRoutes.js",
+      "modulo": "ventas/routes",
+      "metodo": "GET",
+      "ruta": "/configuracion-bonos",
+      "ruta_completa": "/api/ventas/configuracion-bonos",
+      "proteccion": "Solo authenticateToken (sin roles específicos)"
+    },
+    {
+      "archivo": "postventaRoutes.js",
+      "modulo": "ventas/routes",
+      "metodo": "GET",
+      "ruta": "/configuracion/tipos-seguimiento",
+      "ruta_completa": "/api/ventas/configuracion/tipos-seguimiento",
+      "proteccion": "Solo authenticateToken (sin roles específicos)"
+    },
+    {
+      "archivo": "ventasRoutes.js",
+      "modulo": "ventas/routes",
+      "metodo": "POST",
+      "ruta": "/conversion-masiva",
+      "ruta_completa": "/api/ventas/conversion-masiva",
+      "proteccion": "Solo authenticateToken (sin roles específicos)"
+    },
+    {
+      "archivo": "ventasRoutes.js",
+      "modulo": "ventas/routes",
+      "metodo": "POST",
+      "ruta": "/convertir-prospecto/:prospecto_id",
+      "ruta_completa": "/api/ventas/convertir-prospecto/:prospecto_id",
+      "proteccion": "Solo authenticateToken (sin roles específicos)"
+    },
+    {
+      "archivo": "actividadRoutes.js",
+      "modulo": "ventas/routes",
+      "metodo": "GET",
+      "ruta": "/dashboard",
+      "ruta_completa": "/api/ventas/dashboard",
+      "proteccion": "Solo authenticateToken (sin roles específicos)"
+    },
+    {
+      "archivo": "postventaRoutes.js",
+      "modulo": "ventas/routes",
+      "metodo": "GET",
+      "ruta": "/dashboard",
+      "ruta_completa": "/api/ventas/dashboard",
+      "proteccion": "Solo authenticateToken (sin roles específicos)"
+    },
+    {
+      "archivo": "ventasRoutes.js",
+      "modulo": "ventas/routes",
+      "metodo": "GET",
+      "ruta": "/dashboard",
+      "ruta_completa": "/api/ventas/dashboard",
+      "proteccion": "Solo authenticateToken (sin roles específicos)"
+    },
+    {
+      "archivo": "actividadRoutes.js",
+      "modulo": "ventas/routes",
+      "metodo": "POST",
+      "ruta": "/dashboard-equipo",
+      "ruta_completa": "/api/ventas/dashboard-equipo",
+      "proteccion": "Solo authenticateToken (sin roles específicos)"
+    },
+    {
+      "archivo": "comisionesRoutes.js",
+      "modulo": "ventas/routes",
+      "metodo": "GET",
+      "ruta": "/dashboard-equipo",
+      "ruta_completa": "/api/ventas/dashboard-equipo",
+      "proteccion": "Solo authenticateToken (sin roles específicos)"
+    },
+    {
+      "archivo": "comisionesRoutes.js",
+      "modulo": "ventas/routes",
+      "metodo": "GET",
+      "ruta": "/dashboard/:asesor_id",
+      "ruta_completa": "/api/ventas/dashboard/:asesor_id",
+      "proteccion": "Solo authenticateToken (sin roles específicos)"
+    },
+    {
+      "archivo": "postventaRoutes.js",
+      "modulo": "ventas/routes",
+      "metodo": "GET",
+      "ruta": "/dashboard/asesor/:asesor_id",
+      "ruta_completa": "/api/ventas/dashboard/asesor/:asesor_id",
+      "proteccion": "Solo authenticateToken (sin roles específicos)"
+    },
+    {
+      "archivo": "reportesRoutes.js",
+      "modulo": "ventas/routes",
+      "metodo": "GET",
+      "ruta": "/dashboard/asesor/:asesor_id",
+      "ruta_completa": "/api/ventas/dashboard/asesor/:asesor_id",
+      "proteccion": "Solo authenticateToken (sin roles específicos)"
+    },
+    {
+      "archivo": "ventasRoutes.js",
+      "modulo": "ventas/routes",
+      "metodo": "GET",
+      "ruta": "/dashboard/equipo",
+      "ruta_completa": "/api/ventas/dashboard/equipo",
+      "proteccion": "Solo authenticateToken (sin roles específicos)"
+    },
+    {
+      "archivo": "actividadRoutes.js",
+      "modulo": "ventas/routes",
+      "metodo": "GET",
+      "ruta": "/datos-graficos",
+      "ruta_completa": "/api/ventas/datos-graficos",
+      "proteccion": "Solo authenticateToken (sin roles específicos)"
+    },
+    {
+      "archivo": "ventasRoutes.js",
+      "modulo": "ventas/routes",
+      "metodo": "GET",
+      "ruta": "/disponibilidad-correlativos/:year",
+      "ruta_completa": "/api/ventas/disponibilidad-correlativos/:year",
+      "proteccion": "Solo authenticateToken (sin roles específicos)"
+    },
+    {
+      "archivo": "postventaRoutes.js",
+      "modulo": "ventas/routes",
+      "metodo": "POST",
+      "ruta": "/encuesta",
+      "ruta_completa": "/api/ventas/encuesta",
+      "proteccion": "Solo authenticateToken (sin roles específicos)"
+    },
+    {
+      "archivo": "ventasRoutes.js",
+      "modulo": "ventas/routes",
+      "metodo": "GET",
+      "ruta": "/estadisticas",
+      "ruta_completa": "/api/ventas/estadisticas",
+      "proteccion": "Solo authenticateToken (sin roles específicos)"
+    },
+    {
+      "archivo": "ventasRoutes.js",
+      "modulo": "ventas/routes",
+      "metodo": "GET",
+      "ruta": "/estadisticas-asesor/:id",
+      "ruta_completa": "/api/ventas/estadisticas-asesor/:id",
+      "proteccion": "Solo authenticateToken (sin roles específicos)"
+    },
+    {
+      "archivo": "ventasRoutes.js",
+      "modulo": "ventas/routes",
+      "metodo": "GET",
+      "ruta": "/estadisticas-correlativos/:asesor_id",
+      "ruta_completa": "/api/ventas/estadisticas-correlativos/:asesor_id",
+      "proteccion": "Solo authenticateToken (sin roles específicos)"
+    },
+    {
+      "archivo": "actividadRoutes.js",
+      "modulo": "ventas/routes",
+      "metodo": "GET",
+      "ruta": "/estadisticas-rapidas",
+      "ruta_completa": "/api/ventas/estadisticas-rapidas",
+      "proteccion": "Solo authenticateToken (sin roles específicos)"
+    },
+    {
+      "archivo": "actividadRoutes.js",
+      "modulo": "ventas/routes",
+      "metodo": "GET",
+      "ruta": "/estado-hoy",
+      "ruta_completa": "/api/ventas/estado-hoy",
+      "proteccion": "Solo authenticateToken (sin roles específicos)"
+    },
+    {
+      "archivo": "dashboardPersonalRoutes.js",
+      "modulo": "ventas/routes",
+      "metodo": "GET",
+      "ruta": "/evolucion-asesor/:asesor_id",
+      "ruta_completa": "/api/ventas/evolucion-asesor/:asesor_id",
+      "proteccion": "Solo authenticateToken (sin roles específicos)"
+    },
+    {
+      "archivo": "ventasRoutes.js",
+      "modulo": "ventas/routes",
+      "metodo": "GET",
+      "ruta": "/exportar",
+      "ruta_completa": "/api/ventas/exportar",
+      "proteccion": "Solo authenticateToken (sin roles específicos)"
+    },
+    {
+      "archivo": "reportesRoutes.js",
+      "modulo": "ventas/routes",
+      "metodo": "POST",
+      "ruta": "/exportar/csv",
+      "ruta_completa": "/api/ventas/exportar/csv",
+      "proteccion": "Solo authenticateToken (sin roles específicos)"
+    },
+    {
+      "archivo": "reportesRoutes.js",
+      "modulo": "ventas/routes",
+      "metodo": "POST",
+      "ruta": "/exportar/excel",
+      "ruta_completa": "/api/ventas/exportar/excel",
+      "proteccion": "Solo authenticateToken (sin roles específicos)"
+    },
+    {
+      "archivo": "reportesRoutes.js",
+      "modulo": "ventas/routes",
+      "metodo": "POST",
+      "ruta": "/exportar/pdf",
+      "ruta_completa": "/api/ventas/exportar/pdf",
+      "proteccion": "Solo authenticateToken (sin roles específicos)"
+    },
+    {
+      "archivo": "dashboardPersonalRoutes.js",
+      "modulo": "ventas/routes",
+      "metodo": "GET",
+      "ruta": "/geografia-asesor/:asesor_id",
+      "ruta_completa": "/api/ventas/geografia-asesor/:asesor_id",
+      "proteccion": "Solo authenticateToken (sin roles específicos)"
+    },
+    {
+      "archivo": "dashboardsRoutes.js",
+      "modulo": "ventas/routes",
+      "metodo": "GET",
+      "ruta": "/geografico",
+      "ruta_completa": "/api/ventas/geografico",
+      "proteccion": "Solo authenticateToken (sin roles específicos)"
+    },
+    {
+      "archivo": "actividadRoutes.js",
+      "modulo": "ventas/routes",
+      "metodo": "GET",
+      "ruta": "/historial",
+      "ruta_completa": "/api/ventas/historial",
+      "proteccion": "Solo authenticateToken (sin roles específicos)"
+    },
+    {
+      "archivo": "actividadRoutes.js",
+      "modulo": "ventas/routes",
+      "metodo": "GET",
+      "ruta": "/info",
+      "ruta_completa": "/api/ventas/info",
+      "proteccion": "Solo authenticateToken (sin roles específicos)"
+    },
+    {
+      "archivo": "dashboardsRoutes.js",
+      "modulo": "ventas/routes",
+      "metodo": "GET",
+      "ruta": "/maestro",
+      "ruta_completa": "/api/ventas/maestro",
+      "proteccion": "Solo authenticateToken (sin roles específicos)"
+    },
+    {
+      "archivo": "dashboardEjecutivoRoutes.js",
+      "modulo": "ventas/routes",
+      "metodo": "GET",
+      "ruta": "/metas-avanzado",
+      "ruta_completa": "/api/ventas/metas-avanzado",
+      "proteccion": "Solo authenticateToken (sin roles específicos)"
+    },
+    {
+      "archivo": "ventasRoutes.js",
+      "modulo": "ventas/routes",
+      "metodo": "GET",
+      "ruta": "/metricas-asesor/:id",
+      "ruta_completa": "/api/ventas/metricas-asesor/:id",
+      "proteccion": "Solo authenticateToken (sin roles específicos)"
+    },
+    {
+      "archivo": "actividadRoutes.js",
+      "modulo": "ventas/routes",
+      "metodo": "GET",
+      "ruta": "/metricas-empresariales/:usuario_id",
+      "ruta_completa": "/api/ventas/metricas-empresariales/:usuario_id",
+      "proteccion": "Solo authenticateToken (sin roles específicos)"
+    },
+    {
+      "archivo": "dashboardPersonalRoutes.js",
+      "modulo": "ventas/routes",
+      "metodo": "GET",
+      "ruta": "/periodos-disponibles/:asesor_id",
+      "ruta_completa": "/api/ventas/periodos-disponibles/:asesor_id",
+      "proteccion": "Solo authenticateToken (sin roles específicos)"
+    },
+    {
+      "archivo": "dashboardPersonalRoutes.js",
+      "modulo": "ventas/routes",
+      "metodo": "GET",
+      "ruta": "/personal/:asesor_id",
+      "ruta_completa": "/api/ventas/personal/:asesor_id",
+      "proteccion": "Solo authenticateToken (sin roles específicos)"
+    },
+    {
+      "archivo": "reportesRoutes.js",
+      "modulo": "ventas/routes",
+      "metodo": "GET",
+      "ruta": "/plantillas",
+      "ruta_completa": "/api/ventas/plantillas",
+      "proteccion": "Solo authenticateToken (sin roles específicos)"
+    },
+    {
+      "archivo": "reportesRoutes.js",
+      "modulo": "ventas/routes",
+      "metodo": "PUT",
+      "ruta": "/programados/:id",
+      "ruta_completa": "/api/ventas/programados/:id",
+      "proteccion": "Solo authenticateToken (sin roles específicos)"
+    },
+    {
+      "archivo": "reportesRoutes.js",
+      "modulo": "ventas/routes",
+      "metodo": "DELETE",
+      "ruta": "/programados/:id",
+      "ruta_completa": "/api/ventas/programados/:id",
+      "proteccion": "Solo authenticateToken (sin roles específicos)"
+    },
+    {
+      "archivo": "ventasRoutes.js",
+      "modulo": "ventas/routes",
+      "metodo": "GET",
+      "ruta": "/prospectos-listos",
+      "ruta_completa": "/api/ventas/prospectos-listos",
+      "proteccion": "Solo authenticateToken (sin roles específicos)"
+    },
+    {
+      "archivo": "ventasRoutes.js",
+      "modulo": "ventas/routes",
+      "metodo": "POST",
+      "ruta": "/proximos-correlativos",
+      "ruta_completa": "/api/ventas/proximos-correlativos",
+      "proteccion": "Solo authenticateToken (sin roles específicos)"
+    },
+    {
+      "archivo": "dashboardPersonalRoutes.js",
+      "modulo": "ventas/routes",
+      "metodo": "GET",
+      "ruta": "/ranking-asesor/:asesor_id",
+      "ruta_completa": "/api/ventas/ranking-asesor/:asesor_id",
+      "proteccion": "Solo authenticateToken (sin roles específicos)"
+    },
+    {
+      "archivo": "ventasRoutes.js",
+      "modulo": "ventas/routes",
+      "metodo": "GET",
+      "ruta": "/reportes/dashboard",
+      "ruta_completa": "/api/ventas/reportes/dashboard",
+      "proteccion": "Solo authenticateToken (sin roles específicos)"
+    },
+    {
+      "archivo": "ventasRoutes.js",
+      "modulo": "ventas/routes",
+      "metodo": "GET",
+      "ruta": "/reportes/pipeline",
+      "ruta_completa": "/api/ventas/reportes/pipeline",
+      "proteccion": "Solo authenticateToken (sin roles específicos)"
+    },
+    {
+      "archivo": "ventasRoutes.js",
+      "modulo": "ventas/routes",
+      "metodo": "GET",
+      "ruta": "/reportes/productos-top",
+      "ruta_completa": "/api/ventas/reportes/productos-top",
+      "proteccion": "Solo authenticateToken (sin roles específicos)"
+    },
+    {
+      "archivo": "ventasRoutes.js",
+      "modulo": "ventas/routes",
+      "metodo": "GET",
+      "ruta": "/reportes/resumen",
+      "ruta_completa": "/api/ventas/reportes/resumen",
+      "proteccion": "Solo authenticateToken (sin roles específicos)"
+    },
+    {
+      "archivo": "actividadRoutes.js",
+      "modulo": "ventas/routes",
+      "metodo": "GET",
+      "ruta": "/resumen-semanal",
+      "ruta_completa": "/api/ventas/resumen-semanal",
+      "proteccion": "Solo authenticateToken (sin roles específicos)"
+    },
+    {
+      "archivo": "dashboardPersonalRoutes.js",
+      "modulo": "ventas/routes",
+      "metodo": "GET",
+      "ruta": "/sectores-asesor/:asesor_id",
+      "ruta_completa": "/api/ventas/sectores-asesor/:asesor_id",
+      "proteccion": "Solo authenticateToken (sin roles específicos)"
+    },
+    {
+      "archivo": "dashboardEjecutivoRoutes.js",
+      "modulo": "ventas/routes",
+      "metodo": "GET",
+      "ruta": "/sectores-strategy",
+      "ruta_completa": "/api/ventas/sectores-strategy",
+      "proteccion": "Solo authenticateToken (sin roles específicos)"
+    },
+    {
+      "archivo": "postventaRoutes.js",
+      "modulo": "ventas/routes",
+      "metodo": "GET",
+      "ruta": "/seguimientos",
+      "ruta_completa": "/api/ventas/seguimientos",
+      "proteccion": "Solo authenticateToken (sin roles específicos)"
+    },
+    {
+      "archivo": "postventaRoutes.js",
+      "modulo": "ventas/routes",
+      "metodo": "GET",
+      "ruta": "/seguimientos/:id",
+      "ruta_completa": "/api/ventas/seguimientos/:id",
+      "proteccion": "Solo authenticateToken (sin roles específicos)"
+    },
+    {
+      "archivo": "postventaRoutes.js",
+      "modulo": "ventas/routes",
+      "metodo": "PUT",
+      "ruta": "/seguimientos/:id/ejecutar",
+      "ruta_completa": "/api/ventas/seguimientos/:id/ejecutar",
+      "proteccion": "Solo authenticateToken (sin roles específicos)"
+    },
+    {
+      "archivo": "postventaRoutes.js",
+      "modulo": "ventas/routes",
+      "metodo": "POST",
+      "ruta": "/seguimientos/:venta_id/programar",
+      "ruta_completa": "/api/ventas/seguimientos/:venta_id/programar",
+      "proteccion": "Solo authenticateToken (sin roles específicos)"
+    },
+    {
+      "archivo": "comisionesRoutes.js",
+      "modulo": "ventas/routes",
+      "metodo": "POST",
+      "ruta": "/simular-bono",
+      "ruta_completa": "/api/ventas/simular-bono",
+      "proteccion": "Solo authenticateToken (sin roles específicos)"
+    },
+    {
+      "archivo": "asesoresRoutes.js",
+      "modulo": "ventas/routes",
+      "metodo": "GET",
+      "ruta": "/supervisables",
+      "ruta_completa": "/api/ventas/supervisables",
+      "proteccion": "Solo authenticateToken (sin roles específicos)"
+    },
+    {
+      "archivo": "asesoresRoutes.js",
+      "modulo": "ventas/routes",
+      "metodo": "GET",
+      "ruta": "/validar-acceso/:asesor_id",
+      "ruta_completa": "/api/ventas/validar-acceso/:asesor_id",
+      "proteccion": "Solo authenticateToken (sin roles específicos)"
+    },
+    {
+      "archivo": "actividadRoutes.js",
+      "modulo": "ventas/routes",
+      "metodo": "GET",
+      "ruta": "/validar-checkin",
+      "ruta_completa": "/api/ventas/validar-checkin",
+      "proteccion": "Solo authenticateToken (sin roles específicos)"
+    },
+    {
+      "archivo": "actividadRoutes.js",
+      "modulo": "ventas/routes",
+      "metodo": "GET",
+      "ruta": "/validar-checkout",
+      "ruta_completa": "/api/ventas/validar-checkout",
+      "proteccion": "Solo authenticateToken (sin roles específicos)"
+    },
+    {
+      "archivo": "reportesRoutes.js",
+      "modulo": "ventas/routes",
+      "metodo": "GET",
+      "ruta": "/ventas/resumen",
+      "ruta_completa": "/api/ventas/ventas/resumen",
+      "proteccion": "Solo authenticateToken (sin roles específicos)"
+    },
+    {
+      "archivo": "dashboardEjecutivoRoutes.js",
+      "modulo": "ventas/routes",
+      "metodo": "GET",
+      "ruta": "/vista-unificada",
+      "ruta_completa": "/api/ventas/vista-unificada",
+      "proteccion": "Solo authenticateToken (sin roles específicos)"
+    }
+  ],
+  "roles_encontrados": [
+    "admin",
+    "supervisor"
+  ],
+  "resumen_por_modulo": {
+    "prospectos/routes": {
+      "total_rutas": 2,
+      "rutas_con_roles": [
+        {
+          "archivo": "prospectosRoutes.js",
+          "modulo": "prospectos/routes",
+          "metodo": "GET",
+          "ruta": "/cache/stats",
+          "roles": [
+            "admin",
+            "supervisor"
+          ],
+          "ruta_completa": "/api/prospectos/cache/stats"
+        },
+        {
+          "archivo": "prospectosRoutes.js",
+          "modulo": "prospectos/routes",
+          "metodo": "POST",
+          "ruta": "/cache/clear",
+          "roles": [
+            "admin"
+          ],
+          "ruta_completa": "/api/prospectos/cache/clear"
+        }
+      ],
+      "rutas_sin_roles": [],
+      "roles_utilizados": [
+        "admin",
+        "supervisor"
+      ]
+    },
+    "almacen/routes": {
+      "total_rutas": 38,
+      "rutas_con_roles": [],
+      "rutas_sin_roles": [
+        {
+          "archivo": "almacenRoutes.js",
+          "modulo": "almacen/routes",
+          "metodo": "GET",
+          "ruta": "/dashboard",
+          "ruta_completa": "/api/almacen/dashboard",
+          "proteccion": "Solo authenticateToken (sin roles específicos)"
+        },
+        {
+          "archivo": "almacenRoutes.js",
+          "modulo": "almacen/routes",
+          "metodo": "GET",
+          "ruta": "/inventario",
+          "ruta_completa": "/api/almacen/inventario",
+          "proteccion": "Solo authenticateToken (sin roles específicos)"
+        },
+        {
+          "archivo": "almacenRoutes.js",
+          "modulo": "almacen/routes",
+          "metodo": "GET",
+          "ruta": "/inventario/producto/:producto_id",
+          "ruta_completa": "/api/almacen/inventario/producto/:producto_id",
+          "proteccion": "Solo authenticateToken (sin roles específicos)"
+        },
+        {
+          "archivo": "almacenRoutes.js",
+          "modulo": "almacen/routes",
+          "metodo": "PUT",
+          "ruta": "/inventario/:producto_id/almacen/:almacen_id",
+          "ruta_completa": "/api/almacen/inventario/:producto_id/almacen/:almacen_id",
+          "proteccion": "Solo authenticateToken (sin roles específicos)"
+        },
+        {
+          "archivo": "almacenRoutes.js",
+          "modulo": "almacen/routes",
+          "metodo": "GET",
+          "ruta": "/movimientos",
+          "ruta_completa": "/api/almacen/movimientos",
+          "proteccion": "Solo authenticateToken (sin roles específicos)"
+        },
+        {
+          "archivo": "almacenRoutes.js",
+          "modulo": "almacen/routes",
+          "metodo": "GET",
+          "ruta": "/kardex/:producto_id",
+          "ruta_completa": "/api/almacen/kardex/:producto_id",
+          "proteccion": "Solo authenticateToken (sin roles específicos)"
+        },
+        {
+          "archivo": "almacenRoutes.js",
+          "modulo": "almacen/routes",
+          "metodo": "POST",
+          "ruta": "/transferencias",
+          "ruta_completa": "/api/almacen/transferencias",
+          "proteccion": "Solo authenticateToken (sin roles específicos)"
+        },
+        {
+          "archivo": "almacenRoutes.js",
+          "modulo": "almacen/routes",
+          "metodo": "GET",
+          "ruta": "/almacenes",
+          "ruta_completa": "/api/almacen/almacenes",
+          "proteccion": "Solo authenticateToken (sin roles específicos)"
+        },
+        {
+          "archivo": "almacenRoutes.js",
+          "modulo": "almacen/routes",
+          "metodo": "GET",
+          "ruta": "/alertas",
+          "ruta_completa": "/api/almacen/alertas",
+          "proteccion": "Solo authenticateToken (sin roles específicos)"
+        },
+        {
+          "archivo": "almacenRoutes.js",
+          "modulo": "almacen/routes",
+          "metodo": "PUT",
+          "ruta": "/alertas/:id/resolver",
+          "ruta_completa": "/api/almacen/alertas/:id/resolver",
+          "proteccion": "Solo authenticateToken (sin roles específicos)"
+        },
+        {
+          "archivo": "almacenRoutes.js",
+          "modulo": "almacen/routes",
+          "metodo": "GET",
+          "ruta": "/despachos",
+          "ruta_completa": "/api/almacen/despachos",
+          "proteccion": "Solo authenticateToken (sin roles específicos)"
+        },
+        {
+          "archivo": "almacenRoutes.js",
+          "modulo": "almacen/routes",
+          "metodo": "PUT",
+          "ruta": "/despachos/:id/estado",
+          "ruta_completa": "/api/almacen/despachos/:id/estado",
+          "proteccion": "Solo authenticateToken (sin roles específicos)"
+        },
+        {
+          "archivo": "almacenRoutes.js",
+          "modulo": "almacen/routes",
+          "metodo": "GET",
+          "ruta": "/despachos/:id",
+          "ruta_completa": "/api/almacen/despachos/:id",
+          "proteccion": "Solo authenticateToken (sin roles específicos)"
+        },
+        {
+          "archivo": "almacenRoutes.js",
+          "modulo": "almacen/routes",
+          "metodo": "GET",
+          "ruta": "/analisis/rotacion",
+          "ruta_completa": "/api/almacen/analisis/rotacion",
+          "proteccion": "Solo authenticateToken (sin roles específicos)"
+        },
+        {
+          "archivo": "almacenRoutes.js",
+          "modulo": "almacen/routes",
+          "metodo": "GET",
+          "ruta": "/analisis/eficiencia",
+          "ruta_completa": "/api/almacen/analisis/eficiencia",
+          "proteccion": "Solo authenticateToken (sin roles específicos)"
+        },
+        {
+          "archivo": "almacenRoutes.js",
+          "modulo": "almacen/routes",
+          "metodo": "GET",
+          "ruta": "/analisis/stock-seguridad",
+          "ruta_completa": "/api/almacen/analisis/stock-seguridad",
+          "proteccion": "Solo authenticateToken (sin roles específicos)"
+        },
+        {
+          "archivo": "almacenRoutes.js",
+          "modulo": "almacen/routes",
+          "metodo": "GET",
+          "ruta": "/analisis/mapa-calor",
+          "ruta_completa": "/api/almacen/analisis/mapa-calor",
+          "proteccion": "Solo authenticateToken (sin roles específicos)"
+        },
+        {
+          "archivo": "almacenRoutes.js",
+          "modulo": "almacen/routes",
+          "metodo": "GET",
+          "ruta": "/analisis/tendencias",
+          "ruta_completa": "/api/almacen/analisis/tendencias",
+          "proteccion": "Solo authenticateToken (sin roles específicos)"
+        },
+        {
+          "archivo": "almacenRoutes.js",
+          "modulo": "almacen/routes",
+          "metodo": "GET",
+          "ruta": "/analisis/consolidado",
+          "ruta_completa": "/api/almacen/analisis/consolidado",
+          "proteccion": "Solo authenticateToken (sin roles específicos)"
+        },
+        {
+          "archivo": "almacenRoutes.js",
+          "modulo": "almacen/routes",
+          "metodo": "GET",
+          "ruta": "/reportes/consolidado/:tipo_reporte",
+          "ruta_completa": "/api/almacen/reportes/consolidado/:tipo_reporte",
+          "proteccion": "Solo authenticateToken (sin roles específicos)"
+        },
+        {
+          "archivo": "almacenRoutes.js",
+          "modulo": "almacen/routes",
+          "metodo": "GET",
+          "ruta": "/reportes/kardex/:producto_id",
+          "ruta_completa": "/api/almacen/reportes/kardex/:producto_id",
+          "proteccion": "Solo authenticateToken (sin roles específicos)"
+        },
+        {
+          "archivo": "almacenRoutes.js",
+          "modulo": "almacen/routes",
+          "metodo": "GET",
+          "ruta": "/reportes/valorizacion",
+          "ruta_completa": "/api/almacen/reportes/valorizacion",
+          "proteccion": "Solo authenticateToken (sin roles específicos)"
+        },
+        {
+          "archivo": "almacenRoutes.js",
+          "modulo": "almacen/routes",
+          "metodo": "GET",
+          "ruta": "/reportes/stock-consolidado",
+          "ruta_completa": "/api/almacen/reportes/stock-consolidado",
+          "proteccion": "Solo authenticateToken (sin roles específicos)"
+        },
+        {
+          "archivo": "almacenRoutes.js",
+          "modulo": "almacen/routes",
+          "metodo": "GET",
+          "ruta": "/reportes/performance-comparativa",
+          "ruta_completa": "/api/almacen/reportes/performance-comparativa",
+          "proteccion": "Solo authenticateToken (sin roles específicos)"
+        },
+        {
+          "archivo": "almacenRoutes.js",
+          "modulo": "almacen/routes",
+          "metodo": "GET",
+          "ruta": "/reportes/analisis-predictivo",
+          "ruta_completa": "/api/almacen/reportes/analisis-predictivo",
+          "proteccion": "Solo authenticateToken (sin roles específicos)"
+        },
+        {
+          "archivo": "almacenRoutes.js",
+          "modulo": "almacen/routes",
+          "metodo": "GET",
+          "ruta": "/reportes/valorizacion-evolutiva",
+          "ruta_completa": "/api/almacen/reportes/valorizacion-evolutiva",
+          "proteccion": "Solo authenticateToken (sin roles específicos)"
+        },
+        {
+          "archivo": "almacenRoutes.js",
+          "modulo": "almacen/routes",
+          "metodo": "GET",
+          "ruta": "/reportes/kardex-inteligente",
+          "ruta_completa": "/api/almacen/reportes/kardex-inteligente",
+          "proteccion": "Solo authenticateToken (sin roles específicos)"
+        },
+        {
+          "archivo": "almacenRoutes.js",
+          "modulo": "almacen/routes",
+          "metodo": "GET",
+          "ruta": "/reportes/eficiencia-despachos",
+          "ruta_completa": "/api/almacen/reportes/eficiencia-despachos",
+          "proteccion": "Solo authenticateToken (sin roles específicos)"
+        },
+        {
+          "archivo": "almacenRoutes.js",
+          "modulo": "almacen/routes",
+          "metodo": "POST",
+          "ruta": "/query/ejecutar",
+          "ruta_completa": "/api/almacen/query/ejecutar",
+          "proteccion": "Solo authenticateToken (sin roles específicos)"
+        },
+        {
+          "archivo": "almacenRoutes.js",
+          "modulo": "almacen/routes",
+          "metodo": "GET",
+          "ruta": "/upload/plantilla",
+          "ruta_completa": "/api/almacen/upload/plantilla",
+          "proteccion": "Solo authenticateToken (sin roles específicos)"
+        },
+        {
+          "archivo": "almacenRoutes.js",
+          "modulo": "almacen/routes",
+          "metodo": "POST",
+          "ruta": "/upload/preview",
+          "ruta_completa": "/api/almacen/upload/preview",
+          "proteccion": "Solo authenticateToken (sin roles específicos)"
+        },
+        {
+          "archivo": "almacenRoutes.js",
+          "modulo": "almacen/routes",
+          "metodo": "POST",
+          "ruta": "/upload/ejecutar",
+          "ruta_completa": "/api/almacen/upload/ejecutar",
+          "proteccion": "Solo authenticateToken (sin roles específicos)"
+        },
+        {
+          "archivo": "almacenRoutes.js",
+          "modulo": "almacen/routes",
+          "metodo": "POST",
+          "ruta": "/verificar-stock",
+          "ruta_completa": "/api/almacen/verificar-stock",
+          "proteccion": "Solo authenticateToken (sin roles específicos)"
+        },
+        {
+          "archivo": "almacenRoutes.js",
+          "modulo": "almacen/routes",
+          "metodo": "POST",
+          "ruta": "/descontar-stock",
+          "ruta_completa": "/api/almacen/descontar-stock",
+          "proteccion": "Solo authenticateToken (sin roles específicos)"
+        },
+        {
+          "archivo": "almacenRoutes.js",
+          "modulo": "almacen/routes",
+          "metodo": "POST",
+          "ruta": "/despachos/desde-venta",
+          "ruta_completa": "/api/almacen/despachos/desde-venta",
+          "proteccion": "Solo authenticateToken (sin roles específicos)"
+        },
+        {
+          "archivo": "almacenRoutes.js",
+          "modulo": "almacen/routes",
+          "metodo": "POST",
+          "ruta": "/mantenimiento/generar-alertas",
+          "ruta_completa": "/api/almacen/mantenimiento/generar-alertas",
+          "proteccion": "Solo authenticateToken (sin roles específicos)"
+        },
+        {
+          "archivo": "almacenRoutes.js",
+          "modulo": "almacen/routes",
+          "metodo": "DELETE",
+          "ruta": "/mantenimiento/limpiar-alertas",
+          "ruta_completa": "/api/almacen/mantenimiento/limpiar-alertas",
+          "proteccion": "Solo authenticateToken (sin roles específicos)"
+        },
+        {
+          "archivo": "almacenRoutes.js",
+          "modulo": "almacen/routes",
+          "metodo": "GET",
+          "ruta": "/config",
+          "ruta_completa": "/api/almacen/config",
+          "proteccion": "Solo authenticateToken (sin roles específicos)"
+        }
+      ],
+      "roles_utilizados": []
+    },
+    "auth/routes": {
+      "total_rutas": 2,
+      "rutas_con_roles": [],
+      "rutas_sin_roles": [
+        {
+          "archivo": "authRoutes.js",
+          "modulo": "auth/routes",
+          "metodo": "GET",
+          "ruta": "/profile",
+          "ruta_completa": "/api/auth/profile",
+          "proteccion": "Solo authenticateToken (sin roles específicos)"
+        },
+        {
+          "archivo": "authRoutes.js",
+          "modulo": "auth/routes",
+          "metodo": "GET",
+          "ruta": "/me",
+          "ruta_completa": "/api/auth/me",
+          "proteccion": "Solo authenticateToken (sin roles específicos)"
+        }
+      ],
+      "roles_utilizados": []
+    },
+    "productos/routes": {
+      "total_rutas": 13,
+      "rutas_con_roles": [],
+      "rutas_sin_roles": [
+        {
+          "archivo": "productosRoutes.js",
+          "modulo": "productos/routes",
+          "metodo": "GET",
+          "ruta": "/",
+          "ruta_completa": "/api/productos/",
+          "proteccion": "Solo authenticateToken (sin roles específicos)"
+        },
+        {
+          "archivo": "productosRoutes.js",
+          "modulo": "productos/routes",
+          "metodo": "GET",
+          "ruta": "/dashboard",
+          "ruta_completa": "/api/productos/dashboard",
+          "proteccion": "Solo authenticateToken (sin roles específicos)"
+        },
+        {
+          "archivo": "productosRoutes.js",
+          "modulo": "productos/routes",
+          "metodo": "GET",
+          "ruta": "/categorias",
+          "ruta_completa": "/api/productos/categorias",
+          "proteccion": "Solo authenticateToken (sin roles específicos)"
+        },
+        {
+          "archivo": "productosRoutes.js",
+          "modulo": "productos/routes",
+          "metodo": "GET",
+          "ruta": "/lineas",
+          "ruta_completa": "/api/productos/lineas",
+          "proteccion": "Solo authenticateToken (sin roles específicos)"
+        },
+        {
+          "archivo": "productosRoutes.js",
+          "modulo": "productos/routes",
+          "metodo": "GET",
+          "ruta": "/:id",
+          "ruta_completa": "/api/productos/:id",
+          "proteccion": "Solo authenticateToken (sin roles específicos)"
+        },
+        {
+          "archivo": "productosRoutes.js",
+          "modulo": "productos/routes",
+          "metodo": "POST",
+          "ruta": "/",
+          "ruta_completa": "/api/productos/",
+          "proteccion": "Solo authenticateToken (sin roles específicos)"
+        },
+        {
+          "archivo": "productosRoutes.js",
+          "modulo": "productos/routes",
+          "metodo": "PUT",
+          "ruta": "/:id",
+          "ruta_completa": "/api/productos/:id",
+          "proteccion": "Solo authenticateToken (sin roles específicos)"
+        },
+        {
+          "archivo": "productosRoutes.js",
+          "modulo": "productos/routes",
+          "metodo": "DELETE",
+          "ruta": "/:id",
+          "ruta_completa": "/api/productos/:id",
+          "proteccion": "Solo authenticateToken (sin roles específicos)"
+        },
+        {
+          "archivo": "productosRoutes.js",
+          "modulo": "productos/routes",
+          "metodo": "POST",
+          "ruta": "/upload/preview",
+          "ruta_completa": "/api/productos/upload/preview",
+          "proteccion": "Solo authenticateToken (sin roles específicos)"
+        },
+        {
+          "archivo": "productosRoutes.js",
+          "modulo": "productos/routes",
+          "metodo": "POST",
+          "ruta": "/upload/masivo",
+          "ruta_completa": "/api/productos/upload/masivo",
+          "proteccion": "Solo authenticateToken (sin roles específicos)"
+        },
+        {
+          "archivo": "productosRoutes.js",
+          "modulo": "productos/routes",
+          "metodo": "POST",
+          "ruta": "/buscar-codigo",
+          "ruta_completa": "/api/productos/buscar-codigo",
+          "proteccion": "Solo authenticateToken (sin roles específicos)"
+        },
+        {
+          "archivo": "productosRoutes.js",
+          "modulo": "productos/routes",
+          "metodo": "GET",
+          "ruta": "/plantilla/premium",
+          "ruta_completa": "/api/productos/plantilla/premium",
+          "proteccion": "Solo authenticateToken (sin roles específicos)"
+        },
+        {
+          "archivo": "productosRoutes.js",
+          "modulo": "productos/routes",
+          "metodo": "GET",
+          "ruta": "/stats",
+          "ruta_completa": "/api/productos/stats",
+          "proteccion": "Solo authenticateToken (sin roles específicos)"
+        }
+      ],
+      "roles_utilizados": []
+    },
+    "usuarios/routes": {
+      "total_rutas": 8,
+      "rutas_con_roles": [],
+      "rutas_sin_roles": [
+        {
+          "archivo": "usuariosRoutes.js",
+          "modulo": "usuarios/routes",
+          "metodo": "GET",
+          "ruta": "/roles",
+          "ruta_completa": "/api/usuarios/roles",
+          "proteccion": "Solo authenticateToken (sin roles específicos)"
+        },
+        {
+          "archivo": "usuariosRoutes.js",
+          "modulo": "usuarios/routes",
+          "metodo": "GET",
+          "ruta": "/areas",
+          "ruta_completa": "/api/usuarios/areas",
+          "proteccion": "Solo authenticateToken (sin roles específicos)"
+        },
+        {
+          "archivo": "usuariosRoutes.js",
+          "modulo": "usuarios/routes",
+          "metodo": "GET",
+          "ruta": "/",
+          "ruta_completa": "/api/usuarios/",
+          "proteccion": "Solo authenticateToken (sin roles específicos)"
+        },
+        {
+          "archivo": "usuariosRoutes.js",
+          "modulo": "usuarios/routes",
+          "metodo": "GET",
+          "ruta": "/:id",
+          "ruta_completa": "/api/usuarios/:id",
+          "proteccion": "Solo authenticateToken (sin roles específicos)"
+        },
+        {
+          "archivo": "usuariosRoutes.js",
+          "modulo": "usuarios/routes",
+          "metodo": "POST",
+          "ruta": "/",
+          "ruta_completa": "/api/usuarios/",
+          "proteccion": "Solo authenticateToken (sin roles específicos)"
+        },
+        {
+          "archivo": "usuariosRoutes.js",
+          "modulo": "usuarios/routes",
+          "metodo": "PUT",
+          "ruta": "/:id",
+          "ruta_completa": "/api/usuarios/:id",
+          "proteccion": "Solo authenticateToken (sin roles específicos)"
+        },
+        {
+          "archivo": "usuariosRoutes.js",
+          "modulo": "usuarios/routes",
+          "metodo": "PUT",
+          "ruta": "/:id/password",
+          "ruta_completa": "/api/usuarios/:id/password",
+          "proteccion": "Solo authenticateToken (sin roles específicos)"
+        },
+        {
+          "archivo": "usuariosRoutes.js",
+          "modulo": "usuarios/routes",
+          "metodo": "DELETE",
+          "ruta": "/:id",
+          "ruta_completa": "/api/usuarios/:id",
+          "proteccion": "Solo authenticateToken (sin roles específicos)"
+        }
+      ],
+      "roles_utilizados": []
+    },
+    "ventas/routes": {
+      "total_rutas": 99,
+      "rutas_con_roles": [],
+      "rutas_sin_roles": [
+        {
+          "archivo": "actividadRoutes.js",
+          "modulo": "ventas/routes",
+          "metodo": "POST",
+          "ruta": "/check-in",
+          "ruta_completa": "/api/ventas/check-in",
+          "proteccion": "Solo authenticateToken (sin roles específicos)"
+        },
+        {
+          "archivo": "actividadRoutes.js",
+          "modulo": "ventas/routes",
+          "metodo": "POST",
+          "ruta": "/check-out",
+          "ruta_completa": "/api/ventas/check-out",
+          "proteccion": "Solo authenticateToken (sin roles específicos)"
+        },
+        {
+          "archivo": "actividadRoutes.js",
+          "modulo": "ventas/routes",
+          "metodo": "GET",
+          "ruta": "/estado-hoy",
+          "ruta_completa": "/api/ventas/estado-hoy",
+          "proteccion": "Solo authenticateToken (sin roles específicos)"
+        },
+        {
+          "archivo": "actividadRoutes.js",
+          "modulo": "ventas/routes",
+          "metodo": "GET",
+          "ruta": "/",
+          "ruta_completa": "/api/ventas/",
+          "proteccion": "Solo authenticateToken (sin roles específicos)"
+        },
+        {
+          "archivo": "actividadRoutes.js",
+          "modulo": "ventas/routes",
+          "metodo": "GET",
+          "ruta": "/dashboard",
+          "ruta_completa": "/api/ventas/dashboard",
+          "proteccion": "Solo authenticateToken (sin roles específicos)"
+        },
+        {
+          "archivo": "actividadRoutes.js",
+          "modulo": "ventas/routes",
+          "metodo": "GET",
+          "ruta": "/historial",
+          "ruta_completa": "/api/ventas/historial",
+          "proteccion": "Solo authenticateToken (sin roles específicos)"
+        },
+        {
+          "archivo": "actividadRoutes.js",
+          "modulo": "ventas/routes",
+          "metodo": "GET",
+          "ruta": "/estadisticas-rapidas",
+          "ruta_completa": "/api/ventas/estadisticas-rapidas",
+          "proteccion": "Solo authenticateToken (sin roles específicos)"
+        },
+        {
+          "archivo": "actividadRoutes.js",
+          "modulo": "ventas/routes",
+          "metodo": "GET",
+          "ruta": "/resumen-semanal",
+          "ruta_completa": "/api/ventas/resumen-semanal",
+          "proteccion": "Solo authenticateToken (sin roles específicos)"
+        },
+        {
+          "archivo": "actividadRoutes.js",
+          "modulo": "ventas/routes",
+          "metodo": "GET",
+          "ruta": "/datos-graficos",
+          "ruta_completa": "/api/ventas/datos-graficos",
+          "proteccion": "Solo authenticateToken (sin roles específicos)"
+        },
+        {
+          "archivo": "actividadRoutes.js",
+          "modulo": "ventas/routes",
+          "metodo": "GET",
+          "ruta": "/validar-checkin",
+          "ruta_completa": "/api/ventas/validar-checkin",
+          "proteccion": "Solo authenticateToken (sin roles específicos)"
+        },
+        {
+          "archivo": "actividadRoutes.js",
+          "modulo": "ventas/routes",
+          "metodo": "GET",
+          "ruta": "/validar-checkout",
+          "ruta_completa": "/api/ventas/validar-checkout",
+          "proteccion": "Solo authenticateToken (sin roles específicos)"
+        },
+        {
+          "archivo": "actividadRoutes.js",
+          "modulo": "ventas/routes",
+          "metodo": "GET",
+          "ruta": "/configuracion",
+          "ruta_completa": "/api/ventas/configuracion",
+          "proteccion": "Solo authenticateToken (sin roles específicos)"
+        },
+        {
+          "archivo": "actividadRoutes.js",
+          "modulo": "ventas/routes",
+          "metodo": "GET",
+          "ruta": "/actividad-completa/:usuario_id",
+          "ruta_completa": "/api/ventas/actividad-completa/:usuario_id",
+          "proteccion": "Solo authenticateToken (sin roles específicos)"
+        },
+        {
+          "archivo": "actividadRoutes.js",
+          "modulo": "ventas/routes",
+          "metodo": "GET",
+          "ruta": "/metricas-empresariales/:usuario_id",
+          "ruta_completa": "/api/ventas/metricas-empresariales/:usuario_id",
+          "proteccion": "Solo authenticateToken (sin roles específicos)"
+        },
+        {
+          "archivo": "actividadRoutes.js",
+          "modulo": "ventas/routes",
+          "metodo": "POST",
+          "ruta": "/dashboard-equipo",
+          "ruta_completa": "/api/ventas/dashboard-equipo",
+          "proteccion": "Solo authenticateToken (sin roles específicos)"
+        },
+        {
+          "archivo": "actividadRoutes.js",
+          "modulo": "ventas/routes",
+          "metodo": "GET",
+          "ruta": "/info",
+          "ruta_completa": "/api/ventas/info",
+          "proteccion": "Solo authenticateToken (sin roles específicos)"
+        },
+        {
+          "archivo": "asesoresRoutes.js",
+          "modulo": "ventas/routes",
+          "metodo": "GET",
+          "ruta": "/supervisables",
+          "ruta_completa": "/api/ventas/supervisables",
+          "proteccion": "Solo authenticateToken (sin roles específicos)"
+        },
+        {
+          "archivo": "asesoresRoutes.js",
+          "modulo": "ventas/routes",
+          "metodo": "GET",
+          "ruta": "/validar-acceso/:asesor_id",
+          "ruta_completa": "/api/ventas/validar-acceso/:asesor_id",
+          "proteccion": "Solo authenticateToken (sin roles específicos)"
+        },
+        {
+          "archivo": "campanasRoutes.js",
+          "modulo": "ventas/routes",
+          "metodo": "GET",
+          "ruta": "/activas",
+          "ruta_completa": "/api/ventas/activas",
+          "proteccion": "Solo authenticateToken (sin roles específicos)"
+        },
+        {
+          "archivo": "campanasRoutes.js",
+          "modulo": "ventas/routes",
+          "metodo": "POST",
+          "ruta": "/",
+          "ruta_completa": "/api/ventas/",
+          "proteccion": "Solo authenticateToken (sin roles específicos)"
+        },
+        {
+          "archivo": "campanasRoutes.js",
+          "modulo": "ventas/routes",
+          "metodo": "GET",
+          "ruta": "/:campana_id/progreso",
+          "ruta_completa": "/api/ventas/:campana_id/progreso",
+          "proteccion": "Solo authenticateToken (sin roles específicos)"
+        },
+        {
+          "archivo": "comisionesRoutes.js",
+          "modulo": "ventas/routes",
+          "metodo": "GET",
+          "ruta": "/bono-actual/:asesor_id",
+          "ruta_completa": "/api/ventas/bono-actual/:asesor_id",
+          "proteccion": "Solo authenticateToken (sin roles específicos)"
+        },
+        {
+          "archivo": "comisionesRoutes.js",
+          "modulo": "ventas/routes",
+          "metodo": "GET",
+          "ruta": "/dashboard-equipo",
+          "ruta_completa": "/api/ventas/dashboard-equipo",
+          "proteccion": "Solo authenticateToken (sin roles específicos)"
+        },
+        {
+          "archivo": "comisionesRoutes.js",
+          "modulo": "ventas/routes",
+          "metodo": "GET",
+          "ruta": "/configuracion-bonos",
+          "ruta_completa": "/api/ventas/configuracion-bonos",
+          "proteccion": "Solo authenticateToken (sin roles específicos)"
+        },
+        {
+          "archivo": "comisionesRoutes.js",
+          "modulo": "ventas/routes",
+          "metodo": "POST",
+          "ruta": "/simular-bono",
+          "ruta_completa": "/api/ventas/simular-bono",
+          "proteccion": "Solo authenticateToken (sin roles específicos)"
+        },
+        {
+          "archivo": "comisionesRoutes.js",
+          "modulo": "ventas/routes",
+          "metodo": "GET",
+          "ruta": "/",
+          "ruta_completa": "/api/ventas/",
+          "proteccion": "Solo authenticateToken (sin roles específicos)"
+        },
+        {
+          "archivo": "comisionesRoutes.js",
+          "modulo": "ventas/routes",
+          "metodo": "GET",
+          "ruta": "/dashboard/:asesor_id",
+          "ruta_completa": "/api/ventas/dashboard/:asesor_id",
+          "proteccion": "Solo authenticateToken (sin roles específicos)"
+        },
+        {
+          "archivo": "dashboardEjecutivoRoutes.js",
+          "modulo": "ventas/routes",
+          "metodo": "GET",
+          "ruta": "/vista-unificada",
+          "ruta_completa": "/api/ventas/vista-unificada",
+          "proteccion": "Solo authenticateToken (sin roles específicos)"
+        },
+        {
+          "archivo": "dashboardEjecutivoRoutes.js",
+          "modulo": "ventas/routes",
+          "metodo": "GET",
+          "ruta": "/metas-avanzado",
+          "ruta_completa": "/api/ventas/metas-avanzado",
+          "proteccion": "Solo authenticateToken (sin roles específicos)"
+        },
+        {
+          "archivo": "dashboardEjecutivoRoutes.js",
+          "modulo": "ventas/routes",
+          "metodo": "GET",
+          "ruta": "/sectores-strategy",
+          "ruta_completa": "/api/ventas/sectores-strategy",
+          "proteccion": "Solo authenticateToken (sin roles específicos)"
+        },
+        {
+          "archivo": "dashboardEjecutivoRoutes.js",
+          "modulo": "ventas/routes",
+          "metodo": "GET",
+          "ruta": "/abc-productos",
+          "ruta_completa": "/api/ventas/abc-productos",
+          "proteccion": "Solo authenticateToken (sin roles específicos)"
+        },
+        {
+          "archivo": "dashboardEjecutivoRoutes.js",
+          "modulo": "ventas/routes",
+          "metodo": "GET",
+          "ruta": "/analisis-geografico",
+          "ruta_completa": "/api/ventas/analisis-geografico",
+          "proteccion": "Solo authenticateToken (sin roles específicos)"
+        },
+        {
+          "archivo": "dashboardEjecutivoRoutes.js",
+          "modulo": "ventas/routes",
+          "metodo": "GET",
+          "ruta": "/",
+          "ruta_completa": "/api/ventas/",
+          "proteccion": "Solo authenticateToken (sin roles específicos)"
+        },
+        {
+          "archivo": "dashboardPersonalRoutes.js",
+          "modulo": "ventas/routes",
+          "metodo": "GET",
+          "ruta": "/personal/:asesor_id",
+          "ruta_completa": "/api/ventas/personal/:asesor_id",
+          "proteccion": "Solo authenticateToken (sin roles específicos)"
+        },
+        {
+          "archivo": "dashboardPersonalRoutes.js",
+          "modulo": "ventas/routes",
+          "metodo": "GET",
+          "ruta": "/geografia-asesor/:asesor_id",
+          "ruta_completa": "/api/ventas/geografia-asesor/:asesor_id",
+          "proteccion": "Solo authenticateToken (sin roles específicos)"
+        },
+        {
+          "archivo": "dashboardPersonalRoutes.js",
+          "modulo": "ventas/routes",
+          "metodo": "GET",
+          "ruta": "/sectores-asesor/:asesor_id",
+          "ruta_completa": "/api/ventas/sectores-asesor/:asesor_id",
+          "proteccion": "Solo authenticateToken (sin roles específicos)"
+        },
+        {
+          "archivo": "dashboardPersonalRoutes.js",
+          "modulo": "ventas/routes",
+          "metodo": "GET",
+          "ruta": "/evolucion-asesor/:asesor_id",
+          "ruta_completa": "/api/ventas/evolucion-asesor/:asesor_id",
+          "proteccion": "Solo authenticateToken (sin roles específicos)"
+        },
+        {
+          "archivo": "dashboardPersonalRoutes.js",
+          "modulo": "ventas/routes",
+          "metodo": "GET",
+          "ruta": "/ranking-asesor/:asesor_id",
+          "ruta_completa": "/api/ventas/ranking-asesor/:asesor_id",
+          "proteccion": "Solo authenticateToken (sin roles específicos)"
+        },
+        {
+          "archivo": "dashboardPersonalRoutes.js",
+          "modulo": "ventas/routes",
+          "metodo": "GET",
+          "ruta": "/asesores-disponibles",
+          "ruta_completa": "/api/ventas/asesores-disponibles",
+          "proteccion": "Solo authenticateToken (sin roles específicos)"
+        },
+        {
+          "archivo": "dashboardPersonalRoutes.js",
+          "modulo": "ventas/routes",
+          "metodo": "GET",
+          "ruta": "/periodos-disponibles/:asesor_id",
+          "ruta_completa": "/api/ventas/periodos-disponibles/:asesor_id",
+          "proteccion": "Solo authenticateToken (sin roles específicos)"
+        },
+        {
+          "archivo": "dashboardPersonalRoutes.js",
+          "modulo": "ventas/routes",
+          "metodo": "GET",
+          "ruta": "/",
+          "ruta_completa": "/api/ventas/",
+          "proteccion": "Solo authenticateToken (sin roles específicos)"
+        },
+        {
+          "archivo": "dashboardsRoutes.js",
+          "modulo": "ventas/routes",
+          "metodo": "GET",
+          "ruta": "/maestro",
+          "ruta_completa": "/api/ventas/maestro",
+          "proteccion": "Solo authenticateToken (sin roles específicos)"
+        },
+        {
+          "archivo": "dashboardsRoutes.js",
+          "modulo": "ventas/routes",
+          "metodo": "GET",
+          "ruta": "/geografico",
+          "ruta_completa": "/api/ventas/geografico",
+          "proteccion": "Solo authenticateToken (sin roles específicos)"
+        },
+        {
+          "archivo": "dashboardsRoutes.js",
+          "modulo": "ventas/routes",
+          "metodo": "GET",
+          "ruta": "/abc-productos",
+          "ruta_completa": "/api/ventas/abc-productos",
+          "proteccion": "Solo authenticateToken (sin roles específicos)"
+        },
+        {
+          "archivo": "dashboardsRoutes.js",
+          "modulo": "ventas/routes",
+          "metodo": "GET",
+          "ruta": "/",
+          "ruta_completa": "/api/ventas/",
+          "proteccion": "Solo authenticateToken (sin roles específicos)"
+        },
+        {
+          "archivo": "postventaRoutes.js",
+          "modulo": "ventas/routes",
+          "metodo": "POST",
+          "ruta": "/seguimientos/:venta_id/programar",
+          "ruta_completa": "/api/ventas/seguimientos/:venta_id/programar",
+          "proteccion": "Solo authenticateToken (sin roles específicos)"
+        },
+        {
+          "archivo": "postventaRoutes.js",
+          "modulo": "ventas/routes",
+          "metodo": "GET",
+          "ruta": "/seguimientos",
+          "ruta_completa": "/api/ventas/seguimientos",
+          "proteccion": "Solo authenticateToken (sin roles específicos)"
+        },
+        {
+          "archivo": "postventaRoutes.js",
+          "modulo": "ventas/routes",
+          "metodo": "PUT",
+          "ruta": "/seguimientos/:id/ejecutar",
+          "ruta_completa": "/api/ventas/seguimientos/:id/ejecutar",
+          "proteccion": "Solo authenticateToken (sin roles específicos)"
+        },
+        {
+          "archivo": "postventaRoutes.js",
+          "modulo": "ventas/routes",
+          "metodo": "GET",
+          "ruta": "/seguimientos/:id",
+          "ruta_completa": "/api/ventas/seguimientos/:id",
+          "proteccion": "Solo authenticateToken (sin roles específicos)"
+        },
+        {
+          "archivo": "postventaRoutes.js",
+          "modulo": "ventas/routes",
+          "metodo": "GET",
+          "ruta": "/dashboard",
+          "ruta_completa": "/api/ventas/dashboard",
+          "proteccion": "Solo authenticateToken (sin roles específicos)"
+        },
+        {
+          "archivo": "postventaRoutes.js",
+          "modulo": "ventas/routes",
+          "metodo": "GET",
+          "ruta": "/dashboard/asesor/:asesor_id",
+          "ruta_completa": "/api/ventas/dashboard/asesor/:asesor_id",
+          "proteccion": "Solo authenticateToken (sin roles específicos)"
+        },
+        {
+          "archivo": "postventaRoutes.js",
+          "modulo": "ventas/routes",
+          "metodo": "POST",
+          "ruta": "/encuesta",
+          "ruta_completa": "/api/ventas/encuesta",
+          "proteccion": "Solo authenticateToken (sin roles específicos)"
+        },
+        {
+          "archivo": "postventaRoutes.js",
+          "modulo": "ventas/routes",
+          "metodo": "GET",
+          "ruta": "/configuracion/tipos-seguimiento",
+          "ruta_completa": "/api/ventas/configuracion/tipos-seguimiento",
+          "proteccion": "Solo authenticateToken (sin roles específicos)"
+        },
+        {
+          "archivo": "postventaRoutes.js",
+          "modulo": "ventas/routes",
+          "metodo": "GET",
+          "ruta": "/",
+          "ruta_completa": "/api/ventas/",
+          "proteccion": "Solo authenticateToken (sin roles específicos)"
+        },
+        {
+          "archivo": "reportesRoutes.js",
+          "modulo": "ventas/routes",
+          "metodo": "GET",
+          "ruta": "/dashboard/asesor/:asesor_id",
+          "ruta_completa": "/api/ventas/dashboard/asesor/:asesor_id",
+          "proteccion": "Solo authenticateToken (sin roles específicos)"
+        },
+        {
+          "archivo": "reportesRoutes.js",
+          "modulo": "ventas/routes",
+          "metodo": "GET",
+          "ruta": "/ventas/resumen",
+          "ruta_completa": "/api/ventas/ventas/resumen",
+          "proteccion": "Solo authenticateToken (sin roles específicos)"
+        },
+        {
+          "archivo": "reportesRoutes.js",
+          "modulo": "ventas/routes",
+          "metodo": "POST",
+          "ruta": "/exportar/excel",
+          "ruta_completa": "/api/ventas/exportar/excel",
+          "proteccion": "Solo authenticateToken (sin roles específicos)"
+        },
+        {
+          "archivo": "reportesRoutes.js",
+          "modulo": "ventas/routes",
+          "metodo": "POST",
+          "ruta": "/exportar/pdf",
+          "ruta_completa": "/api/ventas/exportar/pdf",
+          "proteccion": "Solo authenticateToken (sin roles específicos)"
+        },
+        {
+          "archivo": "reportesRoutes.js",
+          "modulo": "ventas/routes",
+          "metodo": "POST",
+          "ruta": "/exportar/csv",
+          "ruta_completa": "/api/ventas/exportar/csv",
+          "proteccion": "Solo authenticateToken (sin roles específicos)"
+        },
+        {
+          "archivo": "reportesRoutes.js",
+          "modulo": "ventas/routes",
+          "metodo": "PUT",
+          "ruta": "/programados/:id",
+          "ruta_completa": "/api/ventas/programados/:id",
+          "proteccion": "Solo authenticateToken (sin roles específicos)"
+        },
+        {
+          "archivo": "reportesRoutes.js",
+          "modulo": "ventas/routes",
+          "metodo": "DELETE",
+          "ruta": "/programados/:id",
+          "ruta_completa": "/api/ventas/programados/:id",
+          "proteccion": "Solo authenticateToken (sin roles específicos)"
+        },
+        {
+          "archivo": "reportesRoutes.js",
+          "modulo": "ventas/routes",
+          "metodo": "GET",
+          "ruta": "/plantillas",
+          "ruta_completa": "/api/ventas/plantillas",
+          "proteccion": "Solo authenticateToken (sin roles específicos)"
+        },
+        {
+          "archivo": "ventasRoutes.js",
+          "modulo": "ventas/routes",
+          "metodo": "POST",
+          "ruta": "/proximos-correlativos",
+          "ruta_completa": "/api/ventas/proximos-correlativos",
+          "proteccion": "Solo authenticateToken (sin roles específicos)"
+        },
+        {
+          "archivo": "ventasRoutes.js",
+          "modulo": "ventas/routes",
+          "metodo": "GET",
+          "ruta": "/disponibilidad-correlativos/:year",
+          "ruta_completa": "/api/ventas/disponibilidad-correlativos/:year",
+          "proteccion": "Solo authenticateToken (sin roles específicos)"
+        },
+        {
+          "archivo": "ventasRoutes.js",
+          "modulo": "ventas/routes",
+          "metodo": "GET",
+          "ruta": "/estadisticas-correlativos/:asesor_id",
+          "ruta_completa": "/api/ventas/estadisticas-correlativos/:asesor_id",
+          "proteccion": "Solo authenticateToken (sin roles específicos)"
+        },
+        {
+          "archivo": "ventasRoutes.js",
+          "modulo": "ventas/routes",
+          "metodo": "GET",
+          "ruta": "/dashboard",
+          "ruta_completa": "/api/ventas/dashboard",
+          "proteccion": "Solo authenticateToken (sin roles específicos)"
+        },
+        {
+          "archivo": "ventasRoutes.js",
+          "modulo": "ventas/routes",
+          "metodo": "GET",
+          "ruta": "/dashboard/equipo",
+          "ruta_completa": "/api/ventas/dashboard/equipo",
+          "proteccion": "Solo authenticateToken (sin roles específicos)"
+        },
+        {
+          "archivo": "ventasRoutes.js",
+          "modulo": "ventas/routes",
+          "metodo": "GET",
+          "ruta": "/estadisticas-asesor/:id",
+          "ruta_completa": "/api/ventas/estadisticas-asesor/:id",
+          "proteccion": "Solo authenticateToken (sin roles específicos)"
+        },
+        {
+          "archivo": "ventasRoutes.js",
+          "modulo": "ventas/routes",
+          "metodo": "GET",
+          "ruta": "/metricas-asesor/:id",
+          "ruta_completa": "/api/ventas/metricas-asesor/:id",
+          "proteccion": "Solo authenticateToken (sin roles específicos)"
+        },
+        {
+          "archivo": "ventasRoutes.js",
+          "modulo": "ventas/routes",
+          "metodo": "GET",
+          "ruta": "/estadisticas",
+          "ruta_completa": "/api/ventas/estadisticas",
+          "proteccion": "Solo authenticateToken (sin roles específicos)"
+        },
+        {
+          "archivo": "ventasRoutes.js",
+          "modulo": "ventas/routes",
+          "metodo": "GET",
+          "ruta": "/analisis-conversiones",
+          "ruta_completa": "/api/ventas/analisis-conversiones",
+          "proteccion": "Solo authenticateToken (sin roles específicos)"
+        },
+        {
+          "archivo": "ventasRoutes.js",
+          "modulo": "ventas/routes",
+          "metodo": "GET",
+          "ruta": "/prospectos-listos",
+          "ruta_completa": "/api/ventas/prospectos-listos",
+          "proteccion": "Solo authenticateToken (sin roles específicos)"
+        },
+        {
+          "archivo": "ventasRoutes.js",
+          "modulo": "ventas/routes",
+          "metodo": "GET",
+          "ruta": "/reportes/pipeline",
+          "ruta_completa": "/api/ventas/reportes/pipeline",
+          "proteccion": "Solo authenticateToken (sin roles específicos)"
+        },
+        {
+          "archivo": "ventasRoutes.js",
+          "modulo": "ventas/routes",
+          "metodo": "GET",
+          "ruta": "/reportes/dashboard",
+          "ruta_completa": "/api/ventas/reportes/dashboard",
+          "proteccion": "Solo authenticateToken (sin roles específicos)"
+        },
+        {
+          "archivo": "ventasRoutes.js",
+          "modulo": "ventas/routes",
+          "metodo": "GET",
+          "ruta": "/reportes/resumen",
+          "ruta_completa": "/api/ventas/reportes/resumen",
+          "proteccion": "Solo authenticateToken (sin roles específicos)"
+        },
+        {
+          "archivo": "ventasRoutes.js",
+          "modulo": "ventas/routes",
+          "metodo": "GET",
+          "ruta": "/reportes/productos-top",
+          "ruta_completa": "/api/ventas/reportes/productos-top",
+          "proteccion": "Solo authenticateToken (sin roles específicos)"
+        },
+        {
+          "archivo": "ventasRoutes.js",
+          "modulo": "ventas/routes",
+          "metodo": "GET",
+          "ruta": "/buscar/:termino",
+          "ruta_completa": "/api/ventas/buscar/:termino",
+          "proteccion": "Solo authenticateToken (sin roles específicos)"
+        },
+        {
+          "archivo": "ventasRoutes.js",
+          "modulo": "ventas/routes",
+          "metodo": "POST",
+          "ruta": "/busqueda-avanzada",
+          "ruta_completa": "/api/ventas/busqueda-avanzada",
+          "proteccion": "Solo authenticateToken (sin roles específicos)"
+        },
+        {
+          "archivo": "ventasRoutes.js",
+          "modulo": "ventas/routes",
+          "metodo": "POST",
+          "ruta": "/convertir-prospecto/:prospecto_id",
+          "ruta_completa": "/api/ventas/convertir-prospecto/:prospecto_id",
+          "proteccion": "Solo authenticateToken (sin roles específicos)"
+        },
+        {
+          "archivo": "ventasRoutes.js",
+          "modulo": "ventas/routes",
+          "metodo": "POST",
+          "ruta": "/conversion-masiva",
+          "ruta_completa": "/api/ventas/conversion-masiva",
+          "proteccion": "Solo authenticateToken (sin roles específicos)"
+        },
+        {
+          "archivo": "ventasRoutes.js",
+          "modulo": "ventas/routes",
+          "metodo": "POST",
+          "ruta": "/clientes",
+          "ruta_completa": "/api/ventas/clientes",
+          "proteccion": "Solo authenticateToken (sin roles específicos)"
+        },
+        {
+          "archivo": "ventasRoutes.js",
+          "modulo": "ventas/routes",
+          "metodo": "GET",
+          "ruta": "/clientes/estadisticas",
+          "ruta_completa": "/api/ventas/clientes/estadisticas",
+          "proteccion": "Solo authenticateToken (sin roles específicos)"
+        },
+        {
+          "archivo": "ventasRoutes.js",
+          "modulo": "ventas/routes",
+          "metodo": "GET",
+          "ruta": "/clientes/autocomplete",
+          "ruta_completa": "/api/ventas/clientes/autocomplete",
+          "proteccion": "Solo authenticateToken (sin roles específicos)"
+        },
+        {
+          "archivo": "ventasRoutes.js",
+          "modulo": "ventas/routes",
+          "metodo": "GET",
+          "ruta": "/clientes/buscar/:documento",
+          "ruta_completa": "/api/ventas/clientes/buscar/:documento",
+          "proteccion": "Solo authenticateToken (sin roles específicos)"
+        },
+        {
+          "archivo": "ventasRoutes.js",
+          "modulo": "ventas/routes",
+          "metodo": "GET",
+          "ruta": "/clientes/:id",
+          "ruta_completa": "/api/ventas/clientes/:id",
+          "proteccion": "Solo authenticateToken (sin roles específicos)"
+        },
+        {
+          "archivo": "ventasRoutes.js",
+          "modulo": "ventas/routes",
+          "metodo": "PUT",
+          "ruta": "/clientes/:id",
+          "ruta_completa": "/api/ventas/clientes/:id",
+          "proteccion": "Solo authenticateToken (sin roles específicos)"
+        },
+        {
+          "archivo": "ventasRoutes.js",
+          "modulo": "ventas/routes",
+          "metodo": "DELETE",
+          "ruta": "/clientes/:id",
+          "ruta_completa": "/api/ventas/clientes/:id",
+          "proteccion": "Solo authenticateToken (sin roles específicos)"
+        },
+        {
+          "archivo": "ventasRoutes.js",
+          "modulo": "ventas/routes",
+          "metodo": "GET",
+          "ruta": "/asesores",
+          "ruta_completa": "/api/ventas/asesores",
+          "proteccion": "Solo authenticateToken (sin roles específicos)"
+        },
+        {
+          "archivo": "ventasRoutes.js",
+          "modulo": "ventas/routes",
+          "metodo": "GET",
+          "ruta": "/exportar",
+          "ruta_completa": "/api/ventas/exportar",
+          "proteccion": "Solo authenticateToken (sin roles específicos)"
+        },
+        {
+          "archivo": "ventasRoutes.js",
+          "modulo": "ventas/routes",
+          "metodo": "GET",
+          "ruta": "/",
+          "ruta_completa": "/api/ventas/",
+          "proteccion": "Solo authenticateToken (sin roles específicos)"
+        },
+        {
+          "archivo": "ventasRoutes.js",
+          "modulo": "ventas/routes",
+          "metodo": "POST",
+          "ruta": "/",
+          "ruta_completa": "/api/ventas/",
+          "proteccion": "Solo authenticateToken (sin roles específicos)"
+        },
+        {
+          "archivo": "ventasRoutes.js",
+          "modulo": "ventas/routes",
+          "metodo": "GET",
+          "ruta": "/:id",
+          "ruta_completa": "/api/ventas/:id",
+          "proteccion": "Solo authenticateToken (sin roles específicos)"
+        },
+        {
+          "archivo": "ventasRoutes.js",
+          "modulo": "ventas/routes",
+          "metodo": "PUT",
+          "ruta": "/:id",
+          "ruta_completa": "/api/ventas/:id",
+          "proteccion": "Solo authenticateToken (sin roles específicos)"
+        },
+        {
+          "archivo": "ventasRoutes.js",
+          "modulo": "ventas/routes",
+          "metodo": "DELETE",
+          "ruta": "/:id",
+          "ruta_completa": "/api/ventas/:id",
+          "proteccion": "Solo authenticateToken (sin roles específicos)"
+        },
+        {
+          "archivo": "ventasRoutes.js",
+          "modulo": "ventas/routes",
+          "metodo": "PUT",
+          "ruta": "/:id/estado",
+          "ruta_completa": "/api/ventas/:id/estado",
+          "proteccion": "Solo authenticateToken (sin roles específicos)"
+        },
+        {
+          "archivo": "ventasRoutes.js",
+          "modulo": "ventas/routes",
+          "metodo": "PUT",
+          "ruta": "/:id/fase",
+          "ruta_completa": "/api/ventas/:id/fase",
+          "proteccion": "Solo authenticateToken (sin roles específicos)"
+        },
+        {
+          "archivo": "ventasRoutes.js",
+          "modulo": "ventas/routes",
+          "metodo": "POST",
+          "ruta": "/:id/aprobar",
+          "ruta_completa": "/api/ventas/:id/aprobar",
+          "proteccion": "Solo authenticateToken (sin roles específicos)"
+        },
+        {
+          "archivo": "ventasRoutes.js",
+          "modulo": "ventas/routes",
+          "metodo": "GET",
+          "ruta": "/:id/detalles",
+          "ruta_completa": "/api/ventas/:id/detalles",
+          "proteccion": "Solo authenticateToken (sin roles específicos)"
+        },
+        {
+          "archivo": "ventasRoutes.js",
+          "modulo": "ventas/routes",
+          "metodo": "POST",
+          "ruta": "/:id/productos",
+          "ruta_completa": "/api/ventas/:id/productos",
+          "proteccion": "Solo authenticateToken (sin roles específicos)"
+        }
+      ],
+      "roles_utilizados": []
+    }
+  },
+  "modulos_sin_gerente": [
+    {
+      "modulo": "prospectos/routes",
+      "roles_actuales": [
+        "admin",
+        "supervisor"
+      ],
+      "total_rutas_afectadas": 2
+    }
+  ]
+}
