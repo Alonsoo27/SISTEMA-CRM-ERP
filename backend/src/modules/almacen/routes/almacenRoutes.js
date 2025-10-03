@@ -344,22 +344,28 @@ router.post('/upload/ejecutar',
 // ==================== INTEGRACIONES CON OTROS MÓDULOS ====================
 
 // Verificar stock disponible para venta (usado desde módulo ventas)
-router.post('/verificar-stock', 
-    authenticateToken, // Sin restricción de rol - usado por ventas
+// ✅ PROTEGIDO: Solo usuarios de ventas y almacén pueden verificar stock
+router.post('/verificar-stock',
+    authenticateToken,
+    requireRole([ROLES.VENDEDOR, ROLES.JEFE_VENTAS, ROLES.ALMACENERO, ROLES.JEFE_ALMACEN, ROLES.GERENTE, ROLES.SUPER_ADMIN, ROLES.ADMIN]),
     almacenValidations.validarVerificacionStock,
     almacenController.verificarStockParaVenta
 );
 
 // Descontar stock automáticamente (trigger desde ventas)
-router.post('/descontar-stock', 
-    authenticateToken, // Sin restricción de rol - usado por ventas  
+// ✅ PROTEGIDO: Solo usuarios de ventas pueden descontar stock
+router.post('/descontar-stock',
+    authenticateToken,
+    requireRole([ROLES.VENDEDOR, ROLES.JEFE_VENTAS, ROLES.ALMACENERO, ROLES.JEFE_ALMACEN, ROLES.GERENTE, ROLES.SUPER_ADMIN, ROLES.ADMIN]),
     almacenValidations.validarDescuentoStock,
     almacenController.descontarStockVenta
 );
 
 // Crear despacho desde venta
-router.post('/despachos/desde-venta', 
-    authenticateToken, // Sin restricción de rol - usado por ventas
+// ✅ PROTEGIDO: Solo usuarios de ventas y almacén pueden crear despachos
+router.post('/despachos/desde-venta',
+    authenticateToken,
+    requireRole([ROLES.VENDEDOR, ROLES.JEFE_VENTAS, ROLES.ALMACENERO, ROLES.JEFE_ALMACEN, ROLES.GERENTE, ROLES.SUPER_ADMIN, ROLES.ADMIN]),
     almacenValidations.validarCreacionDespacho,
     almacenController.crearDespachoDesdeVenta
 );
