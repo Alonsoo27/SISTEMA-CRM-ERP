@@ -48,13 +48,13 @@ export const normalizeUser = (user) => {
     rol: rol_nombre, // String para comparaciones
     rol_objeto: user.rol && typeof user.rol === 'object' ? user.rol : { id: rol_id, nombre: rol_nombre },
 
-    // Permisos
+    // Permisos (maneja tanto snake_case como camelCase)
     vende: user.vende || false,
-    es_jefe: user.es_jefe || false,
+    es_jefe: user.es_jefe || user.esJefe || false,
 
-    // Área
-    area_id: user.area_id,
-    area_nombre: user.area_nombre,
+    // Área (maneja ambos formatos)
+    area_id: user.area_id || user.area?.id,
+    area_nombre: user.area_nombre || user.area?.nombre,
     area: user.area,
 
     // Jefe

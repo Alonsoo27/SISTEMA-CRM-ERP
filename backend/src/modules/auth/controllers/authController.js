@@ -35,7 +35,7 @@ const login = async (req, res) => {
         }
 
         // Buscar usuario con datos completos
-        const userQuery = 'SELECT u.id, u.email, u.password_hash, u.nombre, u.apellido, u.telefono, u.es_jefe, u.activo, u.ultimo_login, r.id as rol_id, r.nombre as rol_nombre, r.permisos, a.id as area_id, a.nombre as area_nombre, a.descripcion as area_descripcion FROM usuarios u JOIN roles r ON u.rol_id = r.id JOIN areas a ON u.area_id = a.id WHERE u.email = $1 AND u.activo = true';
+        const userQuery = 'SELECT u.id, u.email, u.password_hash, u.nombre, u.apellido, u.telefono, u.es_jefe, u.vende, u.jefe_id, u.activo, u.ultimo_login, r.id as rol_id, r.nombre as rol_nombre, r.permisos, a.id as area_id, a.nombre as area_nombre, a.descripcion as area_descripcion FROM usuarios u JOIN roles r ON u.rol_id = r.id JOIN areas a ON u.area_id = a.id WHERE u.email = $1 AND u.activo = true';
 
         const userResult = await query(userQuery, [email.toLowerCase()]);
 
@@ -71,30 +71,47 @@ const login = async (req, res) => {
             { nombre: user.area_nombre }
         );
 
-        // Respuesta exitosa
+        // Respuesta exitosa con estructura normalizada
         res.json({
             success: true,
             message: 'Login exitoso',
             data: {
                 token,
                 user: {
+                    // Identificación
                     id: user.id,
                     email: user.email,
+
+                    // Información personal
                     nombre: user.nombre,
                     apellido: user.apellido,
+                    nombre_completo: `${user.nombre} ${user.apellido}`,
                     telefono: user.telefono,
-                    esJefe: user.es_jefe,
+
+                    // Permisos y capacidades
+                    rol_id: user.rol_id,
+                    es_jefe: user.es_jefe,
+                    vende: user.vende,
+                    jefe_id: user.jefe_id,
+
+                    // Rol completo (para compatibilidad)
                     rol: {
                         id: user.rol_id,
                         nombre: user.rol_nombre,
                         permisos: user.permisos
                     },
+
+                    // Área
+                    area_id: user.area_id,
                     area: {
                         id: user.area_id,
                         nombre: user.area_nombre,
                         descripcion: user.area_descripcion
                     },
-                    ultimoLogin: user.ultimo_login
+
+                    // Metadata
+                    activo: user.activo,
+                    ultimo_login: user.ultimo_login
                 }
             }
         });
