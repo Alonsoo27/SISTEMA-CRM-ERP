@@ -21,6 +21,7 @@ import AnalisisGeografico from '../components/AnalisisGeografico';
 import ABCProductos from '../components/ABCProductos';
 import MetasAvanzado from '../components/MetasAvanzado.jsx';
 import PipelineMetrics from '../components/ventas/PipelineMetrics/PipelineMetrics';
+import { normalizeUser, isExecutive } from '../utils/userUtils';
 const VentasPage = () => {
   const [vistaActual, setVistaActual] = useState('lista');
   const [showVentaForm, setShowVentaForm] = useState(false);
@@ -385,7 +386,9 @@ const VentasPage = () => {
       }
     ];
 
-    if (usuarioActual?.rol === 'admin' || usuarioActual?.rol === 'SUPER_ADMIN') {
+    // Verificar si es ejecutivo usando normalización
+    const user = normalizeUser(usuarioActual);
+    if (isExecutive(user)) {
       vistasBase.push(
         {
           id: 'dashboards-admin',
@@ -422,10 +425,11 @@ const VentasPage = () => {
     );
 
     return vistasBase;
-  }, [usuarioActual?.rol]);
+  }, [usuarioActual]);
 
   const dashboardsDisponibles = useMemo(() => {
-    if (usuarioActual?.rol === 'admin' || usuarioActual?.rol === 'SUPER_ADMIN') {
+    const user = normalizeUser(usuarioActual);
+    if (isExecutive(user)) {
       return [
         { key: 'maestro', label: 'Vista Unificada', icono: Eye, color: 'purple' },
         { key: 'geografico', label: 'Análisis Geográfico', icono: Map, color: 'green' },
@@ -437,7 +441,7 @@ const VentasPage = () => {
         { key: 'maestro', label: 'Mi Dashboard Unificado', icono: Eye, color: 'purple' }
       ];
     }
-  }, [usuarioActual?.rol]);
+  }, [usuarioActual]);
 
   const hayFiltrosActivos = useMemo(() => {
     return Object.values(filtros).some(value => {
