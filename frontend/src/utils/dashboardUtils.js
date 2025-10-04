@@ -207,18 +207,19 @@ export const determinarModoVistaInicial = (usuarioActual) => {
 
   console.log('🔍 determinarModoVistaInicial:', { userRole, usuarioActual: normalizedUser });
 
-  // PRIORIDAD 1: GERENTE (2) y ADMIN (11) NO venden → modo supervisor directo
-  if (userRole === 2 || userRole === 11) {
-    console.log('⚠️ GERENTE/ADMIN (no venden) → Modo supervisor');
+  // PRIORIDAD 1: GERENTE (2), ADMIN (11) y JEFE_VENTAS (3) → modo supervisor
+  // JEFE_VENTAS aunque vende, sus metas dependen del equipo, no de sus ventas personales
+  if (userRole === 2 || userRole === 11 || userRole === 3) {
+    console.log('⚠️ GERENTE/ADMIN/JEFE_VENTAS → Modo supervisor (ven métricas del equipo)');
     return {
       modo: 'supervisor',
       asesorSeleccionado: null
     };
   }
 
-  // PRIORIDAD 2: SUPER_ADMIN (1) y JEFE_VENTAS (3) SÍ venden → modo propio
-  if (userRole === 1 || userRole === 3) {
-    console.log('✅ SUPER_ADMIN/JEFE_VENTAS (venden) → Modo propio');
+  // PRIORIDAD 2: SUPER_ADMIN (1) SÍ vende y ve sus propias métricas
+  if (userRole === 1) {
+    console.log('✅ SUPER_ADMIN (vende) → Modo propio');
     return {
       modo: 'propio',
       asesorSeleccionado: normalizedUser?.id

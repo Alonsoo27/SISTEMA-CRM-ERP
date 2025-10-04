@@ -48,18 +48,15 @@ router.get('/supervisables', authenticateToken, requireRole(GRUPOS_ROLES.JEFES_Y
 
         // LÓGICA COMPLETA DE JERARQUÍA ORGANIZACIONAL
         if (userRole === 3) {
-            // JEFE_VENTAS: Ve su equipo directo + subordinados de subordinados
-            whereCondition += ` AND (u.jefe_id = $1 OR u.id IN (
-                SELECT subordinado_id FROM obtener_subordinados($1)
-            ))`;
-            queryParams.push(userId);
+            // JEFE_VENTAS: Ve todos los vendedores + SUPER_ADMIN (empresa pequeña)
+            whereCondition += ` AND (u.vende = true OR u.id = 1)`;
         } else if (esJefe && ![1, 2, 11].includes(userRole)) {
             // Otros jefes: Ve solo su equipo directo
             whereCondition += ` AND u.jefe_id = $1`;
             queryParams.push(userId);
         } else if (userRole === 2) {
-            // GERENTE: Ve todos los asesores de ventas (área 1)
-            whereCondition += ` AND u.area_id = 1`;
+            // GERENTE: Ve todos los asesores de ventas (área 1) + SUPER_ADMIN
+            whereCondition += ` AND (u.area_id = 1 OR u.id = 1)`;
         }
         // SUPER_ADMIN, ADMIN: Ven todos los asesores sin filtro adicional
 
