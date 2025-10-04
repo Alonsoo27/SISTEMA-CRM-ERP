@@ -50,9 +50,10 @@ router.get('/supervisables', authenticateToken, requireRole(GRUPOS_ROLES.JEFES_Y
 
         // LÓGICA COMPLETA DE JERARQUÍA ORGANIZACIONAL
         if (userRole === 3) {
-            // JEFE_VENTAS: Ve todos los vendedores + SUPER_ADMIN (empresa pequeña)
-            // No necesita filtro adicional porque ya tiene u.vende = true
-            console.log('✅ JEFE_VENTAS: verá todos los vendedores');
+            // JEFE_VENTAS: Ve solo VENDEDORES + SUPER_ADMIN (excluye otros JEFE_VENTAS)
+            // Los jefes no tienen metas personales, solo evalúan a vendedores
+            whereCondition += ` AND (u.rol_id = 7 OR u.rol_id = 1)`;
+            console.log('✅ JEFE_VENTAS: verá solo vendedores + SUPER_ADMIN');
         } else if (esJefe && ![1, 2, 11].includes(userRole)) {
             // Otros jefes: Ve solo su equipo directo
             whereCondition += ` AND u.jefe_id = $1`;
