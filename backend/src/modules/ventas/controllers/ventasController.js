@@ -133,7 +133,7 @@ exports.listarVentas = async (req, res) => {
 
         const {
             page = 1, limit = 10, pagina = 1, limite = 10,
-            estado_detallado, canal_origen, tipo_venta, asesor_id,
+            estado_detallado, canal_origen, tipo_venta, asesor_id, jefe_id, equipo,
             fecha_desde, fecha_hasta, search, orden = 'fecha_creacion', direccion = 'DESC'
         } = req.query;
 
@@ -188,6 +188,15 @@ exports.listarVentas = async (req, res) => {
             paramCount++;
             whereClause += ` AND v.asesor_id = $${paramCount}`;
             params.push(asesor_id);
+        }
+
+        // Filtro por equipo: ventas de todos los vendedores (asesores) y SUPER_ADMIN
+        if (jefe_id && equipo === 'true') {
+            // JEFE_VENTAS ve todas las ventas de vendedores + SUPER_ADMIN
+            whereClause += ` AND (v.asesor_id IN (
+                SELECT id FROM usuarios WHERE vende = true AND activo = true
+            ) OR v.asesor_id = 1)`;
+            // No necesitamos parámetro jefe_id en esta lógica simplificada
         }
 
         if (fecha_desde) {
@@ -306,7 +315,7 @@ exports.listarVentas = async (req, res) => {
                 },
                 metricas: metricas,
                 filtros_aplicados: {
-                    estado_detallado, canal_origen, tipo_venta, asesor_id,
+                    estado_detallado, canal_origen, tipo_venta, asesor_id, jefe_id, equipo,
                     fecha_desde, fecha_hasta, search,
                     orden: campoOrden, direccion: direccionOrden
                 }

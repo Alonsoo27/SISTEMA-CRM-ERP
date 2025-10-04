@@ -76,7 +76,7 @@ class ModulosModel {
             if (permisos && permisos.length > 0) {
                 const values = permisos.map((p, i) => {
                     const offset = i * 6;
-                    return `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6})`;
+                    return `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, NOW(), NOW())`;
                 }).join(', ');
 
                 const params = permisos.flatMap(p => [
@@ -90,7 +90,7 @@ class ModulosModel {
 
                 const sql = `
                     INSERT INTO usuario_modulos
-                    (usuario_id, modulo_id, puede_ver, puede_crear, puede_editar, puede_eliminar)
+                    (usuario_id, modulo_id, puede_ver, puede_crear, puede_editar, puede_eliminar, created_at, updated_at)
                     VALUES ${values}
                 `;
 

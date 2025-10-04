@@ -261,7 +261,7 @@ const VentasList = ({
   // 🔐 NUEVOS ESTADOS PARA CONTROL POR ROLES
   const [asesorSeleccionado, setAsesorSeleccionado] = useState(null);
   const [asesoresDisponibles, setAsesoresDisponibles] = useState([]);
-  const [vistaActual, setVistaActual] = useState('mis_ventas'); // 'mis_ventas', 'todas_ventas', 'asesor_especifico'
+  const [vistaActual, setVistaActual] = useState('mis_ventas'); // 'mis_ventas', 'equipo', 'todas_ventas', 'asesor_especifico'
 
   // ✅ CORREGIDO: Solo estados detallados (flujo logístico)
   const estadosDetallados = [
@@ -407,6 +407,11 @@ const VentasList = ({
           case 'mis_ventas':
             filtrosCompletos.asesor_id = usuarioActual?.id;
             break;
+          case 'equipo':
+            // Ver ventas del equipo (subordinados del jefe)
+            filtrosCompletos.equipo = true;
+            filtrosCompletos.jefe_id = usuarioActual?.id;
+            break;
           case 'asesor_especifico':
             if (asesorSeleccionado) {
               filtrosCompletos.asesor_id = asesorSeleccionado;
@@ -463,6 +468,16 @@ const VentasList = ({
   }, [puedeVerVentasDeOtros]);
 
   // Effects
+  // Establecer vista por defecto según rol del usuario
+  useEffect(() => {
+    if (usuarioActual && vistaActual === 'mis_ventas') {
+      // Si es jefe pero no es rol alto, mostrar equipo por defecto
+      if (usuarioActual.es_jefe && !esRolAlto()) {
+        setVistaActual('equipo');
+      }
+    }
+  }, [usuarioActual, esRolAlto]);
+
   useEffect(() => {
     if (usuarioActual) {
       cargarAsesores();
@@ -611,6 +626,10 @@ const VentasList = ({
           case 'mis_ventas':
             filtrosExportacion.asesor_id = usuarioActual?.id;
             break;
+          case 'equipo':
+            filtrosExportacion.equipo = true;
+            filtrosExportacion.jefe_id = usuarioActual?.id;
+            break;
           case 'asesor_especifico':
             if (asesorSeleccionado) {
               filtrosExportacion.asesor_id = asesorSeleccionado.id;
@@ -732,8 +751,8 @@ const VentasList = ({
           </div>
 
           <div className="flex items-center space-x-4">
-            {/* 🔐 SELECTOR DE VISTA POR ROL - Solo para roles altos */}
-            {usuarioActual && esRolAlto() && (
+            {/* 🔐 SELECTOR DE VISTA POR ROL - Para roles altos y jefes */}
+            {usuarioActual && puedeVerTodasLasVentas() && (
               <div className="flex items-center space-x-3">
                 {/* Selector de tipo de vista */}
                 <div className="flex items-center space-x-2">
@@ -744,7 +763,8 @@ const VentasList = ({
                     className="border border-gray-300 rounded-md px-3 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                   >
                     <option value="mis_ventas">Mis Ventas</option>
-                    <option value="todas_ventas">Todas las Ventas</option>
+                    {usuarioActual?.es_jefe && <option value="equipo">Ventas del Equipo</option>}
+                    {esRolAlto() && <option value="todas_ventas">Todas las Ventas</option>}
                     <option value="asesor_especifico">Por Asesor</option>
                   </select>
                 </div>
