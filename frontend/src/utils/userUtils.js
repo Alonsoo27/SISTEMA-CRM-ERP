@@ -181,6 +181,10 @@ export const getUserAccessLevel = (user) => {
  */
 export const hasModulePermission = (user, moduloCode, action = 'ver') => {
   const normalizedUser = normalizeUser(user);
+
+  // SUPER_ADMIN (rol_id = 1) tiene acceso total a todo
+  if (normalizedUser?.rol_id === 1) return true;
+
   if (!normalizedUser?.modulos_permitidos) return false;
 
   const modulo = normalizedUser.modulos_permitidos[moduloCode];

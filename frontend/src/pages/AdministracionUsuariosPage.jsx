@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
-import { Users, Plus, Edit, Trash2, Key, Search } from 'lucide-react';
+import { Users, Plus, Edit, Trash2, Key, Search, Shield } from 'lucide-react';
 import toast from 'react-hot-toast';
 import axios from 'axios';
 import { API_CONFIG } from '../config/apiConfig';
+import { canCreateIn, canEditIn, canDeleteIn } from '../utils/userUtils';
 
 const AdministracionUsuariosPage = () => {
     const [usuarios, setUsuarios] = useState([]);
@@ -11,8 +12,18 @@ const AdministracionUsuariosPage = () => {
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
     const [showModal, setShowModal] = useState(false);
-    const [modalMode, setModalMode] = useState('create'); // 'create' | 'edit' | 'password'
+    const [modalMode, setModalMode] = useState('create'); // 'create' | 'edit' | 'password' | 'permissions'
     const [selectedUsuario, setSelectedUsuario] = useState(null);
+
+    // Estados para permisos
+    const [modulos, setModulos] = useState([]);
+    const [permisosUsuario, setPermisosUsuario] = useState([]);
+
+    // Obtener usuario actual para verificar permisos
+    const usuarioActual = JSON.parse(localStorage.getItem('user') || '{}');
+    const puedeCrear = canCreateIn(usuarioActual, 'usuarios');
+    const puedeEditar = canEditIn(usuarioActual, 'usuarios');
+    const puedeEliminar = canDeleteIn(usuarioActual, 'usuarios');
 
     const [formData, setFormData] = useState({
         email: '',
@@ -38,21 +49,93 @@ const AdministracionUsuariosPage = () => {
             const token = localStorage.getItem('token');
             const headers = { Authorization: `Bearer ${token}` };
 
-            const [usuariosRes, rolesRes, areasRes] = await Promise.all([
+            const [usuariosRes, rolesRes, areasRes, modulosRes] = await Promise.all([
                 axios.get(`${API_CONFIG.BASE_URL}/api/usuarios`, { headers }),
                 axios.get(`${API_CONFIG.BASE_URL}/api/usuarios/roles`, { headers }),
-                axios.get(`${API_CONFIG.BASE_URL}/api/usuarios/areas`, { headers })
+                axios.get(`${API_CONFIG.BASE_URL}/api/usuarios/areas`, { headers }),
+                axios.get(`${API_CONFIG.BASE_URL}/api/usuarios/modulos/list`, { headers })
             ]);
 
             setUsuarios(usuariosRes.data.data || []);
             setRoles(rolesRes.data.data || []);
             setAreas(areasRes.data.data || []);
+            setModulos(modulosRes.data.data || []);
         } catch (error) {
             console.error('Error cargando datos:', error);
             toast.error('Error al cargar datos');
         } finally {
             setLoading(false);
         }
+    };
+
+    const cargarPermisos = async (usuarioId) => {
+        try {
+            const token = localStorage.getItem('token');
+            const headers = { Authorization: `Bearer ${token}` };
+            const response = await axios.get(
+                `${API_CONFIG.BASE_URL}/api/usuarios/${usuarioId}/permisos`,
+                { headers }
+            );
+            setPermisosUsuario(response.data.data || []);
+        } catch (error) {
+            console.error('Error cargando permisos:', error);
+            toast.error('Error al cargar permisos');
+        }
+    };
+
+    const guardarPermisos = async () => {
+        try {
+            const token = localStorage.getItem('token');
+            const headers = { Authorization: `Bearer ${token}` };
+
+            // Convertir formato de permisosUsuario a lo que espera el backend
+            const permisos = permisosUsuario.map(p => ({
+                modulo_id: p.modulo_id,
+                puede_ver: p.puede_ver,
+                puede_crear: p.puede_crear,
+                puede_editar: p.puede_editar,
+                puede_eliminar: p.puede_eliminar
+            }));
+
+            await axios.put(
+                `${API_CONFIG.BASE_URL}/api/usuarios/${selectedUsuario.id}/permisos`,
+                { permisos },
+                { headers }
+            );
+
+            toast.success('Permisos actualizados exitosamente');
+            setShowModal(false);
+            cargarDatos();
+        } catch (error) {
+            console.error('Error guardando permisos:', error);
+            toast.error('Error al guardar permisos');
+        }
+    };
+
+    const togglePermiso = (moduloId, tipoPermiso) => {
+        setPermisosUsuario(prev => {
+            const permisoExistente = prev.find(p => p.modulo_id === moduloId);
+
+            if (permisoExistente) {
+                return prev.map(p =>
+                    p.modulo_id === moduloId
+                        ? { ...p, [tipoPermiso]: !p[tipoPermiso] }
+                        : p
+                );
+            } else {
+                // Si no existe, crear nuevo permiso
+                return [
+                    ...prev,
+                    {
+                        modulo_id: moduloId,
+                        puede_ver: tipoPermiso === 'puede_ver',
+                        puede_crear: tipoPermiso === 'puede_crear',
+                        puede_editar: tipoPermiso === 'puede_editar',
+                        puede_eliminar: tipoPermiso === 'puede_eliminar'
+                    }
+                ];
+            }
+        });
     };
 
     const handleSubmit = async (e) => {
@@ -102,7 +185,7 @@ const AdministracionUsuariosPage = () => {
         }
     };
 
-    const abrirModal = (mode, usuario = null) => {
+    const abrirModal = async (mode, usuario = null) => {
         setModalMode(mode);
         setSelectedUsuario(usuario);
 
@@ -123,6 +206,9 @@ const AdministracionUsuariosPage = () => {
             });
         } else if (mode === 'password') {
             setFormData({ ...formData, password: '' });
+        } else if (mode === 'permissions' && usuario) {
+            // Cargar permisos del usuario
+            await cargarPermisos(usuario.id);
         }
 
         setShowModal(true);
@@ -169,13 +255,15 @@ const AdministracionUsuariosPage = () => {
                     </h1>
                     <p className="text-gray-600 mt-1">Gestiona los usuarios del sistema</p>
                 </div>
-                <button
-                    onClick={() => abrirModal('create')}
-                    className="bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-blue-700"
-                >
-                    <Plus className="h-5 w-5" />
-                    Nuevo Usuario
-                </button>
+                {puedeCrear && (
+                    <button
+                        onClick={() => abrirModal('create')}
+                        className="bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-blue-700"
+                    >
+                        <Plus className="h-5 w-5" />
+                        Nuevo Usuario
+                    </button>
+                )}
             </div>
 
             {/* Búsqueda */}
@@ -237,27 +325,42 @@ const AdministracionUsuariosPage = () => {
                                 </td>
                                 <td className="px-6 py-4">
                                     <div className="flex gap-2">
-                                        <button
-                                            onClick={() => abrirModal('edit', usuario)}
-                                            className="text-blue-600 hover:text-blue-800"
-                                            title="Editar"
-                                        >
-                                            <Edit className="h-4 w-4" />
-                                        </button>
-                                        <button
-                                            onClick={() => abrirModal('password', usuario)}
-                                            className="text-yellow-600 hover:text-yellow-800"
-                                            title="Cambiar contraseña"
-                                        >
-                                            <Key className="h-4 w-4" />
-                                        </button>
-                                        <button
-                                            onClick={() => handleEliminar(usuario.id)}
-                                            className="text-red-600 hover:text-red-800"
-                                            title="Eliminar"
-                                        >
-                                            <Trash2 className="h-4 w-4" />
-                                        </button>
+                                        {puedeEditar && (
+                                            <button
+                                                onClick={() => abrirModal('edit', usuario)}
+                                                className="text-blue-600 hover:text-blue-800"
+                                                title="Editar"
+                                            >
+                                                <Edit className="h-4 w-4" />
+                                            </button>
+                                        )}
+                                        {puedeEditar && (
+                                            <button
+                                                onClick={() => abrirModal('permissions', usuario)}
+                                                className="text-purple-600 hover:text-purple-800"
+                                                title="Gestionar permisos"
+                                            >
+                                                <Shield className="h-4 w-4" />
+                                            </button>
+                                        )}
+                                        {puedeEditar && (
+                                            <button
+                                                onClick={() => abrirModal('password', usuario)}
+                                                className="text-yellow-600 hover:text-yellow-800"
+                                                title="Cambiar contraseña"
+                                            >
+                                                <Key className="h-4 w-4" />
+                                            </button>
+                                        )}
+                                        {puedeEliminar && (
+                                            <button
+                                                onClick={() => handleEliminar(usuario.id)}
+                                                className="text-red-600 hover:text-red-800"
+                                                title="Eliminar"
+                                            >
+                                                <Trash2 className="h-4 w-4" />
+                                            </button>
+                                        )}
                                     </div>
                                 </td>
                             </tr>
@@ -275,8 +378,104 @@ const AdministracionUsuariosPage = () => {
                                 {modalMode === 'create' && 'Nuevo Usuario'}
                                 {modalMode === 'edit' && 'Editar Usuario'}
                                 {modalMode === 'password' && 'Cambiar Contraseña'}
+                                {modalMode === 'permissions' && `Gestionar Permisos - ${selectedUsuario?.nombre_completo}`}
                             </h2>
 
+                            {modalMode === 'permissions' ? (
+                                <div className="space-y-4">
+                                    <div className="text-sm text-gray-600 mb-4">
+                                        Selecciona los módulos y acciones que este usuario puede realizar.
+                                        SUPER_ADMIN siempre tiene acceso total.
+                                    </div>
+
+                                    <div className="max-h-[500px] overflow-y-auto">
+                                        <table className="min-w-full border">
+                                            <thead className="bg-gray-50 sticky top-0">
+                                                <tr>
+                                                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 border">Módulo</th>
+                                                    <th className="px-4 py-2 text-center text-xs font-medium text-gray-500 border">Ver</th>
+                                                    <th className="px-4 py-2 text-center text-xs font-medium text-gray-500 border">Crear</th>
+                                                    <th className="px-4 py-2 text-center text-xs font-medium text-gray-500 border">Editar</th>
+                                                    <th className="px-4 py-2 text-center text-xs font-medium text-gray-500 border">Eliminar</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {modulos.map((modulo) => {
+                                                    const permiso = permisosUsuario.find(p => p.modulo_id === modulo.id) || {
+                                                        puede_ver: false,
+                                                        puede_crear: false,
+                                                        puede_editar: false,
+                                                        puede_eliminar: false
+                                                    };
+
+                                                    return (
+                                                        <tr key={modulo.id} className="hover:bg-gray-50">
+                                                            <td className="px-4 py-3 border">
+                                                                <div className="flex items-center">
+                                                                    <span className="mr-2">{modulo.icono}</span>
+                                                                    <div>
+                                                                        <div className="font-medium">{modulo.nombre}</div>
+                                                                        <div className="text-xs text-gray-500">{modulo.descripcion}</div>
+                                                                    </div>
+                                                                </div>
+                                                            </td>
+                                                            <td className="px-4 py-3 border text-center">
+                                                                <input
+                                                                    type="checkbox"
+                                                                    checked={permiso.puede_ver}
+                                                                    onChange={() => togglePermiso(modulo.id, 'puede_ver')}
+                                                                    className="h-4 w-4 text-blue-600 cursor-pointer"
+                                                                />
+                                                            </td>
+                                                            <td className="px-4 py-3 border text-center">
+                                                                <input
+                                                                    type="checkbox"
+                                                                    checked={permiso.puede_crear}
+                                                                    onChange={() => togglePermiso(modulo.id, 'puede_crear')}
+                                                                    className="h-4 w-4 text-green-600 cursor-pointer"
+                                                                />
+                                                            </td>
+                                                            <td className="px-4 py-3 border text-center">
+                                                                <input
+                                                                    type="checkbox"
+                                                                    checked={permiso.puede_editar}
+                                                                    onChange={() => togglePermiso(modulo.id, 'puede_editar')}
+                                                                    className="h-4 w-4 text-yellow-600 cursor-pointer"
+                                                                />
+                                                            </td>
+                                                            <td className="px-4 py-3 border text-center">
+                                                                <input
+                                                                    type="checkbox"
+                                                                    checked={permiso.puede_eliminar}
+                                                                    onChange={() => togglePermiso(modulo.id, 'puede_eliminar')}
+                                                                    className="h-4 w-4 text-red-600 cursor-pointer"
+                                                                />
+                                                            </td>
+                                                        </tr>
+                                                    );
+                                                })}
+                                            </tbody>
+                                        </table>
+                                    </div>
+
+                                    <div className="flex gap-3 pt-4">
+                                        <button
+                                            type="button"
+                                            onClick={guardarPermisos}
+                                            className="flex-1 bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700"
+                                        >
+                                            Guardar Permisos
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => setShowModal(false)}
+                                            className="flex-1 bg-gray-200 text-gray-800 py-2 rounded-lg hover:bg-gray-300"
+                                        >
+                                            Cancelar
+                                        </button>
+                                    </div>
+                                </div>
+                            ) : (
                             <form onSubmit={handleSubmit} className="space-y-4">
                                 {modalMode === 'password' ? (
                                     <div>
@@ -431,6 +630,7 @@ const AdministracionUsuariosPage = () => {
                                     </button>
                                 </div>
                             </form>
+                            )}
                         </div>
                     </div>
                 </div>
