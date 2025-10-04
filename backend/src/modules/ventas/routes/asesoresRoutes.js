@@ -46,19 +46,27 @@ router.get('/supervisables', authenticateToken, requireRole(GRUPOS_ROLES.JEFES_Y
         let whereCondition = 'u.activo = true AND u.vende = true';
         let queryParams = [];
 
+        console.log('📊 Usuario solicitando asesores:', { userId, userRole, esJefe });
+
         // LÓGICA COMPLETA DE JERARQUÍA ORGANIZACIONAL
         if (userRole === 3) {
             // JEFE_VENTAS: Ve todos los vendedores + SUPER_ADMIN (empresa pequeña)
-            whereCondition += ` AND (u.vende = true OR u.id = 1)`;
+            // No necesita filtro adicional porque ya tiene u.vende = true
+            console.log('✅ JEFE_VENTAS: verá todos los vendedores');
         } else if (esJefe && ![1, 2, 11].includes(userRole)) {
             // Otros jefes: Ve solo su equipo directo
             whereCondition += ` AND u.jefe_id = $1`;
             queryParams.push(userId);
+            console.log('✅ JEFE: verá solo su equipo directo');
         } else if (userRole === 2) {
             // GERENTE: Ve todos los asesores de ventas (área 1) + SUPER_ADMIN
             whereCondition += ` AND (u.area_id = 1 OR u.id = 1)`;
+            console.log('✅ GERENTE: verá área ventas + SUPER_ADMIN');
         }
         // SUPER_ADMIN, ADMIN: Ven todos los asesores sin filtro adicional
+
+        console.log('📊 WHERE final:', whereCondition);
+        console.log('📊 Params:', queryParams);
 
         const sqlAsesores = `
             SELECT

@@ -115,7 +115,7 @@ const DashboardAsesoresOptimized = ({
       );
 
       if (resultado.success) {
-        const asesores = resultado.data?.asesores || [];
+        const asesores = resultado.data?.data?.asesores || resultado.data?.asesores || [];
         setAsesoresDisponibles(asesores);
         console.log('✅ Asesores cargados:', asesores.length);
       } else {
