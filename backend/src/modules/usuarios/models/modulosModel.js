@@ -75,8 +75,8 @@ class ModulosModel {
             // Insertar nuevos permisos
             if (permisos && permisos.length > 0) {
                 const values = permisos.map((p, i) => {
-                    const offset = i * 5;
-                    return `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5})`;
+                    const offset = i * 6;
+                    return `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6})`;
                 }).join(', ');
 
                 const params = permisos.flatMap(p => [
