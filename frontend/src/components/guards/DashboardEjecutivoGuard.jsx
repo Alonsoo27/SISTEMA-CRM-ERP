@@ -141,7 +141,7 @@ const DashboardEjecutivoGuard = ({
               <Users className="h-4 w-4" />
               <span>Acceso autorizado: {resultadoAcceso.motivo}</span>
               <span className="text-xs opacity-75">
-                (Rol: {user?.rol || 'N/A'})
+                (Rol: {user?.rol?.nombre || user?.rol || 'N/A'})
               </span>
             </div>
           </div>
@@ -241,7 +241,7 @@ const DashboardEjecutivoGuard = ({
               <div className="mt-2 p-3 bg-gray-100 rounded text-xs text-gray-600 font-mono">
                 <div>Código: {resultadoAcceso.codigo}</div>
                 <div>Acceso requerido: {requiredAccess}</div>
-                <div>Rol actual: {user?.rol_id} ({user?.rol})</div>
+                <div>Rol actual: {user?.rol_id} ({user?.rol?.nombre || user?.rol})</div>
                 <div>Roles permitidos: {resultadoAcceso.configuracion?.roles_ejemplo?.join(', ')}</div>
               </div>
             </details>
