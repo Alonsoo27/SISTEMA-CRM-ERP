@@ -72,6 +72,31 @@ const login = async (req, res) => {
             [user.id]
         );
 
+        // Obtener permisos de módulos del usuario
+        const permisosQuery = `
+            SELECT
+                m.codigo,
+                m.nombre,
+                COALESCE(um.puede_ver, false) as puede_ver,
+                COALESCE(um.puede_crear, false) as puede_crear,
+                COALESCE(um.puede_editar, false) as puede_editar,
+                COALESCE(um.puede_eliminar, false) as puede_eliminar
+            FROM modulos m
+            LEFT JOIN usuario_modulos um ON um.modulo_id = m.id AND um.usuario_id = $1
+            WHERE m.activo = true
+            ORDER BY m.orden
+        `;
+        const permisosResult = await query(permisosQuery, [user.id]);
+        const modulos_permitidos = permisosResult.rows.reduce((acc, modulo) => {
+            acc[modulo.codigo] = {
+                puede_ver: modulo.puede_ver,
+                puede_crear: modulo.puede_crear,
+                puede_editar: modulo.puede_editar,
+                puede_eliminar: modulo.puede_eliminar
+            };
+            return acc;
+        }, {});
+
         // Generar token
         const token = generateToken(
             user.id,
@@ -117,6 +142,9 @@ const login = async (req, res) => {
                         nombre: user.area_nombre,
                         descripcion: user.area_descripcion
                     },
+
+                    // Permisos de módulos
+                    modulos_permitidos,
 
                     // Metadata
                     activo: user.activo,

@@ -63,6 +63,9 @@ export const normalizeUser = (user) => {
     // Estado
     activo: user.activo !== undefined ? user.activo : true,
 
+    // Permisos de módulos (sistema dinámico)
+    modulos_permitidos: user.modulos_permitidos || {},
+
     // Metadata original (por si acaso)
     _original: user
   };
@@ -170,31 +173,75 @@ export const getUserAccessLevel = (user) => {
 };
 
 /**
- * Verificar permisos específicos de módulo
+ * Verificar si el usuario tiene un permiso específico en un módulo
+ * @param {Object} user - Usuario normalizado
+ * @param {string} moduloCode - Código del módulo (ej: 'ventas', 'productos', 'dashboard')
+ * @param {string} action - Acción a verificar: 'ver', 'crear', 'editar', 'eliminar'
+ * @returns {boolean}
  */
-export const hasModulePermission = (user, module) => {
+export const hasModulePermission = (user, moduloCode, action = 'ver') => {
   const normalizedUser = normalizeUser(user);
-  if (!normalizedUser || !normalizedUser.rol_id) return false;
+  if (!normalizedUser?.modulos_permitidos) return false;
 
-  const permissions = {
-    // Módulos con acceso total para super admin y gerente
-    'productos': [1, 2], // SUPER_ADMIN, GERENTE
-    'usuarios': [1, 2], // SUPER_ADMIN, GERENTE
-    'almacen_upload': [1, 2], // SUPER_ADMIN, GERENTE (upload masivo)
+  const modulo = normalizedUser.modulos_permitidos[moduloCode];
+  if (!modulo) return false;
 
-    // Módulos con acceso amplio
-    'dashboard_ejecutivo': [1, 2, 3, 11], // SUPER_ADMIN, GERENTE, JEFE_VENTAS, ADMIN
-    'ventas': [1, 2, 3, 7, 11], // Todos los de ventas
-    'prospectos': [1, 2, 3, 7, 11], // Todos los de ventas
+  const actionKey = `puede_${action}`;
+  return modulo[actionKey] === true;
+};
 
-    // Módulos especializados
-    'almacen': [1, 2, 6, 10, 11], // SUPER_ADMIN, GERENTE, JEFE_ALMACEN, ALMACENERO, ADMIN
-    'soporte': [1, 2, 5, 9, 11], // SUPER_ADMIN, GERENTE, JEFE_SOPORTE, SOPORTE_TECNICO, ADMIN
-    'marketing': [1, 2, 4, 8, 11], // SUPER_ADMIN, GERENTE, JEFE_MARKETING, MARKETING_EJECUTOR, ADMIN
-  };
+/**
+ * Verificar si el usuario puede ver/acceder a un módulo
+ * @param {Object} user - Usuario
+ * @param {string} moduloCode - Código del módulo
+ * @returns {boolean}
+ */
+export const canAccessModule = (user, moduloCode) => {
+  return hasModulePermission(user, moduloCode, 'ver');
+};
 
-  const allowedRoles = permissions[module] || [];
-  return allowedRoles.includes(normalizedUser.rol_id);
+/**
+ * Verificar si el usuario puede crear en un módulo
+ * @param {Object} user - Usuario
+ * @param {string} moduloCode - Código del módulo
+ * @returns {boolean}
+ */
+export const canCreateIn = (user, moduloCode) => {
+  return hasModulePermission(user, moduloCode, 'crear');
+};
+
+/**
+ * Verificar si el usuario puede editar en un módulo
+ * @param {Object} user - Usuario
+ * @param {string} moduloCode - Código del módulo
+ * @returns {boolean}
+ */
+export const canEditIn = (user, moduloCode) => {
+  return hasModulePermission(user, moduloCode, 'editar');
+};
+
+/**
+ * Verificar si el usuario puede eliminar en un módulo
+ * @param {Object} user - Usuario
+ * @param {string} moduloCode - Código del módulo
+ * @returns {boolean}
+ */
+export const canDeleteIn = (user, moduloCode) => {
+  return hasModulePermission(user, moduloCode, 'eliminar');
+};
+
+/**
+ * Obtener todos los módulos a los que el usuario tiene acceso
+ * @param {Object} user - Usuario
+ * @returns {Array<string>} - Array de códigos de módulos con acceso
+ */
+export const getAccessibleModules = (user) => {
+  const normalizedUser = normalizeUser(user);
+  if (!normalizedUser?.modulos_permitidos) return [];
+
+  return Object.keys(normalizedUser.modulos_permitidos).filter(
+    moduloCode => normalizedUser.modulos_permitidos[moduloCode].puede_ver === true
+  );
 };
 
 /**
@@ -241,6 +288,11 @@ export default {
   isManager,
   getUserAccessLevel,
   hasModulePermission,
+  canAccessModule,
+  canCreateIn,
+  canEditIn,
+  canDeleteIn,
+  getAccessibleModules,
   debugUser,
   getUserFromStorage
 };

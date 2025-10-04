@@ -5,6 +5,7 @@
 
 const { query } = require('../../../config/database');
 const bcrypt = require('bcrypt');
+const ModulosModel = require('../models/modulosModel');
 
 // ============================================
 // LISTAR TODOS LOS USUARIOS
@@ -441,6 +442,108 @@ const listarAreas = async (req, res) => {
     }
 };
 
+// ============================================
+// GESTIÓN DE MÓDULOS Y PERMISOS
+// ============================================
+
+/**
+ * Listar todos los módulos del sistema
+ */
+const listarModulos = async (req, res) => {
+    try {
+        const resultado = await ModulosModel.obtenerModulos();
+
+        if (!resultado.success) {
+            return res.status(400).json({
+                success: false,
+                message: 'Error al obtener módulos',
+                error: resultado.error
+            });
+        }
+
+        res.json({
+            success: true,
+            data: resultado.data
+        });
+    } catch (error) {
+        console.error('Error al listar módulos:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error interno del servidor',
+            error: error.message
+        });
+    }
+};
+
+/**
+ * Obtener permisos de módulos de un usuario
+ */
+const obtenerPermisosUsuario = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const resultado = await ModulosModel.obtenerPermisosUsuario(parseInt(id));
+
+        if (!resultado.success) {
+            return res.status(400).json({
+                success: false,
+                message: 'Error al obtener permisos',
+                error: resultado.error
+            });
+        }
+
+        res.json({
+            success: true,
+            data: resultado.data
+        });
+    } catch (error) {
+        console.error('Error al obtener permisos:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error interno del servidor',
+            error: error.message
+        });
+    }
+};
+
+/**
+ * Actualizar permisos de un usuario
+ */
+const actualizarPermisosUsuario = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { permisos } = req.body;
+
+        if (!permisos || !Array.isArray(permisos)) {
+            return res.status(400).json({
+                success: false,
+                message: 'Se requiere un array de permisos'
+            });
+        }
+
+        const resultado = await ModulosModel.actualizarPermisosUsuario(parseInt(id), permisos);
+
+        if (!resultado.success) {
+            return res.status(400).json({
+                success: false,
+                message: 'Error al actualizar permisos',
+                error: resultado.error
+            });
+        }
+
+        res.json({
+            success: true,
+            message: 'Permisos actualizados correctamente'
+        });
+    } catch (error) {
+        console.error('Error al actualizar permisos:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error interno del servidor',
+            error: error.message
+        });
+    }
+};
+
 module.exports = {
     listarUsuarios,
     obtenerUsuario,
@@ -449,5 +552,8 @@ module.exports = {
     cambiarPassword,
     eliminarUsuario,
     listarRoles,
-    listarAreas
+    listarAreas,
+    listarModulos,
+    obtenerPermisosUsuario,
+    actualizarPermisosUsuario
 };

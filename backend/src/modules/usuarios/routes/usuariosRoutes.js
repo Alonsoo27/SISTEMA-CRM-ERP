@@ -13,7 +13,10 @@ const {
     cambiarPassword,
     eliminarUsuario,
     listarRoles,
-    listarAreas
+    listarAreas,
+    listarModulos,
+    obtenerPermisosUsuario,
+    actualizarPermisosUsuario
 } = require('../controllers/usuariosController');
 
 const { authenticateToken, requireRole, requireOwnership } = require('../../../middleware/auth');
@@ -72,6 +75,30 @@ router.delete('/:id',
     authenticateToken,
     requireRole(GRUPOS_ROLES.SOLO_ADMINISTRADORES),
     eliminarUsuario
+);
+
+// ============================================
+// GESTIÓN DE MÓDULOS Y PERMISOS
+// ============================================
+
+// Listar todos los módulos del sistema
+router.get('/modulos/list',
+    authenticateToken,
+    listarModulos
+);
+
+// Obtener permisos de un usuario
+router.get('/:id/permisos',
+    authenticateToken,
+    requireRole(GRUPOS_ROLES.SOLO_ADMINISTRADORES),
+    obtenerPermisosUsuario
+);
+
+// Actualizar permisos de un usuario
+router.put('/:id/permisos',
+    authenticateToken,
+    requireRole(GRUPOS_ROLES.SOLO_ADMINISTRADORES),
+    actualizarPermisosUsuario
 );
 
 module.exports = router;

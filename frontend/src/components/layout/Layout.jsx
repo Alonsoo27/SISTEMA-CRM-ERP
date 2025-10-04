@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
 import NotificationBell from '../NotificationBell';
 import authService from '../../services/authService';
+import { canAccessModule } from '../../utils/userUtils';
 
 const Layout = () => {
   const location = useLocation();
@@ -36,62 +37,81 @@ const Layout = () => {
     }
   }, [navigate]);
 
-  const menuItems = [
+  // Definición de todos los módulos del menú
+  const allMenuItems = [
     {
       name: 'Dashboard',
       path: '/',
       icon: '🏠',
-      description: 'Vista general del sistema'
+      description: 'Vista general del sistema',
+      moduleCode: 'dashboard'
     },
-    { 
-      name: 'Prospectos', 
-      path: '/prospectos', 
+    {
+      name: 'Prospectos',
+      path: '/prospectos',
       icon: '🎯',
-      description: 'Pipeline de ventas y seguimientos'
+      description: 'Pipeline de ventas y seguimientos',
+      moduleCode: 'prospectos'
     },
-    { 
-      name: 'Productos', 
-      path: '/productos', 
+    {
+      name: 'Productos',
+      path: '/productos',
       icon: '📦',
-      description: 'Gestión de productos y catálogo'
+      description: 'Gestión de productos y catálogo',
+      moduleCode: 'productos'
     },
     {
       name: 'Ventas',
       path: '/ventas',
       icon: '💰',
-      description: 'Gestión de ventas cerradas'
+      description: 'Gestión de ventas cerradas',
+      moduleCode: 'ventas'
     },
     {
       name: 'Soporte',
       path: '/soporte',
       icon: '🛠️',
-      description: 'Tickets y soporte técnico'
+      description: 'Tickets y soporte técnico',
+      moduleCode: 'soporte'
     },
-    { 
-      name: 'Almacén', 
-      path: '/almacen', 
+    {
+      name: 'Almacén',
+      path: '/almacen',
       icon: '📋',
-      description: 'Control de inventario'
+      description: 'Control de inventario',
+      moduleCode: 'almacen'
     },
-    { 
-      name: 'Marketing', 
-      path: '/marketing', 
+    {
+      name: 'Marketing',
+      path: '/marketing',
       icon: '📢',
-      description: 'Campañas y planificación'
+      description: 'Campañas y planificación',
+      moduleCode: 'marketing'
     },
     {
       name: 'Chat',
       path: '/chat',
       icon: '💬',
-      description: 'Comunicación interna'
+      description: 'Comunicación interna',
+      moduleCode: 'chat'
     },
     {
       name: 'Usuarios',
       path: '/admin/usuarios',
       icon: '👥',
-      description: 'Administración de usuarios'
+      description: 'Administración de usuarios',
+      moduleCode: 'usuarios'
     }
   ];
+
+  // Filtrar módulos según permisos del usuario
+  const menuItems = allMenuItems.filter(item => {
+    // Dashboard siempre visible
+    if (item.moduleCode === 'dashboard') return true;
+
+    // Verificar permiso de acceso al módulo
+    return canAccessModule(usuarioActual, item.moduleCode);
+  });
 
   // FUNCIÓN LOGOUT COMPLETA
   const handleLogout = () => {
