@@ -73,7 +73,8 @@ const VistaUnificada = ({
     } finally {
       setLoading(false);
     }
-  }, [periodoSeleccionado, showNotification]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [periodoSeleccionado]); // showNotification es estable (deps []), no necesita estar aquí
 
   useEffect(() => {
     if (usuarioActual?.id) {
