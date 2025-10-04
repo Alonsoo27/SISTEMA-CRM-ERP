@@ -1835,11 +1835,141 @@ const analizarTopPerformers = (topVentas, topIngresos, asesoresCriticos, canales
   return analysis;
 };
 
+// PERÍODOS DISPONIBLES - DASHBOARD EJECUTIVO
+const periodosDisponibles = async (req, res) => {
+  try {
+    console.log('📅 [Períodos Disponibles Ejecutivo] Consultando períodos con ventas');
+
+    // Query para obtener todos los períodos con ventas (sin filtrar por asesor)
+    const periodosQuery = `
+      SELECT DISTINCT
+        EXTRACT(YEAR FROM fecha_venta) as año,
+        EXTRACT(MONTH FROM fecha_venta) as mes,
+        COUNT(*) as total_ventas,
+        COUNT(DISTINCT asesor_id) as asesores_activos
+      FROM ventas
+      WHERE estado_detallado = 'vendido'
+        AND activo = true
+      GROUP BY EXTRACT(YEAR FROM fecha_venta), EXTRACT(MONTH FROM fecha_venta)
+      HAVING COUNT(*) > 0
+      ORDER BY año DESC, mes DESC
+      LIMIT 24
+    `;
+
+    const result = await db.query(periodosQuery);
+
+    if (result.rows.length === 0) {
+      return res.json({
+        success: true,
+        data: {
+          periodos: {
+            semanas: [{ value: 'semana_actual', label: 'Semana Actual', disponible: true }],
+            meses: [],
+            trimestres: [],
+            años: []
+          },
+          estadisticas: {
+            total_periodos: 0,
+            periodo_mas_antiguo: null,
+            periodo_mas_reciente: null
+          }
+        }
+      });
+    }
+
+    // Procesar períodos
+    const meses = [];
+    const trimestresSet = new Set();
+    const añosSet = new Set();
+
+    result.rows.forEach(row => {
+      const año = parseInt(row.año);
+      const mes = parseInt(row.mes);
+
+      // Meses individuales
+      const mesLabel = new Date(año, mes - 1).toLocaleDateString('es-ES', { year: 'numeric', month: 'long' });
+      meses.push({
+        value: `${año}-${String(mes).padStart(2, '0')}`,
+        label: mesLabel,
+        año,
+        mes,
+        ventas: parseInt(row.total_ventas),
+        asesores: parseInt(row.asesores_activos),
+        disponible: true
+      });
+
+      // Trimestres
+      const trimestre = Math.ceil(mes / 3);
+      const trimestreKey = `${año}-Q${trimestre}`;
+      trimestresSet.add(JSON.stringify({
+        value: trimestreKey,
+        label: `Q${trimestre} ${año}`,
+        año,
+        trimestre,
+        disponible: true
+      }));
+
+      // Años
+      añosSet.add(JSON.stringify({
+        value: año.toString(),
+        label: año.toString(),
+        año,
+        disponible: true
+      }));
+    });
+
+    const trimestres = Array.from(trimestresSet).map(t => JSON.parse(t));
+    const años = Array.from(añosSet).map(a => JSON.parse(a));
+
+    const periodoMasReciente = result.rows[0];
+    const periodoMasAntiguo = result.rows[result.rows.length - 1];
+
+    console.log(`✅ [Períodos Disponibles Ejecutivo] ${meses.length} meses, ${trimestres.length} trimestres, ${años.length} años`);
+
+    res.json({
+      success: true,
+      data: {
+        periodos: {
+          semanas: [{ value: 'semana_actual', label: 'Semana Actual', disponible: true }],
+          meses,
+          trimestres,
+          años
+        },
+        estadisticas: {
+          total_periodos: result.rows.length,
+          total_meses: meses.length,
+          total_trimestres: trimestres.length,
+          total_años: años.length,
+          periodo_mas_reciente: {
+            año: parseInt(periodoMasReciente.año),
+            mes: parseInt(periodoMasReciente.mes),
+            ventas: parseInt(periodoMasReciente.total_ventas)
+          },
+          periodo_mas_antiguo: {
+            año: parseInt(periodoMasAntiguo.año),
+            mes: parseInt(periodoMasAntiguo.mes),
+            ventas: parseInt(periodoMasAntiguo.total_ventas)
+          }
+        }
+      }
+    });
+
+  } catch (error) {
+    console.error('❌ Error en periodosDisponibles:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Error interno del servidor',
+      details: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+};
+
 module.exports = {
   vistaUnificada,
   metasAvanzado,
   sectoresStrategy,
   abcProductos,
   analisisGeografico,
-  healthCheck
+  healthCheck,
+  periodosDisponibles
 };

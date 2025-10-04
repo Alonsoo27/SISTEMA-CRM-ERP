@@ -230,7 +230,7 @@ const VistaUnificada = ({
 
         {/* Selector de Período */}
         <PeriodSelectorAdvanced
-          asesorId={usuarioActual?.id}
+          isExecutive={true}
           onPeriodChange={setPeriodoSeleccionado}
           initialPeriod={periodoSeleccionado}
           loading={loading}

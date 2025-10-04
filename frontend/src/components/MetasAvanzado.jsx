@@ -327,7 +327,7 @@ const MetasAvanzado = ({ usuarioActual }) => {
 
       {/* Selector de Período */}
       <PeriodSelectorAdvanced
-        asesorId={usuarioActual?.id}
+        isExecutive={true}
         onPeriodChange={setPeriodo}
         initialPeriod={periodo}
         loading={loading}

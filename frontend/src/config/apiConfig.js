@@ -27,6 +27,9 @@ export const API_CONFIG = {
     RANKING_ASESOR: (asesorId, periodo) => `/api/dashboard/ranking-asesor/${asesorId}?periodo=${periodo}`,
     PERIODOS_DISPONIBLES: (asesorId) => `/api/dashboard/periodos-disponibles/${asesorId}`,
 
+    // Dashboard Ejecutivo
+    DASHBOARD_EJECUTIVO_PERIODOS: '/api/dashboard-ejecutivo/periodos-disponibles',
+
     // Metas y Comisiones
     METAS_DASHBOARD: (asesorId, periodo) => `/api/metas/dashboard?asesor_id=${asesorId}&periodo=${periodo}`,
     BONO_ACTUAL: (asesorId) => `/api/comisiones/bono-actual/${asesorId}`,

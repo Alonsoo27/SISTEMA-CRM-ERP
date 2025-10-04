@@ -187,6 +187,17 @@ router.get('/analisis-geografico',
     DashboardEjecutivoController.analisisGeografico
 );
 
+/**
+ * @route   GET /api/dashboard-ejecutivo/periodos-disponibles
+ * @desc    Obtener períodos con datos disponibles (todos los asesores)
+ * @access  Private (Ejecutivos: Jefe Ventas+)
+ */
+router.get('/periodos-disponibles',
+    authenticateToken,
+    verificarAccesoEjecutivo,
+    DashboardEjecutivoController.periodosDisponibles
+);
+
 // ============================================
 // RUTAS BÁSICAS (IGUAL AL PERSONAL)
 // ============================================

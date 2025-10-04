@@ -11,7 +11,8 @@ const PeriodSelectorAdvanced = ({
   asesorId,
   onPeriodChange,
   initialPeriod = 'mes_actual',
-  loading = false
+  loading = false,
+  isExecutive = false // Nuevo prop para modo ejecutivo
 }) => {
   const [activeTab, setActiveTab] = useState('mes');
   const [selectedPeriod, setSelectedPeriod] = useState('actual');
@@ -40,14 +41,22 @@ const PeriodSelectorAdvanced = ({
 
   // Cargar períodos disponibles desde el backend
   const cargarPeriodosDisponibles = useCallback(async () => {
-    if (!asesorId) return;
+    // En modo ejecutivo no requiere asesorId
+    if (!isExecutive && !asesorId) return;
 
     try {
       setLoadingPeriods(true);
       const token = localStorage.getItem('token');
 
+      // Usar endpoint diferente según el modo
+      const endpoint = isExecutive
+        ? API_CONFIG.ENDPOINTS.DASHBOARD_EJECUTIVO_PERIODOS
+        : API_CONFIG.ENDPOINTS.PERIODOS_DISPONIBLES(asesorId);
+
+      console.log(`🔍 Modo: ${isExecutive ? 'EJECUTIVO' : 'PERSONAL'}, Endpoint: ${endpoint}`);
+
       const response = await fetchWithErrorHandling(
-        API_CONFIG.ENDPOINTS.PERIODOS_DISPONIBLES(asesorId),
+        endpoint,
         {
           headers: {
             'Authorization': `Bearer ${token}`,
@@ -84,11 +93,11 @@ const PeriodSelectorAdvanced = ({
     } finally {
       setLoadingPeriods(false);
     }
-  }, [asesorId]);
+  }, [asesorId, isExecutive]);
 
   useEffect(() => {
     cargarPeriodosDisponibles();
-  }, [cargarPeriodosDisponibles]);
+  }, [cargarPeriodosDisponibles, isExecutive]);
 
   // Construir período completo
   const buildPeriod = useCallback((tab, selection) => {
