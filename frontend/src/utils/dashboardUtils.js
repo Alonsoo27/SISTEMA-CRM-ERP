@@ -104,17 +104,22 @@ export const fetchWithErrorHandlingOld = async (url, options = {}, retryCount = 
   }
 };
 
-export const cargarDatosDashboard = async (asesorId, periodo, headers) => {
+export const cargarDatosDashboard = async (asesorId, periodo, headers, cargarBono = true) => {
   const endpoints = [
     API_CONFIG.ENDPOINTS.DASHBOARD_PERSONAL(asesorId, periodo),
     API_CONFIG.ENDPOINTS.METAS_DASHBOARD(asesorId, periodo),
     API_CONFIG.ENDPOINTS.GEOGRAFIA_ASESOR(asesorId, periodo),
     API_CONFIG.ENDPOINTS.SECTORES_ASESOR(asesorId, periodo),
-    API_CONFIG.ENDPOINTS.RANKING_ASESOR(asesorId, periodo),
-    API_CONFIG.ENDPOINTS.BONO_ACTUAL(asesorId)
+    API_CONFIG.ENDPOINTS.RANKING_ASESOR(asesorId, periodo)
   ];
 
+  // Solo cargar bono para VENDEDORES y SUPER_ADMIN (no para JEFE_VENTAS)
+  if (cargarBono) {
+    endpoints.push(API_CONFIG.ENDPOINTS.BONO_ACTUAL(asesorId));
+  }
+
   console.log('📋 Cargando endpoints del dashboard:', endpoints);
+  console.log('💰 Cargar bono:', cargarBono);
 
   const resultados = await Promise.allSettled(
     endpoints.map(endpoint => fetchWithErrorHandling(endpoint, { headers }))
@@ -135,7 +140,7 @@ export const cargarDatosDashboard = async (asesorId, periodo, headers) => {
     geografia: extraerDatos(resultados[2]),
     sectores: extraerDatos(resultados[3]),
     ranking: extraerDatos(resultados[4]),
-    bono: extraerDatos(resultados[5]),
+    bono: cargarBono ? extraerDatos(resultados[5]) : null,
     errores: resultados.map((r, i) =>
       r.status === 'rejected' || !r.value.success ? {
         endpoint: endpoints[i],

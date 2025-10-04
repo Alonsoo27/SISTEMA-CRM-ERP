@@ -205,8 +205,12 @@ const DashboardAsesoresOptimized = ({
 
       console.log(`🔄 Cargando dashboard para asesor ${asesorSeleccionado} en modo ${modoVista}`);
 
+      // Determinar si debe cargar bono (solo para VENDEDORES y SUPER_ADMIN, no JEFE_VENTAS)
+      const esJefeVentas = usuarioActual?.rol_id === 3;
+      const cargarBono = modoVista === 'propio' ? !esJefeVentas : asesorSeleccionado !== usuarioActual?.id;
+
       // Usar la función optimizada de carga
-      const datos = await cargarDatosDashboard(asesorSeleccionado, periodoSeleccionado, headers);
+      const datos = await cargarDatosDashboard(asesorSeleccionado, periodoSeleccionado, headers, cargarBono);
 
       // Procesar resultados
       if (datos.dashboard) setMetricas(datos.dashboard);
