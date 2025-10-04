@@ -242,6 +242,16 @@ router.post('/login', async (req, res) => {
             nombre: usuario.nombre,
             apellido: usuario.apellido,
             nombre_completo: usuario.nombre_completo,
+
+            // IDs directos para compatibilidad
+            rol_id: usuario.rol_id,
+            area_id: usuario.area_id,
+            jefe_id: usuario.jefe_id,
+
+            // Permisos y capacidades
+            es_jefe: usuario.es_jefe,
+            vende: usuario.vende,
+
             rol: {
                 id: usuario.rol_id,
                 nombre: usuario.rol_nombre,
