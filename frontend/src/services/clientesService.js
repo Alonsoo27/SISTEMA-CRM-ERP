@@ -8,7 +8,7 @@ const API_BASE_URL = API_CONFIG.BASE_URL;
 
 class ClientesService {
   constructor() {
-    this.baseURL = `${API_BASE_URL}/ventas/clientes`;
+    this.baseURL = `${API_BASE_URL}/api/ventas/clientes`;
     this.cache = new Map();
     this.cacheTimeout = 5 * 60 * 1000; // 5 minutos
   }
