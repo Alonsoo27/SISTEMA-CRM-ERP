@@ -1029,7 +1029,7 @@ const cargarProductosProspecto = async (prospectoId) => {
           estado_detallado: formData.estado_detallado || 'vendido',
           fecha_venta: formData.fecha_venta || obtenerFechaLima(),
           fecha_entrega_estimada: formData.fecha_entrega_estimada || null,
-          canal_origen: 'venta-directa',
+          canal_origen: formData.canal_origen || 'venta-directa',
           
           es_venta_presencial: formData.es_venta_presencial || false,
           recibio_capacitacion_inmediata: formData.recibio_capacitacion_inmediata || false,
