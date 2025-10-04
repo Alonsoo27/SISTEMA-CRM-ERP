@@ -10,6 +10,7 @@ import AnalisisSection from '../components/soporte/sections/AnalisisSection';
 const SoportePage = () => {
   const [activeTab, setActiveTab] = useState('dashboard');
 
+  // Fix: Forzar rebuild para limpiar cache después del fix de trust proxy
   return (
     <div className="h-full p-6">
       <div className="max-w-7xl mx-auto">
