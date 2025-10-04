@@ -3,6 +3,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { API_CONFIG } from '../../../config/apiConfig';
+import { useModulePermissions } from '../../../hooks/useModulePermissions';
 
 // Componentes para modales
 import TicketDetallesModal from './TicketDetallesModal';
@@ -10,6 +11,7 @@ import TicketEditarModal from './TicketEditarModal';
 import TicketProcesarModal from './TicketProcesarModal';
 
 const TicketsSection = () => {
+  const { canCreate, canEdit, canDelete } = useModulePermissions('soporte');
   const [tickets, setTickets] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -218,9 +220,11 @@ const TicketsSection = () => {
             <h2 className="text-xl font-semibold text-gray-900">Gestión de Casos</h2>
             <p className="text-gray-600">Todos los tickets: capacitaciones, reparaciones y mantenimiento</p>
           </div>
-          <Button className="bg-blue-600 hover:bg-blue-700">
-            + Nuevo Ticket
-          </Button>
+          {canCreate && (
+            <Button className="bg-blue-600 hover:bg-blue-700">
+              + Nuevo Ticket
+            </Button>
+          )}
         </div>
 
         {/* Filtros */}
@@ -354,14 +358,16 @@ const TicketsSection = () => {
                   >
                     Ver Detalles
                   </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => abrirEditar(ticket)}
-                  >
-                    Editar
-                  </Button>
-                  {(ticket.estado === 'PENDIENTE' || ticket.estado === 'ASIGNADO' || ticket.estado === 'EN_PROCESO') && (
+                  {canEdit && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => abrirEditar(ticket)}
+                    >
+                      Editar
+                    </Button>
+                  )}
+                  {canEdit && (ticket.estado === 'PENDIENTE' || ticket.estado === 'ASIGNADO' || ticket.estado === 'EN_PROCESO') && (
                     <Button
                       size="sm"
                       className={getAccionBoton(ticket.estado).color}

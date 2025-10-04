@@ -8,6 +8,7 @@ import {
   MapPin, Zap, GitBranch, Target, Award, PieChart
 } from 'lucide-react';
 import almacenService from '../services/almacenService';
+import { useModulePermissions } from '../hooks/useModulePermissions';
 
 // Lazy loading de componentes pesados
 const InventarioModerno = React.lazy(() => import('../components/almacen/InventarioModerno'));
@@ -18,6 +19,7 @@ const AnalisisInventario = React.lazy(() => import('../components/almacen/Analis
 const ReportesAvanzados = React.lazy(() => import('../components/almacen/ReportesAvanzados'));
 
 const AlmacenPage = () => {
+  const { canCreate, canEdit } = useModulePermissions('almacen');
   // Estados principales
   const [vistaActual, setVistaActual] = useState('dashboard');
   const [dashboardData, setDashboardData] = useState(null);
@@ -852,14 +854,16 @@ const AlmacenPage = () => {
                   Filtros
                 </button>
 
-                <button
-                  onClick={() => handleExportar('excel')}
-                  disabled={loading}
-                  className="inline-flex items-center px-3 py-2 border border-gray-300 rounded-md text-gray-700 bg-white hover:bg-gray-50 transition-colors disabled:opacity-50"
-                >
-                  <Download className="h-4 w-4 mr-2" />
-                  Exportar
-                </button>
+                {canEdit && (
+                  <button
+                    onClick={() => handleExportar('excel')}
+                    disabled={loading}
+                    className="inline-flex items-center px-3 py-2 border border-gray-300 rounded-md text-gray-700 bg-white hover:bg-gray-50 transition-colors disabled:opacity-50"
+                  >
+                    <Download className="h-4 w-4 mr-2" />
+                    Exportar
+                  </button>
+                )}
               </>
             )}
           </div>

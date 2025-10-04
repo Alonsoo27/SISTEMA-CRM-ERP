@@ -16,8 +16,10 @@ import SeguimientosDashboardEnterprise from '../components/prospectos/Seguimient
 import BalanzaSeguimientos from '../components/prospectos/BalanzaSeguimientos/BalanzaSeguimientos';
 
 import prospectosService from '../services/prospectosService';
+import { useModulePermissions } from '../hooks/useModulePermissions';
 
 const ProspectosPage = () => {
+  const { canCreate, canEdit } = useModulePermissions('prospectos');
   const [vistaActual, setVistaActual] = useState('kanban');
   const [showForm, setShowForm] = useState(false);
   const [prospectoSeleccionado, setProspectoSeleccionado] = useState(null);
@@ -287,14 +289,16 @@ const ProspectosPage = () => {
               <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
               Actualizar
             </button>
-            
-            <button
-              onClick={handleCrearProspecto}
-              className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors shadow-sm"
-            >
-              <Plus className="h-4 w-4 mr-2" />
-              Nuevo Prospecto
-            </button>
+
+            {canCreate && (
+              <button
+                onClick={handleCrearProspecto}
+                className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors shadow-sm"
+              >
+                <Plus className="h-4 w-4 mr-2" />
+                Nuevo Prospecto
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -392,14 +396,16 @@ const ProspectosPage = () => {
                   Filtros
                 </button>
 
-                <button 
-                  onClick={handleExportar}
-                  disabled={loading}
-                  className="inline-flex items-center px-3 py-2 border border-gray-300 rounded-md text-gray-700 bg-white hover:bg-gray-50 transition-colors disabled:opacity-50"
-                >
-                  <Download className="h-4 w-4 mr-2" />
-                  Exportar
-                </button>
+                {canEdit && (
+                  <button
+                    onClick={handleExportar}
+                    disabled={loading}
+                    className="inline-flex items-center px-3 py-2 border border-gray-300 rounded-md text-gray-700 bg-white hover:bg-gray-50 transition-colors disabled:opacity-50"
+                  >
+                    <Download className="h-4 w-4 mr-2" />
+                    Exportar
+                  </button>
+                )}
               </>
             )}
           </div>

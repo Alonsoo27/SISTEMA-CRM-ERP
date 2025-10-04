@@ -2,9 +2,11 @@ import React, { useState } from 'react';
 import { Package, BarChart3, Search, Plus, Filter, Download, Upload } from 'lucide-react';
 import ProductosList from '../components/productos/ProductoList/ProductosList';
 import DashboardProductos from '../components/productos/Dashboard/DashboardProductos';
+import { useModulePermissions } from '../hooks/useModulePermissions';
 
 const ProductosPage = () => {
   const [activeView, setActiveView] = useState('lista'); // 'dashboard', 'lista'
+  const { canCreate, canEdit } = useModulePermissions('productos');
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -46,14 +48,18 @@ const ProductosPage = () => {
 
             {/* Acciones rápidas */}
             <div className="flex items-center space-x-3">
-              <button className="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
-                <Download className="h-4 w-4 mr-2" />
-                Exportar
-              </button>
-              <button className="inline-flex items-center px-3 py-2 border border-transparent text-sm leading-4 font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
-                <Plus className="h-4 w-4 mr-2" />
-                Nuevo Producto
-              </button>
+              {canEdit && (
+                <button className="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+                  <Download className="h-4 w-4 mr-2" />
+                  Exportar
+                </button>
+              )}
+              {canCreate && (
+                <button className="inline-flex items-center px-3 py-2 border border-transparent text-sm leading-4 font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+                  <Plus className="h-4 w-4 mr-2" />
+                  Nuevo Producto
+                </button>
+              )}
             </div>
           </div>
         </div>

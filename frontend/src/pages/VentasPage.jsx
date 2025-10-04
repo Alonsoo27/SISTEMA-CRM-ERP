@@ -22,7 +22,10 @@ import ABCProductos from '../components/ABCProductos';
 import MetasAvanzado from '../components/MetasAvanzado.jsx';
 import PipelineMetrics from '../components/ventas/PipelineMetrics/PipelineMetrics';
 import { normalizeUser, isExecutive } from '../utils/userUtils';
+import { useModulePermissions } from '../hooks/useModulePermissions';
+
 const VentasPage = () => {
+  const { canCreate, canEdit } = useModulePermissions('ventas');
   const [vistaActual, setVistaActual] = useState('lista');
   const [showVentaForm, setShowVentaForm] = useState(false);
   const [ventaSeleccionada, setVentaSeleccionada] = useState(null);
@@ -656,21 +659,25 @@ const VentasPage = () => {
               Actualizar
             </button>
 
-            <button
-              onClick={handleCrearCliente}
-              className="inline-flex items-center px-3 py-2 border border-blue-300 rounded-md text-blue-700 bg-blue-50 hover:bg-blue-100 transition-colors"
-            >
-              <Users className="h-4 w-4 mr-2" />
-              Nuevo Cliente
-            </button>
+            {canCreate && (
+              <button
+                onClick={handleCrearCliente}
+                className="inline-flex items-center px-3 py-2 border border-blue-300 rounded-md text-blue-700 bg-blue-50 hover:bg-blue-100 transition-colors"
+              >
+                <Users className="h-4 w-4 mr-2" />
+                Nuevo Cliente
+              </button>
+            )}
 
-            <button
-              onClick={handleCrearVenta}
-              className="inline-flex items-center px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors shadow-sm"
-            >
-              <Plus className="h-4 w-4 mr-2" />
-              Nueva Venta
-            </button>
+            {canCreate && (
+              <button
+                onClick={handleCrearVenta}
+                className="inline-flex items-center px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors shadow-sm"
+              >
+                <Plus className="h-4 w-4 mr-2" />
+                Nueva Venta
+              </button>
+            )}
           </div>
         </div>
       </div>
