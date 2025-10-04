@@ -75,16 +75,40 @@ const PeriodSelectorAdvanced = ({
         console.log('📊 Períodos extraídos:', periodos);
 
         if (periodos) {
+          // Filtrar opciones inválidas (aquellas sin value válido o con NaN)
+          const filtrarInvalidos = (items) => {
+            if (!Array.isArray(items)) return [];
+            return items.filter(item => {
+              // Verificar que value existe y no contiene NaN
+              const tieneValueValido = item.value &&
+                                       typeof item.value === 'string' &&
+                                       !item.value.includes('NaN') &&
+                                       !item.value.includes('undefined') &&
+                                       !item.value.includes('null');
+
+              // Verificar que label existe y no es "Invalid Date"
+              const tieneLabelValido = item.label &&
+                                       item.label !== 'Invalid Date' &&
+                                       !item.label.includes('NaN');
+
+              if (!tieneValueValido || !tieneLabelValido) {
+                console.warn('🚫 Opción inválida filtrada:', item);
+                return false;
+              }
+              return true;
+            });
+          };
+
           setAvailablePeriods({
-            meses: periodos.meses || [],
-            trimestres: periodos.trimestres || [],
-            años: periodos.años || [],
+            meses: filtrarInvalidos(periodos.meses || []),
+            trimestres: filtrarInvalidos(periodos.trimestres || []),
+            años: filtrarInvalidos(periodos.años || []),
             resumen: estadisticas
           });
           console.log('✅ Períodos guardados en estado:', {
-            meses: periodos.meses?.length || 0,
-            trimestres: periodos.trimestres?.length || 0,
-            años: periodos.años?.length || 0
+            meses: filtrarInvalidos(periodos.meses || []).length,
+            trimestres: filtrarInvalidos(periodos.trimestres || []).length,
+            años: filtrarInvalidos(periodos.años || []).length
           });
         }
       }
@@ -99,20 +123,34 @@ const PeriodSelectorAdvanced = ({
     cargarPeriodosDisponibles();
   }, [cargarPeriodosDisponibles, isExecutive]);
 
-  // Construir período completo
+  // Construir período completo con validación
   const buildPeriod = useCallback((tab, selection) => {
+    let period;
+
     switch (tab) {
       case 'semana':
-        return 'semana_actual';
+        period = 'semana_actual';
+        break;
       case 'mes':
-        return selection === 'actual' ? 'mes_actual' : `mes_${selection}`;
+        period = selection === 'actual' ? 'mes_actual' : `mes_${selection}`;
+        break;
       case 'trimestre':
-        return selection === 'actual' ? 'trimestre_actual' : `trimestre_${selection}`;
+        period = selection === 'actual' ? 'trimestre_actual' : `trimestre_${selection}`;
+        break;
       case 'año':
-        return selection === 'actual' ? 'año_actual' : `año_${selection}`;
+        period = selection === 'actual' ? 'año_actual' : `año_${selection}`;
+        break;
       default:
-        return 'mes_actual';
+        period = 'mes_actual';
     }
+
+    // Validar que el período construido no contenga valores inválidos
+    if (period.includes('NaN') || period.includes('undefined') || period.includes('null')) {
+      console.warn(`⚠️ Período inválido construido: ${period}, usando mes_actual como fallback`);
+      return 'mes_actual';
+    }
+
+    return period;
   }, []);
 
   // Manejar cambio de tab
@@ -131,8 +169,16 @@ const PeriodSelectorAdvanced = ({
 
   // Manejar cambio de período específico
   const handlePeriodChange = (period) => {
+    // Validar que el período seleccionado no sea inválido
+    if (!period || period.includes('NaN') || period.includes('undefined') || period.includes('null')) {
+      console.warn(`⚠️ Intento de seleccionar período inválido: ${period}`);
+      return; // No hacer nada si el período es inválido
+    }
+
     setSelectedPeriod(period);
-    onPeriodChange(buildPeriod(activeTab, period));
+    const builtPeriod = buildPeriod(activeTab, period);
+    console.log(`📅 Período construido: ${builtPeriod} (tab: ${activeTab}, selection: ${period})`);
+    onPeriodChange(builtPeriod);
   };
 
   // Renderizar opciones del selector

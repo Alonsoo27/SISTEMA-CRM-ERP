@@ -11,17 +11,48 @@ const obtenerFechasPeriodo = (periodo) => {
   // Manejar períodos específicos (mes_2025-09, trimestre_2025-Q3, año_2025)
   if (periodo.startsWith('mes_') && periodo.includes('-')) {
     const [year, month] = periodo.replace('mes_', '').split('-');
-    fechaInicio = new Date(parseInt(year), parseInt(month) - 1, 1).toISOString().split('T')[0];
-    fechaFin = new Date(parseInt(year), parseInt(month), 0).toISOString().split('T')[0];
+    const yearNum = parseInt(year);
+    const monthNum = parseInt(month);
+
+    // Validar que year y month sean números válidos
+    if (isNaN(yearNum) || isNaN(monthNum) || monthNum < 1 || monthNum > 12 || yearNum < 2000 || yearNum > 2100) {
+      console.warn(`⚠️ Período inválido recibido: ${periodo}, usando mes_actual como fallback`);
+      // Usar mes actual como fallback
+      fechaInicio = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0];
+      fechaFin = new Date().toISOString().split('T')[0];
+    } else {
+      fechaInicio = new Date(yearNum, monthNum - 1, 1).toISOString().split('T')[0];
+      fechaFin = new Date(yearNum, monthNum, 0).toISOString().split('T')[0];
+    }
   } else if (periodo.startsWith('trimestre_') && periodo.includes('-Q')) {
     const [year, quarter] = periodo.replace('trimestre_', '').split('-Q');
-    const mesInicio = (parseInt(quarter) - 1) * 3;
-    fechaInicio = new Date(parseInt(year), mesInicio, 1).toISOString().split('T')[0];
-    fechaFin = new Date(parseInt(year), mesInicio + 3, 0).toISOString().split('T')[0];
+    const yearNum = parseInt(year);
+    const quarterNum = parseInt(quarter);
+
+    // Validar números
+    if (isNaN(yearNum) || isNaN(quarterNum) || quarterNum < 1 || quarterNum > 4 || yearNum < 2000 || yearNum > 2100) {
+      console.warn(`⚠️ Trimestre inválido recibido: ${periodo}, usando trimestre_actual como fallback`);
+      const mesActual = new Date().getMonth();
+      const trimestreInicio = Math.floor(mesActual / 3) * 3;
+      fechaInicio = new Date(new Date().getFullYear(), trimestreInicio, 1).toISOString().split('T')[0];
+      fechaFin = new Date().toISOString().split('T')[0];
+    } else {
+      const mesInicio = (quarterNum - 1) * 3;
+      fechaInicio = new Date(yearNum, mesInicio, 1).toISOString().split('T')[0];
+      fechaFin = new Date(yearNum, mesInicio + 3, 0).toISOString().split('T')[0];
+    }
   } else if (periodo.startsWith('año_') && /^\d{4}$/.test(periodo.replace('año_', ''))) {
     const year = periodo.replace('año_', '');
-    fechaInicio = new Date(parseInt(year), 0, 1).toISOString().split('T')[0];
-    fechaFin = new Date(parseInt(year), 11, 31).toISOString().split('T')[0];
+    const yearNum = parseInt(year);
+
+    if (isNaN(yearNum) || yearNum < 2000 || yearNum > 2100) {
+      console.warn(`⚠️ Año inválido recibido: ${periodo}, usando año_actual como fallback`);
+      fechaInicio = new Date(new Date().getFullYear(), 0, 1).toISOString().split('T')[0];
+      fechaFin = new Date().toISOString().split('T')[0];
+    } else {
+      fechaInicio = new Date(yearNum, 0, 1).toISOString().split('T')[0];
+      fechaFin = new Date(yearNum, 11, 31).toISOString().split('T')[0];
+    }
   } else {
     // Períodos predeterminados
     switch (periodo) {
@@ -1886,8 +1917,22 @@ const periodosDisponibles = async (req, res) => {
       const año = parseInt(row.año);
       const mes = parseInt(row.mes);
 
+      // Validar que año y mes sean números válidos
+      if (isNaN(año) || isNaN(mes) || mes < 1 || mes > 12 || año < 2000 || año > 2100) {
+        console.warn(`⚠️ Período inválido detectado: año=${año}, mes=${mes}`);
+        return; // Saltar este registro
+      }
+
       // Meses individuales
-      const mesLabel = new Date(año, mes - 1, 1).toLocaleDateString('es-ES', { year: 'numeric', month: 'long' });
+      const fecha = new Date(año, mes - 1, 1);
+
+      // Validar que la fecha sea válida
+      if (isNaN(fecha.getTime())) {
+        console.warn(`⚠️ Fecha inválida: ${año}-${mes}`);
+        return; // Saltar este registro
+      }
+
+      const mesLabel = fecha.toLocaleDateString('es-ES', { year: 'numeric', month: 'long' });
       meses.push({
         value: `${año}-${String(mes).padStart(2, '0')}`,
         label: mesLabel.charAt(0).toUpperCase() + mesLabel.slice(1), // Capitalizar
