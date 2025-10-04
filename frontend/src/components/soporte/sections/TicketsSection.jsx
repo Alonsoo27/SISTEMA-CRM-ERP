@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { API_CONFIG } from '../../../config/apiConfig';
 
 // Componentes para modales
 import TicketDetallesModal from './TicketDetallesModal';
@@ -39,7 +40,7 @@ const TicketsSection = () => {
   const fetchTickets = async () => {
     try {
       setLoading(true);
-      const response = await fetch('/api/soporte/tickets', {
+      const response = await fetch(`${API_CONFIG.BASE_URL}/api/soporte/tickets`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`,
           'Content-Type': 'application/json'

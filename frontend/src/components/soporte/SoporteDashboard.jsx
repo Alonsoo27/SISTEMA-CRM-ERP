@@ -9,10 +9,11 @@ import {
     LineChart, Line, PieChart, Pie, Cell, Area, AreaChart 
 } from 'recharts';
 import {
-    Clock, AlertTriangle, CheckCircle, Wrench, Users, 
+    Clock, AlertTriangle, CheckCircle, Wrench, Users,
     TrendingUp, TrendingDown, Pause, Play, Phone,
     Calendar, Settings, RefreshCw, Download
 } from 'lucide-react';
+import { API_CONFIG } from '../../config/apiConfig';
 
 const SoporteDashboard = () => {
     const [dashboardData, setDashboardData] = useState(null);
@@ -49,8 +50,8 @@ const SoporteDashboard = () => {
             setLoading(true);
             setError(null);
             
-            // CORRECCIÓN: Endpoint correcto según las rutas del backend
-            const response = await fetch('/api/soporte/dashboard/metricas', {
+            // CORRECCIÓN: Endpoint correcto usando BASE_URL para Railway
+            const response = await fetch(`${API_CONFIG.BASE_URL}/api/soporte/dashboard/metricas`, {
                 headers: {
                     'Authorization': `Bearer ${localStorage.getItem('token')}`,
                     'Content-Type': 'application/json'
