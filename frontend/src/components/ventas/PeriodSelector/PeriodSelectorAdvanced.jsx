@@ -195,8 +195,9 @@ const PeriodSelectorAdvanced = ({
              'Año Actual'}
           </option>
           {options.map((option) => (
-            <option key={option.valor} value={option.valor}>
-              {option.label} ({option.estadisticas})
+            <option key={option.value} value={option.value}>
+              {option.label}
+              {option.ventas && ` (${option.ventas} ventas)`}
             </option>
           ))}
         </select>

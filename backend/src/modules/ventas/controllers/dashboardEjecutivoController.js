@@ -1887,10 +1887,10 @@ const periodosDisponibles = async (req, res) => {
       const mes = parseInt(row.mes);
 
       // Meses individuales
-      const mesLabel = new Date(año, mes - 1).toLocaleDateString('es-ES', { year: 'numeric', month: 'long' });
+      const mesLabel = new Date(año, mes - 1, 1).toLocaleDateString('es-ES', { year: 'numeric', month: 'long' });
       meses.push({
         value: `${año}-${String(mes).padStart(2, '0')}`,
-        label: mesLabel,
+        label: mesLabel.charAt(0).toUpperCase() + mesLabel.slice(1), // Capitalizar
         año,
         mes,
         ventas: parseInt(row.total_ventas),

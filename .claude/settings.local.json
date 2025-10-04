@@ -46,7 +46,8 @@
       "Bash(git ls-tree:*)",
       "Bash(git checkout:*)",
       "Read(//c/**)",
-      "Bash(findstr:*)"
+      "Bash(findstr:*)",
+      "Bash(Invoke-WebRequest -Uri \"https://sistema-crm-erp-production.up.railway.app/api/auth/login\" -Method POST -Body '{\"\"\"\"email\"\"\"\":\"\"\"\"jventasmundipaci@gmail.com\"\"\"\",\"\"\"\"password\"\"\"\":\"\"\"\"Test1234\"\"\"\"}' -ContentType \"application/json\")"
     ],
     "deny": [],
     "ask": []
