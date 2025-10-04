@@ -448,8 +448,8 @@ const metasAvanzado = async (req, res) => {
       WHERE mv.activo = true
         AND mv.año = $1
         AND mv.mes = $2
-        -- Solo mostrar roles de ventas para vista ejecutiva
-        AND u.rol_id IN (1, 7) -- SUPERADMIN y VENDEDOR
+        AND u.vende = true
+        AND u.activo = true
       ORDER BY porcentaje_valor DESC, mv.meta_valor DESC
     `;
 

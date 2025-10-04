@@ -76,10 +76,11 @@ const verificarAccesoEjecutivo = (req, res, next) => {
                 'abc-productos', 'analisis-geografico'
             ];
         } else if (userRole === 3) {
-            // JEFE_VENTAS: Acceso específico a ventas
+            // JEFE_VENTAS: Acceso completo a dashboards ejecutivos
             nivelAcceso = 'ventas';
             dashboardsPermitidos = [
-                'vista-unificada', 'metas-avanzado', 'sectores-strategy'
+                'vista-unificada', 'metas-avanzado', 'sectores-strategy',
+                'abc-productos', 'analisis-geografico'
             ];
         }
 
@@ -167,24 +168,22 @@ router.get('/sectores-strategy',
 /**
  * @route   GET /api/dashboard-ejecutivo/abc-productos
  * @desc    Análisis ABC de productos
- * @access  Private (Administradores: Gerente+)
+ * @access  Private (Ejecutivos: Jefe Ventas+)
  */
 router.get('/abc-productos',
     authenticateToken,
     verificarAccesoEjecutivo,
-    requireAccessoTotal,
     DashboardEjecutivoController.abcProductos
 );
 
 /**
  * @route   GET /api/dashboard-ejecutivo/analisis-geografico
  * @desc    Análisis geográfico del equipo
- * @access  Private (Administradores: Gerente+)
+ * @access  Private (Ejecutivos: Jefe Ventas+)
  */
 router.get('/analisis-geografico',
     authenticateToken,
     verificarAccesoEjecutivo,
-    requireAccessoTotal,
     DashboardEjecutivoController.analisisGeografico
 );
 
