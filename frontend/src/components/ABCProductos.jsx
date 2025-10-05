@@ -17,8 +17,11 @@ const ABCProductos = ({ usuarioActual }) => {
   const [vistaActiva, setVistaActiva] = useState('todos');
 
   useEffect(() => {
-    cargarDatos();
-  }, [periodo]);
+    if (periodo) {
+      cargarDatos();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [periodo]); // NO poner cargarDatos en deps - es función estable
 
   const cargarDatos = async () => {
     try {

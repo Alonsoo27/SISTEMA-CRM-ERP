@@ -80,7 +80,10 @@ const VistaUnificada = ({
     if (usuarioActual?.id) {
       cargarDatos();
     }
-  }, [cargarDatos, refreshTrigger, usuarioActual?.id]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [periodoSeleccionado, refreshTrigger, usuarioActual?.id]);
+  // Llamamos cargarDatos directamente cuando cambian periodo/refresh/usuario
+  // NO ponemos cargarDatos en deps porque causa ciclo (se recrea cuando periodo cambia)
 
   // Funciones auxiliares
   const formatearMonto = (monto) => {

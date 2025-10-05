@@ -37,8 +37,11 @@ const AnalisisGeografico = ({ usuarioActual }) => {
   }, [periodo]);
 
   useEffect(() => {
-    cargarDatos();
-  }, [cargarDatos]);
+    if (periodo) {
+      cargarDatos();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [periodo]); // NO poner cargarDatos en deps - causa re-ejecución innecesaria
 
   const textoSegunPeriodo = useMemo(() => {
     switch(periodo) {
