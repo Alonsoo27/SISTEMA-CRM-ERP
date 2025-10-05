@@ -35,15 +35,7 @@ if (!existsSync(distPath)) {
 
 console.log('✅ dist/ folder found');
 
-// Servir archivos estáticos con logs
-app.use((req, res, next) => {
-  console.log(`📥 ${req.method} ${req.path}`);
-  next();
-});
-
-app.use(express.static(distPath));
-
-// Proxy para requests a /api/* → redirigir al backend
+// Proxy para requests a /api/* → redirigir al backend (DEBE IR ANTES DE STATIC)
 app.use('/api', createProxyMiddleware({
   target: BACKEND_URL,
   changeOrigin: true,
@@ -56,6 +48,14 @@ app.use('/api', createProxyMiddleware({
     res.status(500).json({ error: 'Backend proxy error', details: err.message });
   }
 }));
+
+// Servir archivos estáticos con logs
+app.use((req, res, next) => {
+  console.log(`📥 ${req.method} ${req.path}`);
+  next();
+});
+
+app.use(express.static(distPath));
 
 // Todas las rutas NO-API devuelven index.html para SPA
 app.get('*', (req, res) => {
