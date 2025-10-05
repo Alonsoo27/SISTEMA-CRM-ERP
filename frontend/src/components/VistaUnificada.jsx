@@ -77,6 +77,13 @@ const VistaUnificada = ({
   }, [periodoSeleccionado]); // showNotification es estable (deps []), no necesita estar aquí
 
   useEffect(() => {
+    console.log('🔄 [VistaUnificada] useEffect disparado:', {
+      periodo: periodoSeleccionado,
+      refresh: refreshTrigger,
+      userId: usuarioActual?.id,
+      timestamp: new Date().toISOString()
+    });
+
     if (usuarioActual?.id) {
       cargarDatos();
     }

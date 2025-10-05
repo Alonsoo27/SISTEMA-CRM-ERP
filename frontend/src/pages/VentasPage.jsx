@@ -101,6 +101,7 @@ const VentasPage = () => {
       const usuario = await authService.getUser();
 
       if (usuario) {
+        console.log('🔄 [VentasPage] setUsuarioActual - ANTES:', usuarioActual?.id, '→ DESPUÉS:', usuario.id);
         setUsuarioActual(usuario);
         console.log('✅ VentasPage: Usuario cargado:', {
           id: usuario.id,
