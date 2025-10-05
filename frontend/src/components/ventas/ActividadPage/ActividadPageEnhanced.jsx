@@ -26,8 +26,11 @@ const ActividadPageEnhanced = () => {
   const [horasDecimales, setHorasDecimales] = useState(0);
 
   // Estados para el nuevo diseño
-  const [userRole, setUserRole] = useState('VENDEDOR'); // Simulado por ahora
+  const [userRole, setUserRole] = useState(null);
+  const [userId, setUserId] = useState(null);
+  const [userName, setUserName] = useState('');
   const [selectedUser, setSelectedUser] = useState(null);
+  const [vistaMode, setVistaMode] = useState('global'); // 'global' o 'por_asesor'
   const [graphData, setGraphData] = useState(null);
   const [graphLoading, setGraphLoading] = useState(false);
   const [selectedPeriod, setSelectedPeriod] = useState('semanal');
@@ -38,6 +41,27 @@ const ActividadPageEnhanced = () => {
   const [historialLoading, setHistorialLoading] = useState(false);
   const [campanasData, setCampanasData] = useState([]);
   const [campanasLoading, setCampanasLoading] = useState(false);
+
+  // Obtener información del usuario desde localStorage
+  const obtenerInfoUsuario = () => {
+    try {
+      const token = localStorage.getItem('token');
+      if (token) {
+        // Decodificar el token JWT (asumiendo formato estándar)
+        const payload = JSON.parse(atob(token.split('.')[1]));
+        const rol = payload.rol || 'VENDEDOR';
+        const id = payload.id || payload.user_id;
+        const nombre = payload.nombre || '';
+
+        setUserRole(rol);
+        setUserId(id);
+        setUserName(nombre);
+      }
+    } catch (error) {
+      console.error('Error decodificando token:', error);
+      setUserRole('VENDEDOR'); // Default fallback
+    }
+  };
 
   // Funciones principales
   const obtenerEstado = async () => {
@@ -165,7 +189,18 @@ const ActividadPageEnhanced = () => {
   const cargarHistorial = async () => {
     try {
       setHistorialLoading(true);
-      const response = await actividadService.getHistorial({ limite: 10 });
+
+      // Construir parámetros según el modo de vista
+      const params = { limite: 30 };
+
+      // Si es manager y está en modo "por_asesor" con usuario seleccionado
+      if (isManager() && vistaMode === 'por_asesor' && selectedUser) {
+        params.usuario_id = selectedUser;
+      }
+      // Si no es manager o está en modo global sin selección, traer solo datos del usuario actual
+      // (el backend ya hace esto por defecto)
+
+      const response = await actividadService.getHistorial(params);
 
       console.log('🔍 Respuesta completa del historial:', response);
 
@@ -239,19 +274,13 @@ const ActividadPageEnhanced = () => {
       }
     } catch (error) {
       console.error('Error cargando vendedores:', error);
-      // Datos de ejemplo
-      setVendedores([
-        { id: 1, nombre: 'Juan', apellido: 'Pérez' },
-        { id: 2, nombre: 'María', apellido: 'García' },
-        { id: 3, nombre: 'Carlos', apellido: 'López' }
-      ]);
     }
   };
 
   // useEffects
   useEffect(() => {
+    obtenerInfoUsuario(); // Obtener info del usuario primero
     obtenerEstado();
-    cargarVendedores();
     if (activeTab === 'graficos') {
       cargarDatosGraficos();
     }
@@ -264,6 +293,13 @@ const ActividadPageEnhanced = () => {
     const interval = setInterval(obtenerEstado, 5 * 60 * 1000);
     return () => clearInterval(interval);
   }, []);
+
+  // Cargar vendedores cuando el rol esté disponible
+  useEffect(() => {
+    if (userRole && isManager()) {
+      cargarVendedores();
+    }
+  }, [userRole, userId, userName]);
 
   useEffect(() => {
     if (activeTab === 'graficos') {
@@ -279,6 +315,13 @@ const ActividadPageEnhanced = () => {
       cargarCampanas();
     }
   }, [activeTab]);
+
+  // Recargar historial cuando cambie el modo de vista o usuario seleccionado
+  useEffect(() => {
+    if (activeTab === 'historial' && isManager()) {
+      cargarHistorial();
+    }
+  }, [vistaMode, selectedUser]);
 
   useEffect(() => {
     let interval = null;
@@ -486,12 +529,23 @@ const ActividadPageEnhanced = () => {
 
   // Sistema de tabs
   const TabSystem = () => {
-    const tabs = [
-      { id: 'actividad', label: 'Actividad Hoy', icon: Activity },
-      { id: 'graficos', label: 'Gráficos', icon: BarChart3 },
-      { id: 'historial', label: 'Historial', icon: History },
-      { id: 'campanas', label: 'Campañas', icon: Target }
+    // Definir tabs según rol del usuario
+    const allTabs = [
+      { id: 'actividad', label: 'Actividad Hoy', icon: Activity, roles: ['VENDEDOR', 'ASESOR_VENTAS', 'SUPER_ADMIN'] },
+      { id: 'graficos', label: 'Gráficos', icon: BarChart3, roles: ['VENDEDOR', 'ASESOR_VENTAS', 'SUPER_ADMIN', 'JEFE_VENTAS', 'GERENTE', 'ADMIN'] },
+      { id: 'historial', label: 'Historial', icon: History, roles: ['VENDEDOR', 'ASESOR_VENTAS', 'SUPER_ADMIN', 'JEFE_VENTAS', 'GERENTE', 'ADMIN'] },
+      { id: 'campanas', label: 'Campañas', icon: Target, roles: ['VENDEDOR', 'ASESOR_VENTAS', 'SUPER_ADMIN', 'JEFE_VENTAS', 'GERENTE', 'ADMIN'] }
     ];
+
+    // Filtrar tabs según el rol del usuario
+    const tabs = allTabs.filter(tab => tab.roles.includes(userRole));
+
+    // Si el tab activo no está permitido, cambiar al primero disponible
+    useEffect(() => {
+      if (!tabs.find(tab => tab.id === activeTab) && tabs.length > 0) {
+        setActiveTab(tabs[0].id);
+      }
+    }, [userRole, tabs]);
 
     return (
       <div className="border-b border-gray-200 mb-6">
@@ -632,40 +686,79 @@ const ActividadPageEnhanced = () => {
       <div className="space-y-6">
         {/* Panel de filtros */}
         <div className="bg-white p-4 rounded-xl shadow-lg border border-gray-100">
-          <div className="flex items-center justify-between">
-            <h3 className="text-lg font-semibold text-gray-900">Análisis Temporal</h3>
-            <div className="flex items-center space-x-4">
-              <div className="flex items-center space-x-2">
-                <Calendar className="h-4 w-4 text-gray-500" />
-                <select
-                  className="border border-gray-300 rounded-lg px-3 py-1 text-sm"
-                  value={selectedPeriod}
-                  onChange={(e) => setSelectedPeriod(e.target.value)}
-                >
-                  <option value="semanal">Última Semana</option>
-                  <option value="mensual">Último Mes</option>
-                  <option value="trimestral">Último Trimestre</option>
-                  <option value="anual">Último Año</option>
-                </select>
-              </div>
-              {isManager() && (
+          <div className="flex flex-col space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-semibold text-gray-900">Análisis Temporal</h3>
+              <div className="flex items-center space-x-4">
                 <div className="flex items-center space-x-2">
-                  <Users className="h-4 w-4 text-gray-500" />
+                  <Calendar className="h-4 w-4 text-gray-500" />
                   <select
                     className="border border-gray-300 rounded-lg px-3 py-1 text-sm"
-                    value={selectedUser || ''}
-                    onChange={(e) => setSelectedUser(e.target.value || null)}
+                    value={selectedPeriod}
+                    onChange={(e) => setSelectedPeriod(e.target.value)}
                   >
-                    <option value="">Todos los vendedores</option>
-                    {vendedores.map((vendedor) => (
-                      <option key={vendedor.id} value={vendedor.id}>
-                        {vendedor.nombre} {vendedor.apellido}
-                      </option>
-                    ))}
+                    <option value="semanal">Última Semana</option>
+                    <option value="mensual">Último Mes</option>
+                    <option value="trimestral">Último Trimestre</option>
+                    <option value="anual">Último Año</option>
                   </select>
                 </div>
-              )}
+              </div>
             </div>
+
+            {/* Selector de Vista para Managers */}
+            {isManager() && (
+              <div className="flex items-center space-x-4 pt-3 border-t border-gray-200">
+                <div className="flex items-center space-x-2">
+                  <Filter className="h-4 w-4 text-purple-600" />
+                  <span className="text-sm font-medium text-gray-700">Modo de Vista:</span>
+                  <div className="flex bg-gray-100 rounded-lg p-1">
+                    <button
+                      onClick={() => {
+                        setVistaMode('global');
+                        setSelectedUser(null);
+                      }}
+                      className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${
+                        vistaMode === 'global'
+                          ? 'bg-white text-purple-600 shadow-sm'
+                          : 'text-gray-600 hover:text-gray-900'
+                      }`}
+                    >
+                      Vista Global
+                    </button>
+                    <button
+                      onClick={() => setVistaMode('por_asesor')}
+                      className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${
+                        vistaMode === 'por_asesor'
+                          ? 'bg-white text-purple-600 shadow-sm'
+                          : 'text-gray-600 hover:text-gray-900'
+                      }`}
+                    >
+                      Por Asesor
+                    </button>
+                  </div>
+                </div>
+
+                {/* Selector de Asesor (solo visible en modo "Por Asesor") */}
+                {vistaMode === 'por_asesor' && (
+                  <div className="flex items-center space-x-2">
+                    <Users className="h-4 w-4 text-gray-500" />
+                    <select
+                      className="border border-gray-300 rounded-lg px-3 py-1 text-sm"
+                      value={selectedUser || ''}
+                      onChange={(e) => setSelectedUser(e.target.value || null)}
+                    >
+                      <option value="">Seleccionar asesor...</option>
+                      {vendedores.map((vendedor) => (
+                        <option key={vendedor.id} value={vendedor.id}>
+                          {vendedor.nombre} {vendedor.apellido}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
 
@@ -804,8 +897,65 @@ const ActividadPageEnhanced = () => {
   // Contenido de Historial
   const HistorialContent = () => {
     return (
-      <div className="bg-white p-6 rounded-xl shadow-lg border border-gray-100">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">Historial de Actividad</h3>
+      <div className="space-y-6">
+        {/* Panel de filtros para Historial */}
+        {isManager() && (
+          <div className="bg-white p-4 rounded-xl shadow-lg border border-gray-100">
+            <div className="flex items-center space-x-4">
+              <div className="flex items-center space-x-2">
+                <Filter className="h-4 w-4 text-purple-600" />
+                <span className="text-sm font-medium text-gray-700">Modo de Vista:</span>
+                <div className="flex bg-gray-100 rounded-lg p-1">
+                  <button
+                    onClick={() => {
+                      setVistaMode('global');
+                      setSelectedUser(null);
+                    }}
+                    className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${
+                      vistaMode === 'global'
+                        ? 'bg-white text-purple-600 shadow-sm'
+                        : 'text-gray-600 hover:text-gray-900'
+                    }`}
+                  >
+                    Vista Global
+                  </button>
+                  <button
+                    onClick={() => setVistaMode('por_asesor')}
+                    className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${
+                      vistaMode === 'por_asesor'
+                        ? 'bg-white text-purple-600 shadow-sm'
+                        : 'text-gray-600 hover:text-gray-900'
+                    }`}
+                  >
+                    Por Asesor
+                  </button>
+                </div>
+              </div>
+
+              {/* Selector de Asesor (solo visible en modo "Por Asesor") */}
+              {vistaMode === 'por_asesor' && (
+                <div className="flex items-center space-x-2">
+                  <Users className="h-4 w-4 text-gray-500" />
+                  <select
+                    className="border border-gray-300 rounded-lg px-3 py-1 text-sm"
+                    value={selectedUser || ''}
+                    onChange={(e) => setSelectedUser(e.target.value || null)}
+                  >
+                    <option value="">Seleccionar asesor...</option>
+                    {vendedores.map((vendedor) => (
+                      <option key={vendedor.id} value={vendedor.id}>
+                        {vendedor.nombre} {vendedor.apellido}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        <div className="bg-white p-6 rounded-xl shadow-lg border border-gray-100">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Historial de Actividad</h3>
         {historialLoading ? (
           <div className="flex items-center justify-center py-12">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
@@ -821,6 +971,12 @@ const ActividadPageEnhanced = () => {
               <div key={index} className="border border-gray-200 rounded-lg p-4">
                 <div className="flex items-center justify-between">
                   <div>
+                    {/* Mostrar nombre del usuario en vista global */}
+                    {isManager() && vistaMode === 'global' && registro.usuario_nombre && (
+                      <p className="text-xs font-semibold text-purple-600 mb-1">
+                        {registro.usuario_nombre}
+                      </p>
+                    )}
                     <p className="font-medium text-gray-900">
                       {new Date(registro.fecha).toLocaleDateString('es-PE')}
                     </p>
@@ -855,6 +1011,7 @@ const ActividadPageEnhanced = () => {
             ))}
           </div>
         )}
+        </div>
       </div>
     );
   };

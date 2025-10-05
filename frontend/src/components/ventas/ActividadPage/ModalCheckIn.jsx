@@ -24,11 +24,26 @@ const ModalCheckIn = ({
   const [errors, setErrors] = useState({});
   const [lineasProductos, setLineasProductos] = useState([]);
   const [loadingLineas, setLoadingLineas] = useState(false);
+  const [campanaActiva, setCampanaActiva] = useState(null);
 
-  // Cargar líneas de productos cuando se abre el modal
+  // Cargar líneas de productos y campaña activa cuando se abre el modal
   useEffect(() => {
     if (isOpen) {
       cargarLineasProductos();
+      cargarCampanaActiva();
+    } else {
+      // Reset del formulario cuando se cierra el modal
+      setFormData({
+        mensajes_meta: 0,
+        mensajes_whatsapp: 0,
+        mensajes_instagram: 0,
+        mensajes_tiktok: 0,
+        notas_check_in: '',
+        en_campana: false,
+        producto_campana: ''
+      });
+      setCampanaActiva(null);
+      setErrors({});
     }
   }, [isOpen]);
 
@@ -52,6 +67,91 @@ const ModalCheckIn = ({
       console.error('Error cargando líneas:', error);
     } finally {
       setLoadingLineas(false);
+    }
+  };
+
+  const cargarCampanaActiva = async () => {
+    try {
+      // PASO 1: Verificar el último check-in del usuario (persistencia)
+      const ultimoCheckInResponse = await fetch('/api/actividad/estado-hoy', {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      let campanaPersistente = null;
+
+      if (ultimoCheckInResponse.ok) {
+        const estadoData = await ultimoCheckInResponse.json();
+
+        // Buscar el último registro con campaña
+        // Nota: El backend debería devolver el último estado, pero vamos a hacer otra consulta específica
+        const historialResponse = await fetch('/api/actividad/historial?limite=5', {
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('token')}`,
+            'Content-Type': 'application/json'
+          }
+        });
+
+        if (historialResponse.ok) {
+          const historialData = await historialResponse.json();
+          if (historialData.success) {
+            const registros = historialData.data?.registros || historialData.data?.data?.registros || historialData.data || [];
+
+            // Buscar el último check-in que tenga campaña marcada
+            const ultimoConCampana = Array.isArray(registros)
+              ? registros.find(r => r.en_campana && r.producto_campana)
+              : null;
+
+            if (ultimoConCampana) {
+              campanaPersistente = {
+                nombre: `Campaña ${ultimoConCampana.producto_campana}`,
+                linea_producto: ultimoConCampana.producto_campana,
+                descripcion: 'Continuación de campaña anterior',
+                persistente: true
+              };
+            }
+          }
+        }
+      }
+
+      // PASO 2: Si hay campaña persistente, usar esa
+      if (campanaPersistente) {
+        setCampanaActiva(campanaPersistente);
+        setFormData(prev => ({
+          ...prev,
+          en_campana: true,
+          producto_campana: campanaPersistente.linea_producto || ''
+        }));
+        return; // Salir, ya tenemos la campaña
+      }
+
+      // PASO 3: Si no hay persistencia, buscar campañas activas en la tabla
+      const response = await fetch('/api/campanas/activas', {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success && data.data && data.data.length > 0) {
+          // Tomar la primera campaña activa
+          const campana = data.data[0];
+          setCampanaActiva(campana);
+
+          // Pre-cargar los datos de la campaña en el formulario
+          setFormData(prev => ({
+            ...prev,
+            en_campana: true,
+            producto_campana: campana.linea_producto || ''
+          }));
+        }
+      }
+    } catch (error) {
+      console.error('Error cargando campaña activa:', error);
     }
   };
 
@@ -267,6 +367,41 @@ const ModalCheckIn = ({
                 <Target className="h-4 w-4 text-purple-600" />
                 <span>Tracking de Campaña</span>
               </h4>
+
+              {/* Alerta de campaña activa */}
+              {campanaActiva && (
+                <div className={`mb-4 rounded-lg p-3 ${
+                  campanaActiva.persistente
+                    ? 'bg-blue-50 border border-blue-200'
+                    : 'bg-purple-50 border border-purple-200'
+                }`}>
+                  <div className="flex items-start space-x-2">
+                    <Target className={`h-4 w-4 mt-0.5 ${
+                      campanaActiva.persistente ? 'text-blue-600' : 'text-purple-600'
+                    }`} />
+                    <div className="flex-1">
+                      <p className={`text-sm font-medium ${
+                        campanaActiva.persistente ? 'text-blue-900' : 'text-purple-900'
+                      }`}>
+                        {campanaActiva.persistente
+                          ? '🔄 Continuando campaña anterior'
+                          : '✨ Nueva campaña activa detectada'
+                        }
+                      </p>
+                      <p className={`text-xs mt-1 ${
+                        campanaActiva.persistente ? 'text-blue-700' : 'text-purple-700'
+                      }`}>
+                        {campanaActiva.nombre} - {campanaActiva.linea_producto}
+                      </p>
+                      {campanaActiva.persistente && (
+                        <p className="text-xs text-blue-600 mt-1 italic">
+                          Desmarca el checkbox si ya finalizó esta campaña
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* Checkbox de campaña */}
               <div className="mb-4">

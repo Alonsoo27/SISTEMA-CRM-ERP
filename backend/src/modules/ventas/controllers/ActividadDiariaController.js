@@ -834,21 +834,23 @@ exports.getHistorial = async (req, res) => {
     try {
         logRequest('getHistorial', req);
 
-        const { 
+        const {
             fecha_inicio,
-            fecha_fin, 
-            limite = 30, 
-            pagina = 1, 
-            orden_por = 'fecha', 
+            fecha_fin,
+            limite = 30,
+            pagina = 1,
+            orden_por = 'fecha',
             direccion = 'desc',
-            usuario_id 
+            usuario_id
         } = req.query;
-        
-        const userId = usuario_id || req.user.id;
-        
-        // Validación de permisos
+
+        // Determinar si es manager
+        const rolesManager = ['SUPER_ADMIN', 'GERENTE', 'ADMIN', 'JEFE_VENTAS'];
+        const esManager = rolesManager.includes(req.user.rol);
+
+        // Validación de permisos: Solo managers pueden ver historial de otros
         if (usuario_id && usuario_id !== req.user.id.toString()) {
-            if (req.user.rol !== 'admin' && req.user.rol !== 'manager') {
+            if (!esManager) {
                 return res.status(403).json({
                     success: false,
                     message: 'No tienes permisos para ver historial de otros usuarios'
@@ -857,11 +859,26 @@ exports.getHistorial = async (req, res) => {
         }
 
         const offset = (parseInt(pagina) - 1) * parseInt(limite);
-        
+
         // Query corregido usando los campos reales de la BD
-        let whereConditions = ['usuario_id = $1'];
-        const params = [userId];
-        let paramCount = 1;
+        let whereConditions = [];
+        const params = [];
+        let paramCount = 0;
+
+        // Si se especifica usuario_id, filtrar por ese usuario
+        // Si NO se especifica Y es manager, traer TODOS los vendedores (vista global)
+        // Si NO se especifica Y NO es manager, traer solo sus datos
+        if (usuario_id) {
+            paramCount++;
+            whereConditions.push(`usuario_id = $${paramCount}`);
+            params.push(usuario_id);
+        } else if (!esManager) {
+            // No es manager, solo puede ver sus propios datos
+            paramCount++;
+            whereConditions.push(`usuario_id = $${paramCount}`);
+            params.push(req.user.id);
+        }
+        // Si es manager y NO hay usuario_id, no agregamos filtro de usuario (trae todos)
 
         if (fecha_inicio) {
             paramCount++;
@@ -875,28 +892,35 @@ exports.getHistorial = async (req, res) => {
             params.push(fecha_fin);
         }
 
+        const whereClause = whereConditions.length > 0
+            ? 'WHERE ' + whereConditions.join(' AND ')
+            : '';
+
         const historialQuery = `
-    SELECT 
-        id,
-        fecha,
-        estado_jornada,
-        check_in_time,
-        check_out_time,
-        COALESCE(jornada_horas, 0.0) as horas_calculadas,
-        COALESCE(total_mensajes_recibidos, 0) as total_mensajes_recibidos,
-        COALESCE(total_llamadas, 0) as total_llamadas,
-        created_at,
-        updated_at
-    FROM actividad_diaria 
-    WHERE ${whereConditions.join(' AND ')}
-    ORDER BY ${orden_por} ${direccion.toUpperCase()}
+    SELECT
+        a.id,
+        a.usuario_id,
+        a.fecha,
+        a.estado_jornada,
+        a.check_in_time,
+        a.check_out_time,
+        COALESCE(a.jornada_horas, 0.0) as horas_calculadas,
+        COALESCE(a.total_mensajes_recibidos, 0) as total_mensajes_recibidos,
+        COALESCE(a.total_llamadas, 0) as total_llamadas,
+        a.created_at,
+        a.updated_at,
+        u.nombre || ' ' || u.apellido as usuario_nombre
+    FROM actividad_diaria a
+    LEFT JOIN usuarios u ON a.usuario_id = u.id
+    ${whereClause}
+    ORDER BY a.${orden_por} ${direccion.toUpperCase()}
     LIMIT $${paramCount + 1} OFFSET $${paramCount + 2}
 `;
 
         const countQuery = `
-            SELECT COUNT(*) as total 
-            FROM actividad_diaria 
-            WHERE ${whereConditions.join(' AND ')}
+            SELECT COUNT(*) as total
+            FROM actividad_diaria
+            ${whereClause}
         `;
 
         params.push(parseInt(limite), offset);
@@ -1173,8 +1197,19 @@ exports.getDatosGraficos = async (req, res) => {
         const userRole = req.user.rol?.toUpperCase();
 
         // Verificar permisos: jefes pueden ver otros usuarios
-        const puedeVerOtros = ['SUPER_ADMIN', 'GERENTE', 'ADMIN', 'JEFE_VENTAS'].includes(userRole);
-        const targetUserId = (puedeVerOtros && usuario_id) ? usuario_id : userId;
+        const esManager = ['SUPER_ADMIN', 'GERENTE', 'ADMIN', 'JEFE_VENTAS'].includes(userRole);
+
+        // Determinar filtro de usuario:
+        // - Si es manager y NO hay usuario_id → vista global (todos los asesores)
+        // - Si es manager y hay usuario_id → ese usuario específico
+        // - Si NO es manager → siempre su propio ID
+        let filtroUsuario = null;
+        if (usuario_id && esManager) {
+            filtroUsuario = usuario_id; // Usuario específico
+        } else if (!esManager) {
+            filtroUsuario = userId; // Solo sus datos
+        }
+        // Si esManager y NO hay usuario_id, filtroUsuario = null (todos)
 
         let datos = [];
         const fechaHoy = new Date().toLocaleDateString('en-CA', {
@@ -1188,22 +1223,46 @@ exports.getDatosGraficos = async (req, res) => {
                     timeZone: 'America/Lima'
                 });
 
-                const datosSemana = await query(`
-                    SELECT
-                        fecha,
-                        TO_CHAR(fecha, 'YYYY-MM-DD') as fecha_str,
-                        EXTRACT(DOW FROM fecha) as dia_semana,
-                        TO_CHAR(fecha, 'Day') as nombre_dia,
-                        COALESCE(mensajes_meta + mensajes_whatsapp + mensajes_instagram + mensajes_tiktok, 0) as total_mensajes,
-                        COALESCE(llamadas_realizadas + llamadas_recibidas, 0) as total_llamadas,
-                        COALESCE(jornada_horas, 0) as horas_efectivas,
-                        estado_entrada,
-                        minutos_tardanza,
-                        estado_jornada
-                    FROM actividad_diaria
-                    WHERE usuario_id = $1 AND fecha >= $2 AND fecha <= $3
-                    ORDER BY fecha ASC
-                `, [targetUserId, fechaInicioSemanal, fechaHoy]);
+                let querySemanal, paramsSemanal;
+                if (filtroUsuario) {
+                    // Usuario específico
+                    querySemanal = `
+                        SELECT
+                            fecha,
+                            TO_CHAR(fecha, 'YYYY-MM-DD') as fecha_str,
+                            EXTRACT(DOW FROM fecha) as dia_semana,
+                            TO_CHAR(fecha, 'Day') as nombre_dia,
+                            COALESCE(mensajes_meta + mensajes_whatsapp + mensajes_instagram + mensajes_tiktok, 0) as total_mensajes,
+                            COALESCE(llamadas_realizadas + llamadas_recibidas, 0) as total_llamadas,
+                            COALESCE(jornada_horas, 0) as horas_efectivas,
+                            estado_entrada,
+                            minutos_tardanza,
+                            estado_jornada
+                        FROM actividad_diaria
+                        WHERE usuario_id = $1 AND fecha >= $2 AND fecha <= $3
+                        ORDER BY fecha ASC
+                    `;
+                    paramsSemanal = [filtroUsuario, fechaInicioSemanal, fechaHoy];
+                } else {
+                    // Vista global (suma de todos los asesores)
+                    querySemanal = `
+                        SELECT
+                            fecha,
+                            TO_CHAR(fecha, 'YYYY-MM-DD') as fecha_str,
+                            EXTRACT(DOW FROM fecha) as dia_semana,
+                            TO_CHAR(fecha, 'Day') as nombre_dia,
+                            COALESCE(SUM(mensajes_meta + mensajes_whatsapp + mensajes_instagram + mensajes_tiktok), 0) as total_mensajes,
+                            COALESCE(SUM(llamadas_realizadas + llamadas_recibidas), 0) as total_llamadas,
+                            COALESCE(SUM(jornada_horas), 0) as horas_efectivas
+                        FROM actividad_diaria
+                        WHERE fecha >= $1 AND fecha <= $2
+                        GROUP BY fecha, fecha_str, dia_semana, nombre_dia
+                        ORDER BY fecha ASC
+                    `;
+                    paramsSemanal = [fechaInicioSemanal, fechaHoy];
+                }
+
+                const datosSemana = await query(querySemanal, paramsSemanal);
 
                 // Crear array con todos los días de la semana
                 const diasSemana = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
@@ -1234,21 +1293,44 @@ exports.getDatosGraficos = async (req, res) => {
                     timeZone: 'America/Lima'
                 });
 
-                const datosMes = await query(`
-                    SELECT
-                        DATE_TRUNC('week', fecha) as semana,
-                        EXTRACT(WEEK FROM fecha) as numero_semana,
-                        TO_CHAR(DATE_TRUNC('week', fecha), 'Mon DD') as semana_label,
-                        SUM(mensajes_meta + mensajes_whatsapp + mensajes_instagram + mensajes_tiktok) as total_mensajes,
-                        SUM(llamadas_realizadas + llamadas_recibidas) as total_llamadas,
-                        SUM(jornada_horas) as total_horas,
-                        COUNT(*) as dias_trabajados,
-                        SUM(CASE WHEN estado_entrada = 'puntual' THEN 1 ELSE 0 END) as dias_puntuales
-                    FROM actividad_diaria
-                    WHERE usuario_id = $1 AND fecha >= $2 AND fecha <= $3
-                    GROUP BY DATE_TRUNC('week', fecha), EXTRACT(WEEK FROM fecha)
-                    ORDER BY semana ASC
-                `, [targetUserId, fechaInicioMensual, fechaHoy]);
+                let queryMensual, paramsMensual;
+                if (filtroUsuario) {
+                    queryMensual = `
+                        SELECT
+                            DATE_TRUNC('week', fecha) as semana,
+                            EXTRACT(WEEK FROM fecha) as numero_semana,
+                            TO_CHAR(DATE_TRUNC('week', fecha), 'Mon DD') as semana_label,
+                            SUM(mensajes_meta + mensajes_whatsapp + mensajes_instagram + mensajes_tiktok) as total_mensajes,
+                            SUM(llamadas_realizadas + llamadas_recibidas) as total_llamadas,
+                            SUM(jornada_horas) as total_horas,
+                            COUNT(*) as dias_trabajados,
+                            SUM(CASE WHEN estado_entrada = 'puntual' THEN 1 ELSE 0 END) as dias_puntuales
+                        FROM actividad_diaria
+                        WHERE usuario_id = $1 AND fecha >= $2 AND fecha <= $3
+                        GROUP BY DATE_TRUNC('week', fecha), EXTRACT(WEEK FROM fecha)
+                        ORDER BY semana ASC
+                    `;
+                    paramsMensual = [filtroUsuario, fechaInicioMensual, fechaHoy];
+                } else {
+                    queryMensual = `
+                        SELECT
+                            DATE_TRUNC('week', fecha) as semana,
+                            EXTRACT(WEEK FROM fecha) as numero_semana,
+                            TO_CHAR(DATE_TRUNC('week', fecha), 'Mon DD') as semana_label,
+                            SUM(mensajes_meta + mensajes_whatsapp + mensajes_instagram + mensajes_tiktok) as total_mensajes,
+                            SUM(llamadas_realizadas + llamadas_recibidas) as total_llamadas,
+                            SUM(jornada_horas) as total_horas,
+                            COUNT(*) as dias_trabajados,
+                            SUM(CASE WHEN estado_entrada = 'puntual' THEN 1 ELSE 0 END) as dias_puntuales
+                        FROM actividad_diaria
+                        WHERE fecha >= $1 AND fecha <= $2
+                        GROUP BY DATE_TRUNC('week', fecha), EXTRACT(WEEK FROM fecha)
+                        ORDER BY semana ASC
+                    `;
+                    paramsMensual = [fechaInicioMensual, fechaHoy];
+                }
+
+                const datosMes = await query(queryMensual, paramsMensual);
 
                 datos = datosMes.rows.map((row, index) => ({
                     dia: `Sem ${index + 1}`,
@@ -1269,21 +1351,44 @@ exports.getDatosGraficos = async (req, res) => {
                     timeZone: 'America/Lima'
                 });
 
-                const datosTrimestre = await query(`
-                    SELECT
-                        DATE_TRUNC('month', fecha) as mes,
-                        TO_CHAR(DATE_TRUNC('month', fecha), 'Mon') as mes_abrev,
-                        TO_CHAR(DATE_TRUNC('month', fecha), 'Month YYYY') as nombre_mes_completo,
-                        SUM(mensajes_meta + mensajes_whatsapp + mensajes_instagram + mensajes_tiktok) as total_mensajes,
-                        SUM(llamadas_realizadas + llamadas_recibidas) as total_llamadas,
-                        SUM(jornada_horas) as total_horas,
-                        COUNT(*) as dias_trabajados,
-                        SUM(CASE WHEN estado_entrada = 'puntual' THEN 1 ELSE 0 END) as dias_puntuales
-                    FROM actividad_diaria
-                    WHERE usuario_id = $1 AND fecha >= $2 AND fecha <= $3
-                    GROUP BY DATE_TRUNC('month', fecha)
-                    ORDER BY mes ASC
-                `, [targetUserId, fechaInicioTrimestral, fechaHoy]);
+                let queryTrimestral, paramsTrimestral;
+                if (filtroUsuario) {
+                    queryTrimestral = `
+                        SELECT
+                            DATE_TRUNC('month', fecha) as mes,
+                            TO_CHAR(DATE_TRUNC('month', fecha), 'Mon') as mes_abrev,
+                            TO_CHAR(DATE_TRUNC('month', fecha), 'Month YYYY') as nombre_mes_completo,
+                            SUM(mensajes_meta + mensajes_whatsapp + mensajes_instagram + mensajes_tiktok) as total_mensajes,
+                            SUM(llamadas_realizadas + llamadas_recibidas) as total_llamadas,
+                            SUM(jornada_horas) as total_horas,
+                            COUNT(*) as dias_trabajados,
+                            SUM(CASE WHEN estado_entrada = 'puntual' THEN 1 ELSE 0 END) as dias_puntuales
+                        FROM actividad_diaria
+                        WHERE usuario_id = $1 AND fecha >= $2 AND fecha <= $3
+                        GROUP BY DATE_TRUNC('month', fecha)
+                        ORDER BY mes ASC
+                    `;
+                    paramsTrimestral = [filtroUsuario, fechaInicioTrimestral, fechaHoy];
+                } else {
+                    queryTrimestral = `
+                        SELECT
+                            DATE_TRUNC('month', fecha) as mes,
+                            TO_CHAR(DATE_TRUNC('month', fecha), 'Mon') as mes_abrev,
+                            TO_CHAR(DATE_TRUNC('month', fecha), 'Month YYYY') as nombre_mes_completo,
+                            SUM(mensajes_meta + mensajes_whatsapp + mensajes_instagram + mensajes_tiktok) as total_mensajes,
+                            SUM(llamadas_realizadas + llamadas_recibidas) as total_llamadas,
+                            SUM(jornada_horas) as total_horas,
+                            COUNT(*) as dias_trabajados,
+                            SUM(CASE WHEN estado_entrada = 'puntual' THEN 1 ELSE 0 END) as dias_puntuales
+                        FROM actividad_diaria
+                        WHERE fecha >= $1 AND fecha <= $2
+                        GROUP BY DATE_TRUNC('month', fecha)
+                        ORDER BY mes ASC
+                    `;
+                    paramsTrimestral = [fechaInicioTrimestral, fechaHoy];
+                }
+
+                const datosTrimestre = await query(queryTrimestral, paramsTrimestral);
 
                 datos = datosTrimestre.rows.map(row => ({
                     dia: row.mes_abrev.trim(),
@@ -1304,21 +1409,47 @@ exports.getDatosGraficos = async (req, res) => {
                     timeZone: 'America/Lima'
                 });
 
-                const datosAnual = await query(`
-                    SELECT
-                        DATE_TRUNC('month', fecha) as mes,
-                        TO_CHAR(DATE_TRUNC('month', fecha), 'Mon') as mes_abrev,
-                        TO_CHAR(DATE_TRUNC('month', fecha), 'Mon YYYY') as mes_anio,
-                        SUM(mensajes_meta + mensajes_whatsapp + mensajes_instagram + mensajes_tiktok) as total_mensajes,
-                        SUM(llamadas_realizadas + llamadas_recibidas) as total_llamadas,
-                        SUM(jornada_horas) as total_horas,
-                        COUNT(*) as dias_trabajados,
-                        SUM(CASE WHEN estado_entrada = 'puntual' THEN 1 ELSE 0 END) as dias_puntuales
-                    FROM actividad_diaria
-                    WHERE usuario_id = $1 AND fecha >= $2 AND fecha <= $3
-                    GROUP BY DATE_TRUNC('month', fecha)
-                    ORDER BY mes ASC
-                `, [targetUserId, fechaInicioAnual, fechaHoy]);
+                let queryAnual, paramsAnual;
+
+                if (filtroUsuario) {
+                    // Vista individual - usuario específico
+                    queryAnual = `
+                        SELECT
+                            DATE_TRUNC('month', fecha) as mes,
+                            TO_CHAR(DATE_TRUNC('month', fecha), 'Mon') as mes_abrev,
+                            TO_CHAR(DATE_TRUNC('month', fecha), 'Mon YYYY') as mes_anio,
+                            SUM(mensajes_meta + mensajes_whatsapp + mensajes_instagram + mensajes_tiktok) as total_mensajes,
+                            SUM(llamadas_realizadas + llamadas_recibidas) as total_llamadas,
+                            SUM(jornada_horas) as total_horas,
+                            COUNT(*) as dias_trabajados,
+                            SUM(CASE WHEN estado_entrada = 'puntual' THEN 1 ELSE 0 END) as dias_puntuales
+                        FROM actividad_diaria
+                        WHERE usuario_id = $1 AND fecha >= $2 AND fecha <= $3
+                        GROUP BY DATE_TRUNC('month', fecha)
+                        ORDER BY mes ASC
+                    `;
+                    paramsAnual = [filtroUsuario, fechaInicioAnual, fechaHoy];
+                } else {
+                    // Vista global - suma de todos los asesores
+                    queryAnual = `
+                        SELECT
+                            DATE_TRUNC('month', fecha) as mes,
+                            TO_CHAR(DATE_TRUNC('month', fecha), 'Mon') as mes_abrev,
+                            TO_CHAR(DATE_TRUNC('month', fecha), 'Mon YYYY') as mes_anio,
+                            SUM(mensajes_meta + mensajes_whatsapp + mensajes_instagram + mensajes_tiktok) as total_mensajes,
+                            SUM(llamadas_realizadas + llamadas_recibidas) as total_llamadas,
+                            SUM(jornada_horas) as total_horas,
+                            COUNT(*) as dias_trabajados,
+                            SUM(CASE WHEN estado_entrada = 'puntual' THEN 1 ELSE 0 END) as dias_puntuales
+                        FROM actividad_diaria
+                        WHERE fecha >= $1 AND fecha <= $2
+                        GROUP BY DATE_TRUNC('month', fecha)
+                        ORDER BY mes ASC
+                    `;
+                    paramsAnual = [fechaInicioAnual, fechaHoy];
+                }
+
+                const datosAnual = await query(queryAnual, paramsAnual);
 
                 datos = datosAnual.rows.map(row => ({
                     dia: row.mes_abrev.trim(),
@@ -1344,7 +1475,7 @@ exports.getDatosGraficos = async (req, res) => {
         logSuccess('getDatosGraficos', {
             vista: vistaActual,
             registros: datos.length,
-            usuario_objetivo: targetUserId
+            usuario_objetivo: filtroUsuario || 'vista_global'
         }, duration);
 
         res.json({
@@ -1352,8 +1483,9 @@ exports.getDatosGraficos = async (req, res) => {
             data: {
                 vista: vistaActual,
                 datos,
-                usuario_id: targetUserId,
-                puede_ver_otros: puedeVerOtros,
+                usuario_id: filtroUsuario,
+                es_manager: esManager,
+                vista_global: !filtroUsuario && esManager,
                 fecha_generacion: new Date().toISOString()
             }
         });

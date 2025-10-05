@@ -544,6 +544,46 @@ const actualizarPermisosUsuario = async (req, res) => {
     }
 };
 
+// ============================================
+// LISTAR VENDEDORES/ASESORES
+// Para uso en filtros y reportes
+// ============================================
+const listarVendedores = async (req, res) => {
+    try {
+        const result = await query(`
+            SELECT
+                u.id,
+                u.nombre,
+                u.apellido,
+                u.nombre || ' ' || u.apellido as nombre_completo,
+                u.email,
+                r.nombre as rol,
+                u.vende
+            FROM usuarios u
+            LEFT JOIN roles r ON u.rol_id = r.id
+            WHERE u.deleted_at IS NULL
+              AND r.nombre IN ('VENDEDOR', 'ASESOR_VENTAS', 'SUPER_ADMIN')
+              AND u.estado = 'ACTIVO'
+            ORDER BY u.nombre, u.apellido
+        `);
+
+        res.json({
+            success: true,
+            message: 'Vendedores obtenidos exitosamente',
+            data: result.rows,
+            total: result.rowCount
+        });
+
+    } catch (error) {
+        console.error('Error al listar vendedores:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error al obtener vendedores',
+            error: error.message
+        });
+    }
+};
+
 module.exports = {
     listarUsuarios,
     obtenerUsuario,
@@ -555,5 +595,6 @@ module.exports = {
     listarAreas,
     listarModulos,
     obtenerPermisosUsuario,
-    actualizarPermisosUsuario
+    actualizarPermisosUsuario,
+    listarVendedores
 };

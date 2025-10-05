@@ -16,7 +16,8 @@ const {
     listarAreas,
     listarModulos,
     obtenerPermisosUsuario,
-    actualizarPermisosUsuario
+    actualizarPermisosUsuario,
+    listarVendedores
 } = require('../controllers/usuariosController');
 
 const { authenticateToken, requireRole, requireOwnership } = require('../../../middleware/auth');
@@ -30,6 +31,13 @@ const { GRUPOS_ROLES } = require('../../../config/roles');
 // Todos los usuarios autenticados pueden ver roles y áreas (para formularios)
 router.get('/roles', authenticateToken, listarRoles);
 router.get('/areas', authenticateToken, listarAreas);
+
+// Listar vendedores/asesores (para filtros y reportes de managers)
+router.get('/vendedores',
+    authenticateToken,
+    requireRole(GRUPOS_ROLES.JEFES_Y_EJECUTIVOS),
+    listarVendedores
+);
 
 // ============================================
 // RUTAS PROTEGIDAS - CRUD DE USUARIOS
