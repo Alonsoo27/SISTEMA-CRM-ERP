@@ -559,7 +559,10 @@ const VentasPage = () => {
     </div>
   );
 
-  const DashboardPorRol = () => {
+  // Renderizar dashboard usando useMemo para evitar re-mounting
+  const dashboardContent = useMemo(() => {
+    console.log('📦 [VentasPage] useMemo dashboardContent:', { dashboardActivo, usuarioId: usuarioActual?.id });
+
     if (dashboardLoading) {
       return (
         <div className="flex items-center justify-center py-12">
@@ -608,14 +611,14 @@ const VentasPage = () => {
     }
 
     switch(dashboardActivo) {
-  case 'maestro':
-    return <VistaUnificada usuarioActual={usuarioActual} />;
-  case 'geografico':
-    return <AnalisisGeografico usuarioActual={usuarioActual} />;
-  case 'abc-productos':
-    return <ABCProductos usuarioActual={usuarioActual} />;
-  case 'metas-avanzado':
-    return <MetasAvanzado usuarioActual={usuarioActual} />;  
+      case 'maestro':
+        return <VistaUnificada usuarioActual={usuarioActual} key="vista-unificada" />;
+      case 'geografico':
+        return <AnalisisGeografico usuarioActual={usuarioActual} key="analisis-geografico" />;
+      case 'abc-productos':
+        return <ABCProductos usuarioActual={usuarioActual} key="abc-productos" />;
+      case 'metas-avanzado':
+        return <MetasAvanzado usuarioActual={usuarioActual} key="metas-avanzado" />;
       default:
         return (
           <div className="text-center py-8">
@@ -623,7 +626,7 @@ const VentasPage = () => {
           </div>
         );
     }
-  };
+  }, [dashboardActivo, usuarioActual, dashboardLoading, datosDashboard, usuarioLoading]);
 
   return (
     <div className="h-full flex flex-col">
@@ -868,7 +871,7 @@ const VentasPage = () => {
         {vistaActual === 'dashboards-admin' && (
           <div className="h-full p-6 overflow-y-auto">
             <DashboardSelector />
-            <DashboardPorRol />
+            {dashboardContent}
           </div>
         )}
 
