@@ -949,7 +949,7 @@ const obtenerPeriodosDisponibles = async (req, res) => {
       const totalValor = ventasAño.reduce((sum, v) => sum + parseFloat(v.total_valor), 0);
 
       periodos.años.push({
-        valor: año.toString(),
+        value: año.toString(),
         label: año === añoActual ? `${año} (Actual)` : año.toString(),
         estadisticas: `${totalVentas} ventas`,
         esActual: año === añoActual,
@@ -980,7 +980,7 @@ const obtenerPeriodosDisponibles = async (req, res) => {
       const esActual = parseInt(año) === añoActual && parseInt(q) === trimestreActual;
 
       periodos.trimestres.push({
-        valor: trimestre,
+        value: trimestre,
         label: `Q${q} ${año} (${mesesTrimestre[q]})${esActual ? ' - Actual' : ''}`,
         estadisticas: `${totalVentas} ventas`,
         esActual,
@@ -1009,7 +1009,7 @@ const obtenerPeriodosDisponibles = async (req, res) => {
       const esActual = parseInt(año) === añoActual && parseInt(m) === mesActual;
 
       periodos.meses.push({
-        valor: mes,
+        value: mes,
         label: `${nombreMes.charAt(0).toUpperCase() + nombreMes.slice(1)}${esActual ? ' (Actual)' : ''}`,
         estadisticas: `${totalVentas} ventas`,
         esActual,
@@ -1024,7 +1024,7 @@ const obtenerPeriodosDisponibles = async (req, res) => {
     finSemana.setDate(inicioSemana.getDate() + 6);
 
     periodos.semanas.push({
-      valor: 'semana_actual',
+      value: 'semana_actual',
       label: `Semana actual (${inicioSemana.getDate()}/${inicioSemana.getMonth() + 1} - ${finSemana.getDate()}/${finSemana.getMonth() + 1})`,
       estadisticas: 'Siempre disponible',
       esActual: true
@@ -1033,14 +1033,14 @@ const obtenerPeriodosDisponibles = async (req, res) => {
     // Determinar período por defecto
     let periodoDefecto = {
       tipo: 'semana',
-      valor: 'semana_actual'
+      value: 'semana_actual'
     };
 
     // Si hay datos del mes actual, usar mes actual
     if (periodos.meses.some(m => m.esActual && m.totalVentas > 0)) {
       periodoDefecto = {
         tipo: 'mes',
-        valor: `${añoActual}-${String(mesActual).padStart(2, '0')}`
+        value: `${añoActual}-${String(mesActual).padStart(2, '0')}`
       };
     }
 
