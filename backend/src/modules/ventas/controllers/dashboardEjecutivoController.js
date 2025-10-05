@@ -1881,6 +1881,7 @@ const periodosDisponibles = async (req, res) => {
       FROM ventas
       WHERE estado_detallado = 'vendido'
         AND activo = true
+        AND fecha_venta IS NOT NULL
       GROUP BY EXTRACT(YEAR FROM fecha_venta), EXTRACT(MONTH FROM fecha_venta)
       HAVING COUNT(*) > 0
       ORDER BY año DESC, mes DESC
