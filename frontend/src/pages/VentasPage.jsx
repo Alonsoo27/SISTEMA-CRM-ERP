@@ -458,6 +458,75 @@ const VentasPage = () => {
     });
   }, [filtros]);
 
+  // Renderizar dashboard usando useMemo para evitar re-mounting
+  const dashboardContent = useMemo(() => {
+    console.log('📦 [VentasPage] useMemo dashboardContent:', { dashboardActivo, usuarioId: usuarioActual?.id });
+
+    if (dashboardLoading) {
+      return (
+        <div className="flex items-center justify-center py-12">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mr-3"></div>
+          <span className="text-gray-600">Cargando dashboard {dashboardActivo}...</span>
+        </div>
+      );
+    }
+
+    if (!datosDashboard) {
+      return (
+        <div className="bg-gray-50 border border-gray-200 rounded-lg p-8 text-center">
+          <Eye className="h-16 w-16 mx-auto text-gray-400 mb-4" />
+          <h3 className="text-lg font-semibold text-gray-900 mb-2">Selecciona un Dashboard</h3>
+          <p className="text-gray-600">Elige un dashboard del selector superior para ver los datos</p>
+        </div>
+      );
+    }
+
+    // Si el usuario aún está cargando, mostrar loading
+    if (usuarioLoading) {
+      return (
+        <div className="flex items-center justify-center h-64">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+          <span className="ml-3 text-gray-600">Cargando información del usuario...</span>
+        </div>
+      );
+    }
+
+    // Si no hay usuario, mostrar error
+    if (!usuarioActual) {
+      return (
+        <div className="text-center py-12">
+          <AlertCircle className="h-12 w-12 text-red-500 mx-auto mb-4" />
+          <h3 className="text-lg font-semibold text-gray-900 mb-2">Error de Autenticación</h3>
+          <p className="text-gray-600 mb-4">No se pudo cargar la información del usuario</p>
+          <button
+            onClick={cargarUsuarioActual}
+            className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+          >
+            <RefreshCw className="h-4 w-4 mr-2" />
+            Reintentar
+          </button>
+        </div>
+      );
+    }
+
+    switch(dashboardActivo) {
+      case 'maestro':
+        return <VistaUnificada usuarioActual={usuarioActual} key="vista-unificada" />;
+      case 'geografico':
+        return <AnalisisGeografico usuarioActual={usuarioActual} key="analisis-geografico" />;
+      case 'abc-productos':
+        return <ABCProductos usuarioActual={usuarioActual} key="abc-productos" />;
+      case 'metas-avanzado':
+        return <MetasAvanzado usuarioActual={usuarioActual} key="metas-avanzado" />;
+      default:
+        return (
+          <div className="text-center py-8">
+            <p className="text-gray-500">Dashboard "{dashboardActivo}" en desarrollo</p>
+          </div>
+        );
+    }
+  }, [dashboardActivo, usuarioActual, dashboardLoading, datosDashboard, usuarioLoading]);
+
   // Loading state para usuario
   if (usuarioLoading) {
     return (
@@ -558,75 +627,6 @@ const VentasPage = () => {
       </div>
     </div>
   );
-
-  // Renderizar dashboard usando useMemo para evitar re-mounting
-  const dashboardContent = useMemo(() => {
-    console.log('📦 [VentasPage] useMemo dashboardContent:', { dashboardActivo, usuarioId: usuarioActual?.id });
-
-    if (dashboardLoading) {
-      return (
-        <div className="flex items-center justify-center py-12">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mr-3"></div>
-          <span className="text-gray-600">Cargando dashboard {dashboardActivo}...</span>
-        </div>
-      );
-    }
-
-    if (!datosDashboard) {
-      return (
-        <div className="bg-gray-50 border border-gray-200 rounded-lg p-8 text-center">
-          <Eye className="h-16 w-16 mx-auto text-gray-400 mb-4" />
-          <h3 className="text-lg font-semibold text-gray-900 mb-2">Selecciona un Dashboard</h3>
-          <p className="text-gray-600">Elige un dashboard del selector superior para ver los datos</p>
-        </div>
-      );
-    }
-
-    // Si el usuario aún está cargando, mostrar loading
-    if (usuarioLoading) {
-      return (
-        <div className="flex items-center justify-center h-64">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-          <span className="ml-3 text-gray-600">Cargando información del usuario...</span>
-        </div>
-      );
-    }
-
-    // Si no hay usuario, mostrar error
-    if (!usuarioActual) {
-      return (
-        <div className="text-center py-12">
-          <AlertCircle className="h-12 w-12 text-red-500 mx-auto mb-4" />
-          <h3 className="text-lg font-semibold text-gray-900 mb-2">Error de Autenticación</h3>
-          <p className="text-gray-600 mb-4">No se pudo cargar la información del usuario</p>
-          <button
-            onClick={cargarUsuarioActual}
-            className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
-          >
-            <RefreshCw className="h-4 w-4 mr-2" />
-            Reintentar
-          </button>
-        </div>
-      );
-    }
-
-    switch(dashboardActivo) {
-      case 'maestro':
-        return <VistaUnificada usuarioActual={usuarioActual} key="vista-unificada" />;
-      case 'geografico':
-        return <AnalisisGeografico usuarioActual={usuarioActual} key="analisis-geografico" />;
-      case 'abc-productos':
-        return <ABCProductos usuarioActual={usuarioActual} key="abc-productos" />;
-      case 'metas-avanzado':
-        return <MetasAvanzado usuarioActual={usuarioActual} key="metas-avanzado" />;
-      default:
-        return (
-          <div className="text-center py-8">
-            <p className="text-gray-500">Dashboard "{dashboardActivo}" en desarrollo</p>
-          </div>
-        );
-    }
-  }, [dashboardActivo, usuarioActual, dashboardLoading, datosDashboard, usuarioLoading]);
 
   return (
     <div className="h-full flex flex-col">
