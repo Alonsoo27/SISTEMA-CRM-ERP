@@ -25,6 +25,8 @@ import { normalizeUser, isExecutive } from '../utils/userUtils';
 import { useModulePermissions } from '../hooks/useModulePermissions';
 
 const VentasPage = () => {
+  console.log('🎬 [VentasPage] RENDER');
+
   const { canCreate, canEdit } = useModulePermissions('ventas');
   const [vistaActual, setVistaActual] = useState('lista');
   const [showVentaForm, setShowVentaForm] = useState(false);

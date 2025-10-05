@@ -10,15 +10,26 @@ import DashboardEjecutivoGuard from './guards/DashboardEjecutivoGuard';
 import PeriodSelectorAdvanced from './ventas/PeriodSelector/PeriodSelectorAdvanced';
 import { API_CONFIG } from '../config/apiConfig';
 
-const VistaUnificada = ({ 
+const VistaUnificada = ({
   usuarioActual,
-  refreshTrigger = 0 
+  refreshTrigger = 0
 }) => {
+  console.log('🎬 [VistaUnificada] RENDER:', { usuarioId: usuarioActual?.id, refresh: refreshTrigger });
+
   const [datos, setDatos] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [periodoSeleccionado, setPeriodoSeleccionado] = useState('mes_actual');
   const [notification, setNotification] = useState(null);
+
+  // Detectar mount/unmount
+  useEffect(() => {
+    const mountTime = Date.now();
+    console.log('✅ [VistaUnificada] MONTADO');
+    return () => {
+      console.log(`❌ [VistaUnificada] DESMONTADO (vivió ${Date.now() - mountTime}ms)`);
+    };
+  }, []);
 
   // Función para mostrar notificaciones
   const showNotification = useCallback((mensaje, tipo = 'info') => {
