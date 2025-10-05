@@ -6,6 +6,7 @@ import {
   User, BarChart3, Eye, TrendingUp, History, ChevronDown,
   ChevronUp, Target, Users, Zap, Award, Filter, Bell
 } from 'lucide-react';
+import { API_CONFIG } from '../../../config/apiConfig';
 import {
   LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Area, AreaChart
@@ -165,7 +166,7 @@ const ActividadPageEnhanced = () => {
         ...(selectedUser && { usuario_id: selectedUser })
       });
 
-      const response = await fetch(`/api/actividad/datos-graficos?${params}`, {
+      const response = await fetch(`${API_CONFIG.BASE_URL}/api/actividad/datos-graficos?${params}`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`,
           'Content-Type': 'application/json'
@@ -234,11 +235,11 @@ const ActividadPageEnhanced = () => {
     try {
       setCampanasLoading(true);
 
-      let url = '/api/campanas-asesor/mis-campanas?estado=todas';
+      let url = `${API_CONFIG.BASE_URL}/api/campanas-asesor/mis-campanas?estado=todas`;
 
       // Si es manager, usar vista de equipo
       if (isManager()) {
-        url = '/api/campanas-asesor/vista-equipo?estado=todas';
+        url = `${API_CONFIG.BASE_URL}/api/campanas-asesor/vista-equipo?estado=todas`;
 
         // Si hay usuario seleccionado en modo por_asesor
         if (vistaMode === 'por_asesor' && selectedUser) {
@@ -272,7 +273,7 @@ const ActividadPageEnhanced = () => {
     if (!isManager()) return;
 
     try {
-      const response = await fetch('/api/usuarios/vendedores', {
+      const response = await fetch(`${API_CONFIG.BASE_URL}/api/usuarios/vendedores`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`,
           'Content-Type': 'application/json'
@@ -1042,7 +1043,7 @@ const ActividadPageEnhanced = () => {
       if (!window.confirm('¿Estás seguro de finalizar esta campaña?')) return;
 
       try {
-        const response = await fetch(`/api/campanas-asesor/${campanaId}/finalizar`, {
+        const response = await fetch(`${API_CONFIG.BASE_URL}/api/campanas-asesor/${campanaId}/finalizar`, {
           method: 'PUT',
           headers: {
             'Authorization': `Bearer ${localStorage.getItem('token')}`,
