@@ -233,7 +233,20 @@ const ActividadPageEnhanced = () => {
   const cargarCampanas = async () => {
     try {
       setCampanasLoading(true);
-      const response = await fetch('/api/campanas/activas', {
+
+      let url = '/api/campanas-asesor/mis-campanas?estado=todas';
+
+      // Si es manager, usar vista de equipo
+      if (isManager()) {
+        url = '/api/campanas-asesor/vista-equipo?estado=todas';
+
+        // Si hay usuario seleccionado en modo por_asesor
+        if (vistaMode === 'por_asesor' && selectedUser) {
+          url += `&usuario_id=${selectedUser}`;
+        }
+      }
+
+      const response = await fetch(url, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`,
           'Content-Type': 'application/json'
@@ -320,6 +333,13 @@ const ActividadPageEnhanced = () => {
   useEffect(() => {
     if (activeTab === 'historial' && isManager()) {
       cargarHistorial();
+    }
+  }, [vistaMode, selectedUser]);
+
+  // Recargar campañas cuando cambie el modo de vista o usuario seleccionado
+  useEffect(() => {
+    if (activeTab === 'campanas') {
+      cargarCampanas();
     }
   }, [vistaMode, selectedUser]);
 
@@ -1018,26 +1038,33 @@ const ActividadPageEnhanced = () => {
 
   // Contenido de Campañas
   const CampanasContent = () => {
-    const getColorClasses = (color) => {
-      const colors = {
-        blue: { from: 'from-blue-50', to: 'to-cyan-50', border: 'border-blue-200', text: 'text-blue-600', bg: 'bg-blue-100', progress: 'bg-blue-600', progressBg: 'bg-blue-200' },
-        green: { from: 'from-green-50', to: 'to-emerald-50', border: 'border-green-200', text: 'text-green-600', bg: 'bg-green-100', progress: 'bg-green-600', progressBg: 'bg-green-200' },
-        purple: { from: 'from-purple-50', to: 'to-indigo-50', border: 'border-purple-200', text: 'text-purple-600', bg: 'bg-purple-100', progress: 'bg-purple-600', progressBg: 'bg-purple-200' },
-        red: { from: 'from-red-50', to: 'to-pink-50', border: 'border-red-200', text: 'text-red-600', bg: 'bg-red-100', progress: 'bg-red-600', progressBg: 'bg-red-200' },
-        yellow: { from: 'from-yellow-50', to: 'to-amber-50', border: 'border-yellow-200', text: 'text-yellow-600', bg: 'bg-yellow-100', progress: 'bg-yellow-600', progressBg: 'bg-yellow-200' }
-      };
-      return colors[color] || colors.blue;
+    const finalizarCampana = async (campanaId) => {
+      if (!window.confirm('¿Estás seguro de finalizar esta campaña?')) return;
+
+      try {
+        const response = await fetch(`/api/campanas-asesor/${campanaId}/finalizar`, {
+          method: 'PUT',
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('token')}`,
+            'Content-Type': 'application/json'
+          }
+        });
+
+        if (response.ok) {
+          cargarCampanas(); // Recargar lista
+        }
+      } catch (error) {
+        console.error('Error finalizando campaña:', error);
+      }
     };
 
-    const getEstadoBadge = (estado) => {
-      const badges = {
-        'ACTIVA': { text: 'ACTIVA', style: 'success' },
-        'PROGRAMADA': { text: 'PRÓXIMA', style: 'warning' },
-        'COMPLETADA': { text: 'COMPLETADA', style: 'success' },
-        'CERCA_META': { text: 'CERCA META', style: 'info' },
-        'FINALIZADA': { text: 'FINALIZADA', style: 'secondary' }
-      };
-      return badges[estado] || badges.ACTIVA;
+    const formatMoney = (monto) => {
+      return new Intl.NumberFormat('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(monto || 0);
+    };
+
+    const formatDate = (fecha) => {
+      if (!fecha) return '-';
+      return new Date(fecha).toLocaleDateString('es-PE');
     };
 
     if (campanasLoading) {
@@ -1050,94 +1077,148 @@ const ActividadPageEnhanced = () => {
       );
     }
 
-    if (!campanasData || campanasData.length === 0) {
-      return (
-        <div className="space-y-6">
-          <div className="text-center py-12">
-            <Target className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-            <h3 className="text-lg font-medium text-gray-900 mb-2">No hay campañas activas</h3>
-            <p className="text-gray-600">No tienes campañas asignadas en este momento.</p>
-          </div>
-        </div>
-      );
-    }
+    const campanasActivas = campanasData.filter(c => c.estado === 'activa');
+    const campanasFinalizadas = campanasData.filter(c => c.estado === 'finalizada');
 
     return (
       <div className="space-y-6">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {campanasData.map((campana) => {
-            const colorClasses = getColorClasses(campana.color_tema);
-            const estadoBadge = getEstadoBadge(campana.estado);
-
-            return (
-              <div key={campana.id} className={`bg-gradient-to-r ${colorClasses.from} ${colorClasses.to} p-4 rounded-lg border ${colorClasses.border}`}>
-                <div className="flex items-center justify-between mb-2">
-                  <Target className={`h-6 w-6 ${colorClasses.text}`} />
-                  <span className={`text-xs font-medium ${colorClasses.text} ${colorClasses.bg} px-2 py-1 rounded-full`}>
-                    {estadoBadge.text}
-                  </span>
-                </div>
-
-                <h4 className="font-semibold text-gray-900">{campana.nombre}</h4>
-                <p className="text-sm text-gray-600 mt-1">{campana.descripcion}</p>
-                <p className="text-xs text-gray-500 mt-1">Línea: {campana.linea_producto}</p>
-
-                <div className="mt-3 text-sm">
-                  <div className="flex justify-between items-center mb-1">
-                    <p className={`${colorClasses.text} font-medium`}>
-                      {campana.progreso.porcentaje}% completado
-                    </p>
-                    <span className="text-xs text-gray-500">
-                      {campana.dias_restantes} días restantes
-                    </span>
-                  </div>
-                  <div className={`w-full ${colorClasses.progressBg} rounded-full h-2 mt-1`}>
-                    <div
-                      className={`${colorClasses.progress} h-2 rounded-full transition-all duration-300`}
-                      style={{width: `${Math.min(campana.progreso.porcentaje, 100)}%`}}
-                    ></div>
-                  </div>
-
-                  <div className="mt-2 grid grid-cols-2 gap-2 text-xs text-gray-600">
-                    <div>
-                      <span className="font-medium">Mensajes:</span> {campana.progreso.mensajes_realizados}/{campana.progreso.mensajes_meta}
-                    </div>
-                    <div>
-                      <span className="font-medium">Ventas:</span> {campana.progreso.ventas_realizadas}/{campana.progreso.ventas_meta}
-                    </div>
-                  </div>
+        {/* Selector de Vista para Managers */}
+        {isManager() && (
+          <div className="bg-white p-4 rounded-xl shadow-lg border border-gray-100">
+            <div className="flex items-center space-x-4">
+              <div className="flex items-center space-x-2">
+                <Filter className="h-4 w-4 text-purple-600" />
+                <span className="text-sm font-medium text-gray-700">Modo de Vista:</span>
+                <div className="flex bg-gray-100 rounded-lg p-1">
+                  <button
+                    onClick={() => { setVistaMode('global'); setSelectedUser(null); }}
+                    className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${vistaMode === 'global' ? 'bg-white text-purple-600 shadow-sm' : 'text-gray-600 hover:text-gray-900'}`}
+                  >
+                    Vista Global
+                  </button>
+                  <button
+                    onClick={() => setVistaMode('por_asesor')}
+                    className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${vistaMode === 'por_asesor' ? 'bg-white text-purple-600 shadow-sm' : 'text-gray-600 hover:text-gray-900'}`}
+                  >
+                    Por Asesor
+                  </button>
                 </div>
               </div>
-            );
-          })}
+
+              {vistaMode === 'por_asesor' && (
+                <div className="flex items-center space-x-2">
+                  <Users className="h-4 w-4 text-gray-500" />
+                  <select
+                    className="border border-gray-300 rounded-lg px-3 py-1 text-sm"
+                    value={selectedUser || ''}
+                    onChange={(e) => setSelectedUser(e.target.value || null)}
+                  >
+                    <option value="">Seleccionar asesor...</option>
+                    {vendedores.map((vendedor) => (
+                      <option key={vendedor.id} value={vendedor.id}>
+                        {vendedor.nombre} {vendedor.apellido}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Campañas Activas */}
+        <div className="bg-white p-6 rounded-xl shadow-lg">
+          <h3 className="text-lg font-bold text-gray-900 mb-4">Campañas Activas</h3>
+          {campanasActivas.length === 0 ? (
+            <div className="text-center py-8">
+              <Target className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+              <p className="text-gray-600">No hay campañas activas</p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {campanasActivas.map((campana) => (
+                <div key={campana.id} className="border border-gray-200 p-4 rounded-lg hover:shadow-md transition-shadow">
+                  <div className="flex justify-between items-start mb-3">
+                    <div>
+                      <h4 className="font-semibold text-gray-900">{campana.nombre_campana || campana.linea_producto}</h4>
+                      <p className="text-sm text-gray-600">
+                        Desde {formatDate(campana.fecha_inicio)} ({campana.dias_trabajados} días trabajados)
+                      </p>
+                      {isManager() && campana.asesor_nombre && (
+                        <p className="text-xs text-purple-600 font-medium mt-1">{campana.asesor_nombre}</p>
+                      )}
+                    </div>
+                    <button
+                      onClick={() => finalizarCampana(campana.id)}
+                      className="text-sm text-red-600 hover:text-red-700 font-medium"
+                    >
+                      Finalizar
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div className="bg-blue-50 p-3 rounded-lg">
+                      <p className="text-xs text-blue-600 font-medium">Mensajes</p>
+                      <p className="text-xl font-bold text-blue-700">{campana.total_mensajes || 0}</p>
+                    </div>
+                    <div className="bg-green-50 p-3 rounded-lg">
+                      <p className="text-xs text-green-600 font-medium">Llamadas</p>
+                      <p className="text-xl font-bold text-green-700">{campana.total_llamadas || 0}</p>
+                    </div>
+                    <div className="bg-purple-50 p-3 rounded-lg">
+                      <p className="text-xs text-purple-600 font-medium">Ventas</p>
+                      <p className="text-xl font-bold text-purple-700">{campana.total_ventas || 0}</p>
+                    </div>
+                    <div className="bg-orange-50 p-3 rounded-lg">
+                      <p className="text-xs text-orange-600 font-medium">Conversión</p>
+                      <p className="text-xl font-bold text-orange-700">{campana.tasa_conversion || 0}%</p>
+                    </div>
+                  </div>
+
+                  {campana.monto_total_vendido > 0 && (
+                    <div className="mt-3 text-sm text-gray-600">
+                      Monto vendido: <span className="font-semibold">$ {formatMoney(campana.monto_total_vendido)}</span>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
-        {campanasData.length > 0 && (
-          <div className="bg-white p-4 rounded-lg border border-gray-200">
-            <h4 className="font-medium text-gray-900 mb-2">Resumen de Campañas</h4>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-              <div className="text-center">
-                <p className="text-2xl font-bold text-blue-600">{campanasData.length}</p>
-                <p className="text-gray-600">Total Activas</p>
-              </div>
-              <div className="text-center">
-                <p className="text-2xl font-bold text-green-600">
-                  {campanasData.filter(c => c.estado === 'ACTIVA').length}
-                </p>
-                <p className="text-gray-600">En Progreso</p>
-              </div>
-              <div className="text-center">
-                <p className="text-2xl font-bold text-purple-600">
-                  {Math.round(campanasData.reduce((acc, c) => acc + c.progreso.porcentaje, 0) / campanasData.length)}%
-                </p>
-                <p className="text-gray-600">Progreso Promedio</p>
-              </div>
-              <div className="text-center">
-                <p className="text-2xl font-bold text-orange-600">
-                  {campanasData.reduce((acc, c) => acc + c.progreso.mensajes_realizados, 0)}
-                </p>
-                <p className="text-gray-600">Mensajes Totales</p>
-              </div>
+        {/* Historial de Campañas Finalizadas */}
+        {campanasFinalizadas.length > 0 && (
+          <div className="bg-white p-6 rounded-xl shadow-lg">
+            <h3 className="text-lg font-bold text-gray-900 mb-4">Historial de Campañas</h3>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b text-left">
+                    <th className="py-2 px-2">Línea Producto</th>
+                    {isManager() && <th className="py-2 px-2">Asesor</th>}
+                    <th className="py-2 px-2">Período</th>
+                    <th className="py-2 px-2 text-right">Días</th>
+                    <th className="py-2 px-2 text-right">Mensajes</th>
+                    <th className="py-2 px-2 text-right">Ventas</th>
+                    <th className="py-2 px-2 text-right">Monto</th>
+                    <th className="py-2 px-2 text-right">Conv.</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {campanasFinalizadas.map((campana) => (
+                    <tr key={campana.id} className="border-b hover:bg-gray-50">
+                      <td className="py-2 px-2">{campana.linea_producto}</td>
+                      {isManager() && <td className="py-2 px-2 text-xs text-gray-600">{campana.asesor_nombre}</td>}
+                      <td className="py-2 px-2 text-xs">{formatDate(campana.fecha_inicio)} - {formatDate(campana.fecha_fin)}</td>
+                      <td className="py-2 px-2 text-right">{campana.dias_trabajados}</td>
+                      <td className="py-2 px-2 text-right">{campana.total_mensajes}</td>
+                      <td className="py-2 px-2 text-right">{campana.total_ventas}</td>
+                      <td className="py-2 px-2 text-right">$ {formatMoney(campana.monto_total_vendido)}</td>
+                      <td className="py-2 px-2 text-right text-purple-600 font-medium">{campana.tasa_conversion}%</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           </div>
         )}

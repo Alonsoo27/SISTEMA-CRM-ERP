@@ -77,7 +77,7 @@ const modules = {
     metas: { path: './src/modules/ventas/routes/metas', route: '/api/metas', loaded: null },
     asesores: { path: './src/modules/ventas/routes/asesoresRoutes', route: '/api/asesores', loaded: null },
     ubicaciones: { path: './src/modules/ubicaciones/routes/ubicacionesRoutes', route: '/api/ubicaciones', loaded: null },
-    campanas: { path: './src/modules/ventas/routes/campanasRoutes', route: '/api/campanas', loaded: null }
+    campanasAsesor: { path: './src/modules/ventas/routes/campanasAsesorRoutes', route: '/api/campanas-asesor', loaded: null }
 };
 
 // MÓDULOS PAUSADOS TEMPORALMENTE:

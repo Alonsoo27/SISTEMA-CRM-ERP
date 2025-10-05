@@ -72,63 +72,8 @@ const ModalCheckIn = ({
 
   const cargarCampanaActiva = async () => {
     try {
-      // PASO 1: Verificar el último check-in del usuario (persistencia)
-      const ultimoCheckInResponse = await fetch('/api/actividad/estado-hoy', {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
-          'Content-Type': 'application/json'
-        }
-      });
-
-      let campanaPersistente = null;
-
-      if (ultimoCheckInResponse.ok) {
-        const estadoData = await ultimoCheckInResponse.json();
-
-        // Buscar el último registro con campaña
-        // Nota: El backend debería devolver el último estado, pero vamos a hacer otra consulta específica
-        const historialResponse = await fetch('/api/actividad/historial?limite=5', {
-          headers: {
-            'Authorization': `Bearer ${localStorage.getItem('token')}`,
-            'Content-Type': 'application/json'
-          }
-        });
-
-        if (historialResponse.ok) {
-          const historialData = await historialResponse.json();
-          if (historialData.success) {
-            const registros = historialData.data?.registros || historialData.data?.data?.registros || historialData.data || [];
-
-            // Buscar el último check-in que tenga campaña marcada
-            const ultimoConCampana = Array.isArray(registros)
-              ? registros.find(r => r.en_campana && r.producto_campana)
-              : null;
-
-            if (ultimoConCampana) {
-              campanaPersistente = {
-                nombre: `Campaña ${ultimoConCampana.producto_campana}`,
-                linea_producto: ultimoConCampana.producto_campana,
-                descripcion: 'Continuación de campaña anterior',
-                persistente: true
-              };
-            }
-          }
-        }
-      }
-
-      // PASO 2: Si hay campaña persistente, usar esa
-      if (campanaPersistente) {
-        setCampanaActiva(campanaPersistente);
-        setFormData(prev => ({
-          ...prev,
-          en_campana: true,
-          producto_campana: campanaPersistente.linea_producto || ''
-        }));
-        return; // Salir, ya tenemos la campaña
-      }
-
-      // PASO 3: Si no hay persistencia, buscar campañas activas en la tabla
-      const response = await fetch('/api/campanas/activas', {
+      // Consultar campaña activa del asesor en el nuevo sistema
+      const response = await fetch('/api/campanas-asesor/campana-activa', {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`,
           'Content-Type': 'application/json'
@@ -137,12 +82,19 @@ const ModalCheckIn = ({
 
       if (response.ok) {
         const data = await response.json();
-        if (data.success && data.data && data.data.length > 0) {
-          // Tomar la primera campaña activa
-          const campana = data.data[0];
-          setCampanaActiva(campana);
+        if (data.success && data.data) {
+          const campana = data.data;
 
-          // Pre-cargar los datos de la campaña en el formulario
+          setCampanaActiva({
+            id: campana.id,
+            nombre_campana: campana.nombre_campana,
+            linea_producto: campana.linea_producto,
+            fecha_inicio: campana.fecha_inicio,
+            dias_trabajados: campana.dias_trabajados,
+            total_mensajes: campana.total_mensajes
+          });
+
+          // Pre-cargar en el formulario
           setFormData(prev => ({
             ...prev,
             en_campana: true,

@@ -385,6 +385,22 @@ exports.checkIn = async (req, res) => {
 
         console.log(`📝 Check-in: ${hora}:${minutos.toString().padStart(2, '0')} → ${estado_entrada} (${minutos_tardanza} min tardanza)`);
 
+        // Obtener campaña activa si está marcando en_campana
+        let campanaAsesorId = null;
+        if (en_campana && producto_campana) {
+            const campanaActiva = await query(`
+                SELECT id FROM campanas_asesor
+                WHERE usuario_id = $1
+                  AND linea_producto = $2
+                  AND estado = 'activa'
+                LIMIT 1
+            `, [userId, producto_campana]);
+
+            if (campanaActiva.rows.length > 0) {
+                campanaAsesorId = campanaActiva.rows[0].id;
+            }
+        }
+
         // Realizar check-in
         const checkInQuery = registroExistente.rows.length > 0 ?
             // Actualizar registro existente
@@ -397,8 +413,9 @@ exports.checkIn = async (req, res) => {
                 notas_check_in = $7,
                 en_campana = $8,
                 producto_campana = $9,
-                estado_entrada = $10,
-                minutos_tardanza = $11,
+                campana_asesor_id = $10,
+                estado_entrada = $11,
+                minutos_tardanza = $12,
                 estado_jornada = 'en_progreso',
                 updated_at = NOW()
              WHERE usuario_id = $1 AND fecha = $2
@@ -407,16 +424,16 @@ exports.checkIn = async (req, res) => {
             `INSERT INTO actividad_diaria (
                 usuario_id, fecha, check_in_time,
                 mensajes_meta, mensajes_whatsapp, mensajes_instagram, mensajes_tiktok,
-                notas_check_in, en_campana, producto_campana,
+                notas_check_in, en_campana, producto_campana, campana_asesor_id,
                 estado_entrada, minutos_tardanza, estado_jornada,
                 created_at, updated_at
-             ) VALUES ($1, $2, (NOW() AT TIME ZONE 'UTC' AT TIME ZONE 'America/Lima'), $3, $4, $5, $6, $7, $8, $9, $10, $11, 'en_progreso', NOW(), NOW())
+             ) VALUES ($1, $2, (NOW() AT TIME ZONE 'UTC' AT TIME ZONE 'America/Lima'), $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 'en_progreso', NOW(), NOW())
              RETURNING *`;
 
         const result = await query(checkInQuery, [
             userId, fechaHoy, mensajes_meta, mensajes_whatsapp,
             mensajes_instagram, mensajes_tiktok, notas_check_in,
-            en_campana, producto_campana, estado_entrada, minutos_tardanza
+            en_campana, producto_campana, campanaAsesorId, estado_entrada, minutos_tardanza
         ]);
 
         const actividad = result.rows[0];
