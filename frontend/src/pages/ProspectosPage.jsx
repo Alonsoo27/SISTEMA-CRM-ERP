@@ -38,12 +38,20 @@ const ProspectosPage = () => {
   const [notification, setNotification] = useState(null);
   const [lastUpdated, setLastUpdated] = useState(null);
 
-  // Simular usuario actual (en producción vendría del contexto de auth)
-  const usuarioActual = {
-    id: 1,
-    nombre: 'Admin User',
-    rol: 'admin'
-  };
+  // 🔒 OBTENER USUARIO REAL del localStorage
+  const usuarioActual = useMemo(() => {
+    try {
+      const user = JSON.parse(localStorage.getItem('user') || '{}');
+      return {
+        id: user.id,
+        nombre: user.nombre_completo || `${user.nombre || ''} ${user.apellido || ''}`.trim(),
+        rol: user.rol?.nombre || user.rol
+      };
+    } catch (error) {
+      console.error('Error al obtener usuario:', error);
+      return null;
+    }
+  }, []);
 
   // Cargar stats al montar y cuando se actualice
   useEffect(() => {
@@ -425,7 +433,19 @@ const ProspectosPage = () => {
         {vistaActual === 'seguimientos' && (
           <div className="h-full p-6 overflow-y-auto">
             <BalanzaSeguimientos
-              asesorId={filtros.asesor_id || usuarioActual?.id}
+              asesorId={(() => {
+                // 🔒 LÓGICA DE FILTRADO POR ROL
+                const rolUsuario = usuarioActual?.rol;
+                const esVendedor = rolUsuario === 'VENDEDOR';
+
+                // VENDEDOR siempre ve solo sus datos
+                if (esVendedor) {
+                  return usuarioActual?.id;
+                }
+
+                // JEFE/ADMIN: si hay filtro, usarlo; si no, null (vista global)
+                return filtros.asesor_id || null;
+              })()}
               refreshTrigger={refreshTrigger}
             />
           </div>

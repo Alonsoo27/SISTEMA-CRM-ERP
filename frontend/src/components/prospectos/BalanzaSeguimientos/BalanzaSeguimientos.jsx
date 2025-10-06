@@ -35,12 +35,21 @@ const BalanzaSeguimientos = ({ asesorId = null, refreshTrigger = 0 }) => {
     busqueda: ''
   });
 
-  // Simular usuario actual (en producción vendría del contexto de auth)
-  const usuarioActual = {
-    id: 1,
-    nombre: 'Admin User',
-    rol: 'admin'
-  };
+  // 🔒 OBTENER USUARIO REAL del localStorage
+  const usuarioActual = useMemo(() => {
+    try {
+      const user = JSON.parse(localStorage.getItem('user') || '{}');
+      return {
+        id: user.id,
+        nombre: user.nombre_completo || `${user.nombre || ''} ${user.apellido || ''}`.trim(),
+        rol: user.rol?.nombre || user.rol,
+        es_jefe: user.es_jefe
+      };
+    } catch (error) {
+      console.error('Error al obtener usuario:', error);
+      return null;
+    }
+  }, []);
 
   // Control de permisos
   const esRolAlto = useCallback(() => {
@@ -83,7 +92,15 @@ const BalanzaSeguimientos = ({ asesorId = null, refreshTrigger = 0 }) => {
       setLoading(true);
       setError(null);
 
-      const asesorIdFinal = asesorId || usuarioActual?.id;
+      // 🔒 RESPETAR EL asesorId QUE VIENE DE LA PROP
+      // - null = vista global (para JEFES/ADMINS sin filtro)
+      // - number = vista filtrada por ese asesor
+      // - Si es undefined, usar el usuario actual como fallback
+      const asesorIdFinal = asesorId !== undefined ? asesorId : usuarioActual?.id;
+
+      console.log('🔍 BalanzaSeguimientos: Cargando con asesorId=', asesorIdFinal,
+                  asesorIdFinal === null ? '(vista global)' : `(asesor específico)`);
+
       const response = await prospectosService.obtenerDashboardSeguimientos(asesorIdFinal);
 
       if (response.success) {
