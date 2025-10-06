@@ -597,6 +597,11 @@ const cargarProductosProspecto = async (prospectoId) => {
       newErrors.nombre_cliente = 'El nombre del cliente es obligatorio';
     }
 
+    // ✅ AGREGADO - Validar apellido_cliente solo si NO es RUC (empresa)
+    if (formData.tipo_documento !== 'RUC' && !formData.apellido_cliente.trim()) {
+      newErrors.apellido_cliente = 'El apellido es obligatorio';
+    }
+
     // ✅ AGREGADO - Validar canal_contacto
     if (!formData.canal_contacto) {
       newErrors.canal_contacto = 'Seleccione un canal de contacto';
@@ -1376,10 +1381,16 @@ const response = await ventasService.crearVentaCompleta(datosVenta);
   const totales = totalesMemoizados;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg shadow-xl max-w-6xl w-full max-h-screen overflow-y-auto">
-        {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-gray-200">
+    <div
+      className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+      onClick={onClose}
+    >
+      <div
+        className="bg-white rounded-lg shadow-xl max-w-6xl w-full max-h-screen overflow-y-auto"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header - Sticky */}
+        <div className="sticky top-0 bg-white flex items-center justify-between p-6 border-b border-gray-200 z-10 shadow-sm">
           <div>
             <h2 className="text-xl font-bold text-gray-900 flex items-center">
               {mode === 'conversion' ? (
@@ -1764,15 +1775,20 @@ const response = await ventasService.crearVentaCompleta(datosVenta);
               {formData.tipo_documento !== 'RUC' && (
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Apellido del Cliente
+                    Apellido del Cliente *
                   </label>
                   <input
                     type="text"
                     value={formData.apellido_cliente}
                     onChange={(e) => handleInputChange('apellido_cliente', e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className={`w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                      errors.apellido_cliente ? 'border-red-300' : 'border-gray-300'
+                    }`}
                     placeholder="Apellido del cliente"
                   />
+                  {errors.apellido_cliente && (
+                    <p className="mt-1 text-sm text-red-600">{errors.apellido_cliente}</p>
+                  )}
                 </div>
               )}
 
@@ -1821,7 +1837,7 @@ const response = await ventasService.crearVentaCompleta(datosVenta);
                   className={`w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
                     errors.cliente_telefono ? 'border-red-300' : 'border-gray-300'
                   }`}
-                  placeholder="Número de teléfono"
+                  placeholder="+51 999 999 999"
                 />
                 {errors.cliente_telefono && (
                   <p className="mt-1 text-sm text-red-600">{errors.cliente_telefono}</p>

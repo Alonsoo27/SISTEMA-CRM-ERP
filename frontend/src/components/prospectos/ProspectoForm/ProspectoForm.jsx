@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import {
   X, Save, Phone, Mail, Building, MapPin, DollarSign,
   Calendar, User, AlertCircle, CheckCircle, Plus, Trash2,
-  Search, Package, Tag
+  Search, Package, Tag, FileText
 } from 'lucide-react';
 import prospectosService from '../../../services/prospectosService';
 import productosService from '../../../services/productosService';
@@ -19,11 +19,10 @@ const ProspectoForm = ({ prospecto = null, onClose, onSave, mode = 'create' }) =
     telefono: '',
     email: '',
     empresa: '',
-    cargo: '',
     direccion: '',
     distrito: '',
     ciudad: 'Lima',
-    departamento: '', 
+    departamento: '',
     canal_contacto: 'WhatsApp',
     productos_interes: [],
     presupuesto_estimado: '',
@@ -91,7 +90,6 @@ const cargarDatosProspectoCompletos = async (prospectoId) => {
         telefono: datos.telefono || '',
         email: datos.email || '',
         empresa: datos.empresa || '',
-        cargo: datos.cargo || '',
         direccion: datos.direccion || '',
         distrito: datos.distrito || '',
         ciudad: datos.ciudad || 'Lima',
@@ -102,7 +100,7 @@ const cargarDatosProspectoCompletos = async (prospectoId) => {
         valor_estimado: datos.valor_estimado || '',
         probabilidad_cierre: datos.probabilidad_cierre || 50,
         observaciones: datos.observaciones || '',
-        fecha_seguimiento: datos.fecha_seguimiento ? 
+        fecha_seguimiento: datos.fecha_seguimiento ?
           new Date(datos.fecha_seguimiento).toISOString().slice(0, 16) : ''
       });
     }
@@ -124,7 +122,6 @@ const cargarDatosProspectoCompletos = async (prospectoId) => {
       telefono: prospectoNormalizado.telefono || '',
       email: prospectoNormalizado.email || '',
       empresa: prospectoNormalizado.empresa || '',
-      cargo: prospectoNormalizado.cargo || '',
       direccion: prospectoNormalizado.direccion || '',
       distrito: prospectoNormalizado.distrito || '',
       ciudad: prospectoNormalizado.ciudad || 'Lima',
@@ -135,7 +132,7 @@ const cargarDatosProspectoCompletos = async (prospectoId) => {
       valor_estimado: prospectoNormalizado.valor_estimado || '',
       probabilidad_cierre: prospectoNormalizado.probabilidad_cierre || 50,
       observaciones: prospectoNormalizado.observaciones || '',
-      fecha_seguimiento: prospectoNormalizado.fecha_seguimiento ? 
+      fecha_seguimiento: prospectoNormalizado.fecha_seguimiento ?
         new Date(prospectoNormalizado.fecha_seguimiento).toISOString().slice(0, 16) : ''
     });
   }
@@ -220,6 +217,10 @@ const cargarDatosProspectoCompletos = async (prospectoId) => {
 
     if (!formData.nombre_cliente.trim()) {
       newErrors.nombre_cliente = 'El nombre es requerido';
+    }
+
+    if (!formData.apellido_cliente.trim()) {
+      newErrors.apellido_cliente = 'El apellido es requerido';
     }
 
     if (!formData.telefono.trim()) {
@@ -479,63 +480,91 @@ const cargarDatosProspectoCompletos = async (prospectoId) => {
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
-        {/* Header */}
-        <div className="sticky top-0 bg-white border-b px-6 py-4 flex items-center justify-between">
-          <h2 className="text-xl font-semibold text-gray-900">
-            {mode === 'edit' ? 'Editar Prospecto' : 'Nuevo Prospecto'}
-          </h2>
+    <div
+      className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+      onClick={onClose}
+    >
+      <div
+        className="bg-white rounded-lg shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header Mejorado - Sticky */}
+        <div className="sticky top-0 bg-gradient-to-r from-blue-600 to-indigo-600 border-b px-6 py-4 flex items-center justify-between rounded-t-lg z-10 shadow-lg">
+          <div>
+            <h2 className="text-xl font-bold text-white">
+              {mode === 'edit' ? '✏️ Editar Prospecto' : '✨ Nuevo Prospecto'}
+            </h2>
+            <p className="text-blue-100 text-sm mt-1">
+              {mode === 'edit' ? 'Actualiza la información del prospecto' : 'Registra un nuevo cliente potencial'}
+            </p>
+          </div>
           <button
             onClick={onClose}
-            className="text-gray-400 hover:text-gray-600 transition-colors"
+            className="text-white hover:bg-white/20 p-2 rounded-lg transition-all"
           >
             <X className="h-6 w-6" />
           </button>
         </div>
 
         <form onSubmit={handleSubmit} className="p-6 space-y-6">
-          {/* Información del Cliente */}
-          <div className="bg-gray-50 p-4 rounded-lg">
-            <h3 className="text-lg font-medium text-gray-900 mb-4 flex items-center">
-              <User className="h-5 w-5 mr-2" />
+          {/* Información del Cliente - Diseño Mejorado */}
+          <div className="bg-gradient-to-br from-blue-50 to-indigo-50 p-6 rounded-xl border-2 border-blue-100 shadow-sm">
+            <h3 className="text-lg font-bold text-gray-900 mb-1 flex items-center">
+              <div className="bg-blue-600 p-2 rounded-lg mr-3">
+                <User className="h-5 w-5 text-white" />
+              </div>
               Información del Cliente
             </h3>
+            <p className="text-sm text-gray-600 mb-4 ml-12">Datos básicos del prospecto</p>
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-semibold text-gray-700 mb-2 flex items-center">
+                  <User className="h-4 w-4 mr-1.5 text-blue-600" />
                   Nombre *
                 </label>
                 <input
                   type="text"
                   value={formData.nombre_cliente}
                   onChange={(e) => handleInputChange('nombre_cliente', e.target.value)}
-                  className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                    errors.nombre_cliente ? 'border-red-300' : 'border-gray-300'
+                  className={`w-full px-4 py-2.5 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white transition-all ${
+                    errors.nombre_cliente ? 'border-red-300 ring-2 ring-red-200' : 'border-gray-300 hover:border-blue-300'
                   }`}
                   placeholder="Nombre del cliente"
                 />
                 {errors.nombre_cliente && (
-                  <p className="text-red-500 text-xs mt-1">{errors.nombre_cliente}</p>
+                  <p className="text-red-600 text-xs mt-1.5 flex items-center">
+                    <AlertCircle className="h-3 w-3 mr-1" />
+                    {errors.nombre_cliente}
+                  </p>
                 )}
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Apellido
+                <label className="block text-sm font-semibold text-gray-700 mb-2 flex items-center">
+                  <User className="h-4 w-4 mr-1.5 text-blue-600" />
+                  Apellido *
                 </label>
                 <input
                   type="text"
                   value={formData.apellido_cliente}
                   onChange={(e) => handleInputChange('apellido_cliente', e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className={`w-full px-4 py-2.5 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white transition-all ${
+                    errors.apellido_cliente ? 'border-red-300 ring-2 ring-red-200' : 'border-gray-300 hover:border-blue-300'
+                  }`}
                   placeholder="Apellido del cliente"
                 />
+                {errors.apellido_cliente && (
+                  <p className="text-red-600 text-xs mt-1.5 flex items-center">
+                    <AlertCircle className="h-3 w-3 mr-1" />
+                    {errors.apellido_cliente}
+                  </p>
+                )}
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-semibold text-gray-700 mb-2 flex items-center">
+                  <Phone className="h-4 w-4 mr-1.5 text-green-600" />
                   Teléfono *
                 </label>
                 <div className="relative">
@@ -546,8 +575,8 @@ const cargarDatosProspectoCompletos = async (prospectoId) => {
                     type="tel"
                     value={formData.telefono}
                     onChange={(e) => handleInputChange('telefono', e.target.value)}
-                    className={`w-full pl-10 pr-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                      errors.telefono ? 'border-red-300' : 'border-gray-300'
+                    className={`w-full pl-10 pr-10 py-2.5 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white transition-all ${
+                      errors.telefono ? 'border-red-300 ring-2 ring-red-200' : 'border-gray-300 hover:border-blue-300'
                     }`}
                     placeholder="+51 999 999 999"
                   />
@@ -558,20 +587,29 @@ const cargarDatosProspectoCompletos = async (prospectoId) => {
                   )}
                 </div>
                 {errors.telefono && (
-                  <p className="text-red-500 text-xs mt-1">{errors.telefono}</p>
+                  <p className="text-red-600 text-xs mt-1.5 flex items-center">
+                    <AlertCircle className="h-3 w-3 mr-1" />
+                    {errors.telefono}
+                  </p>
                 )}
                 {duplicadoEncontrado && (
-                  <div className="mt-1 p-2 bg-yellow-50 border border-yellow-200 rounded text-xs">
-                    <div className="flex items-center text-yellow-600">
-                      <AlertCircle className="h-3 w-3 mr-1" />
-                      Ya existe: {duplicadoEncontrado.nombre_cliente} ({duplicadoEncontrado.codigo})
+                  <div className="mt-2 p-3 bg-amber-50 border-l-4 border-amber-400 rounded-r-lg shadow-sm">
+                    <div className="flex items-start">
+                      <AlertCircle className="h-4 w-4 text-amber-600 mr-2 mt-0.5 flex-shrink-0" />
+                      <div>
+                        <p className="text-xs font-semibold text-amber-800">Prospecto existente</p>
+                        <p className="text-xs text-amber-700 mt-0.5">
+                          {duplicadoEncontrado.nombre_cliente} ({duplicadoEncontrado.codigo})
+                        </p>
+                      </div>
                     </div>
                   </div>
                 )}
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-semibold text-gray-700 mb-2 flex items-center">
+                  <Mail className="h-4 w-4 mr-1.5 text-purple-600" />
                   Email
                 </label>
                 <div className="relative">
@@ -582,20 +620,24 @@ const cargarDatosProspectoCompletos = async (prospectoId) => {
                     type="email"
                     value={formData.email}
                     onChange={(e) => handleInputChange('email', e.target.value)}
-                    className={`w-full pl-10 pr-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                      errors.email ? 'border-red-300' : 'border-gray-300'
+                    className={`w-full pl-10 pr-3 py-2.5 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white transition-all ${
+                      errors.email ? 'border-red-300 ring-2 ring-red-200' : 'border-gray-300 hover:border-blue-300'
                     }`}
                     placeholder="cliente@empresa.com"
                   />
                 </div>
                 {errors.email && (
-                  <p className="text-red-500 text-xs mt-1">{errors.email}</p>
+                  <p className="text-red-600 text-xs mt-1.5 flex items-center">
+                    <AlertCircle className="h-3 w-3 mr-1" />
+                    {errors.email}
+                  </p>
                 )}
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Empresa
+                <label className="block text-sm font-semibold text-gray-700 mb-2 flex items-center">
+                  <Building className="h-4 w-4 mr-1.5 text-indigo-600" />
+                  Empresa <span className="text-gray-400 font-normal text-xs ml-1">(Opcional)</span>
                 </label>
                 <div className="relative">
                   <div className="absolute inset-y-0 left-0 pl-3 flex items-center">
@@ -605,33 +647,23 @@ const cargarDatosProspectoCompletos = async (prospectoId) => {
                     type="text"
                     value={formData.empresa}
                     onChange={(e) => handleInputChange('empresa', e.target.value)}
-                    className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full pl-10 pr-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white hover:border-blue-300 transition-all"
                     placeholder="Nombre de la empresa"
                   />
                 </div>
               </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Cargo
-                </label>
-                <input
-                  type="text"
-                  value={formData.cargo}
-                  onChange={(e) => handleInputChange('cargo', e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="Cargo del cliente"
-                />
-              </div>
             </div>
           </div>
 
-          {/* Ubicación */}
-          <div className="bg-gray-50 p-4 rounded-lg">
-            <h3 className="text-lg font-medium text-gray-900 mb-4 flex items-center">
-              <MapPin className="h-5 w-5 mr-2" />
+          {/* Ubicación - Diseño Mejorado */}
+          <div className="bg-gradient-to-br from-green-50 to-emerald-50 p-6 rounded-xl border-2 border-green-100 shadow-sm">
+            <h3 className="text-lg font-bold text-gray-900 mb-1 flex items-center">
+              <div className="bg-green-600 p-2 rounded-lg mr-3">
+                <MapPin className="h-5 w-5 text-white" />
+              </div>
               Ubicación
             </h3>
+            <p className="text-sm text-gray-600 mb-4 ml-12">Localización del prospecto</p>
             
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -664,41 +696,52 @@ const cargarDatosProspectoCompletos = async (prospectoId) => {
             </div>
           </div>
 
-          {/* Canal de Contacto */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Canal de Contacto *
-            </label>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+          {/* Canal de Contacto - Diseño Mejorado */}
+          <div className="bg-gradient-to-br from-purple-50 to-pink-50 p-6 rounded-xl border-2 border-purple-100 shadow-sm">
+            <h3 className="text-lg font-bold text-gray-900 mb-1 flex items-center">
+              <div className="bg-purple-600 p-2 rounded-lg mr-3">
+                <Phone className="h-5 w-5 text-white" />
+              </div>
+              Canal de Contacto
+            </h3>
+            <p className="text-sm text-gray-600 mb-4 ml-12">¿Cómo te contactó el cliente? *</p>
+
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               {canales.map((canal) => (
                 <button
                   key={canal.codigo}
                   type="button"
                   onClick={() => handleInputChange('canal_contacto', canal.codigo)}
-                  className={`p-3 border-2 rounded-lg text-sm font-medium transition-all ${
+                  className={`p-4 border-2 rounded-xl text-sm font-semibold transition-all transform hover:scale-105 ${
                     formData.canal_contacto === canal.codigo
-                      ? 'border-blue-500 bg-blue-50 text-blue-700'
-                      : 'border-gray-200 hover:border-gray-300'
+                      ? 'border-purple-500 bg-gradient-to-br from-purple-500 to-pink-500 text-white shadow-lg shadow-purple-300/50'
+                      : 'border-gray-200 bg-white hover:border-purple-300 hover:shadow-md text-gray-700'
                   }`}
                 >
                   <div className="text-center">
-                    <div className="text-lg mb-1">{canal.icono}</div>
-                    <div>{canal.nombre}</div>
+                    <div className="text-2xl mb-2">{canal.icono}</div>
+                    <div className="text-xs">{canal.nombre}</div>
                   </div>
                 </button>
               ))}
             </div>
             {errors.canal_contacto && (
-              <p className="text-red-500 text-xs mt-1">{errors.canal_contacto}</p>
+              <p className="text-red-600 text-xs mt-2 flex items-center">
+                <AlertCircle className="h-3 w-3 mr-1" />
+                {errors.canal_contacto}
+              </p>
             )}
           </div>
 
-          {/* Productos de Interés */}
-          <div className="bg-gray-50 p-4 rounded-lg">
-            <h3 className="text-lg font-medium text-gray-900 mb-4 flex items-center">
-              <Package className="h-5 w-5 mr-2" />
+          {/* Productos de Interés - Diseño Mejorado */}
+          <div className="bg-gradient-to-br from-orange-50 to-amber-50 p-6 rounded-xl border-2 border-orange-100 shadow-sm">
+            <h3 className="text-lg font-bold text-gray-900 mb-1 flex items-center">
+              <div className="bg-orange-600 p-2 rounded-lg mr-3">
+                <Package className="h-5 w-5 text-white" />
+              </div>
               Productos de Interés
             </h3>
+            <p className="text-sm text-gray-600 mb-4 ml-12">Productos que interesan al prospecto</p>
             
             {/* Buscador de productos del catálogo */}
             <div className="mb-4">
@@ -878,12 +921,15 @@ const cargarDatosProspectoCompletos = async (prospectoId) => {
             )}
           </div>
 
-          {/* Valores y Seguimiento */}
-          <div className="bg-gray-50 p-4 rounded-lg">
-            <h3 className="text-lg font-medium text-gray-900 mb-4 flex items-center">
-              <DollarSign className="h-5 w-5 mr-2" />
+          {/* Valores y Seguimiento - Diseño Mejorado */}
+          <div className="bg-gradient-to-br from-emerald-50 to-teal-50 p-6 rounded-xl border-2 border-emerald-100 shadow-sm">
+            <h3 className="text-lg font-bold text-gray-900 mb-1 flex items-center">
+              <div className="bg-emerald-600 p-2 rounded-lg mr-3">
+                <DollarSign className="h-5 w-5 text-white" />
+              </div>
               Valores y Seguimiento
             </h3>
+            <p className="text-sm text-gray-600 mb-4 ml-12">Estimaciones y programación</p>
             
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
               <div>
@@ -964,40 +1010,56 @@ const cargarDatosProspectoCompletos = async (prospectoId) => {
             </div>
           </div>
 
-          {/* Observaciones */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+          {/* Observaciones - Diseño Mejorado */}
+          <div className="bg-gradient-to-br from-gray-50 to-slate-50 p-6 rounded-xl border-2 border-gray-200 shadow-sm">
+            <label className="block text-sm font-bold text-gray-700 mb-3 flex items-center">
+              <FileText className="h-4 w-4 mr-2 text-gray-600" />
               Observaciones
             </label>
             <textarea
               value={formData.observaciones}
               onChange={(e) => handleInputChange('observaciones', e.target.value)}
-              rows={3}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="Información adicional sobre el prospecto..."
+              rows={4}
+              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white hover:border-blue-300 transition-all resize-none"
+              placeholder="💬 Información adicional sobre el prospecto, necesidades específicas, preferencias..."
             />
           </div>
 
-          {/* Botones */}
-          <div className="flex justify-end space-x-3 pt-6 border-t">
+          {/* Botones - Diseño Mejorado */}
+          <div className="flex justify-end space-x-3 pt-6 border-t-2 border-gray-200">
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 transition-colors"
+              className="px-6 py-3 border-2 border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 hover:border-gray-400 transition-all font-semibold flex items-center"
             >
+              <X className="h-4 w-4 mr-2" />
               Cancelar
             </button>
             <button
               type="submit"
               disabled={loading}
-              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50 flex items-center"
+              className="px-6 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-lg hover:from-blue-700 hover:to-indigo-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center font-semibold shadow-lg shadow-blue-300/50"
             >
               {loading ? (
-                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                <>
+                  <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
+                  Procesando...
+                </>
               ) : (
-                <Save className="h-4 w-4 mr-2" />
+                <>
+                  {mode === 'edit' ? (
+                    <>
+                      <Save className="h-5 w-5 mr-2" />
+                      Actualizar Prospecto
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle className="h-5 w-5 mr-2" />
+                      Crear Prospecto
+                    </>
+                  )}
+                </>
               )}
-              {mode === 'edit' ? 'Actualizar' : 'Crear'} Prospecto
             </button>
           </div>
         </form>
