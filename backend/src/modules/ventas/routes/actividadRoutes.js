@@ -229,6 +229,19 @@ router.post('/check-out',
 );
 
 /**
+ * @route POST /api/actividad/check-out-retroactivo
+ * @desc Completar check-out de jornadas pendientes (días anteriores)
+ * @access Vendedores, Asesores, Supervisores, Managers, Admins
+ */
+router.post('/check-out-retroactivo',
+    authenticateToken,
+    requireVentasAccess,
+    logActivityEndpoint('CHECK-OUT-RETROACTIVO'),
+    validateCheckOutData,
+    ActividadDiariaController.checkOutRetroactivo
+);
+
+/**
  * @route GET /api/actividad/estado-hoy
  * @desc Obtener estado actual de la actividad del día
  * @access Vendedores, Asesores, Supervisores, Managers, Admins

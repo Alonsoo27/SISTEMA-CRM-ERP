@@ -8,6 +8,7 @@ import {
 import actividadService from '../../../services/actividadService';
 import ModalCheckIn from './ModalCheckIn';
 import ModalCheckOut from './ModalCheckOut';
+import ModalCheckOutPendiente from './ModalCheckOutPendiente';
 
 const ActividadPage = () => {
   const [estado, setEstado] = useState(null);
@@ -51,6 +52,23 @@ const ActividadPage = () => {
     setModalCheckOutOpen(false);
     showNotification('Check-out registrado exitosamente', 'success');
     setTimeout(() => obtenerEstado(), 1000);
+  };
+
+  const handleCheckOutPendienteComplete = async (data) => {
+    try {
+      const response = await actividadService.checkOutRetroactivo(data);
+
+      if (response.success) {
+        showNotification('Check-out pendiente completado exitosamente', 'success');
+        // Recargar el estado para ocultar el modal
+        setTimeout(() => obtenerEstado(), 1000);
+      } else {
+        throw new Error(response.error || 'Error al completar check-out pendiente');
+      }
+    } catch (err) {
+      console.error('Error completando check-out pendiente:', err);
+      throw err; // El modal manejará el error
+    }
   };
 
   const showNotification = (mensaje, tipo = 'info') => {
@@ -646,6 +664,14 @@ const ActividadPage = () => {
           }
         }}
       />
+
+      {/* Modal Check-Out Pendiente - FORZOSO */}
+      {estado?.jornada_pendiente?.tiene_pendiente && (
+        <ModalCheckOutPendiente
+          jornadaPendiente={estado.jornada_pendiente}
+          onComplete={handleCheckOutPendienteComplete}
+        />
+      )}
 
       {/* Modal de Historial - VERSIÓN FUNCIONAL */}
       {showHistorial && (

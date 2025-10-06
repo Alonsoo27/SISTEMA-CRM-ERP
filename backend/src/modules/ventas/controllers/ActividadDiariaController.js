@@ -64,37 +64,134 @@ const obtenerHoraLima = () => {
 };
 
 /**
+ * Obtener fecha/hora completa en zona horaria Lima
+ * @returns {Date} - Objeto Date en hora Lima
+ */
+const obtenerFechaHoraLima = () => {
+    const fechaLima = new Date().toLocaleString('en-US', {
+        timeZone: 'America/Lima'
+    });
+    return new Date(fechaLima);
+};
+
+/**
+ * Obtener día de la semana en zona horaria Lima (0=Domingo, 6=Sábado)
+ * @returns {number} - Día de la semana
+ */
+const obtenerDiaSemanaLima = () => {
+    const fechaLima = obtenerFechaHoraLima();
+    return fechaLima.getDay();
+};
+
+/**
  * Validar horario de check-in empresarial (LIMA)
+ * Lunes-Viernes: 8:00 AM - 12:00 PM
+ * Sábado: 9:15 AM - 12:10 PM
+ * Domingo: No permitido
  * @returns {boolean} - true si está en horario válido
  */
 const validarHorarioCheckin = () => {
-    const horaActualLima = obtenerHoraLima();
-
     // Permitir bypass en desarrollo si está configurado
     if (process.env.NODE_ENV === 'development' && process.env.BYPASS_SCHEDULE_VALIDATION === 'true') {
         console.log('⚠️  DEVELOPMENT: Schedule validation bypassed for check-in');
         return true;
     }
 
-    // Horario empresarial: 6:00 AM - 2:00 PM (flexible)
-    return horaActualLima >= 6 && horaActualLima <= 14;
+    const fechaHoraLima = obtenerFechaHoraLima();
+    const diaSemana = fechaHoraLima.getDay(); // 0=Domingo, 1=Lunes, ..., 6=Sábado
+    const hora = fechaHoraLima.getHours();
+    const minutos = fechaHoraLima.getMinutes();
+
+    // Domingo: No se permite check-in
+    if (diaSemana === 0) {
+        return false;
+    }
+
+    // Sábado: 9:15 AM - 10:00 AM
+    if (diaSemana === 6) {
+        // Después de 9:15 AM
+        if (hora > 9 || (hora === 9 && minutos >= 15)) {
+            // Antes de 10:00 AM
+            if (hora < 10) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    // Lunes a Viernes: 8:00 AM - 12:00 PM (mediodía)
+    return hora >= 8 && hora < 12;
 };
 
 /**
  * Validar horario de check-out empresarial (LIMA)
+ * Lunes-Viernes: 5:00 PM - 6:10 PM
+ * Sábado: 11:00 AM - 12:00 PM (mediodía)
+ * Domingo: No permitido
  * @returns {boolean} - true si está en horario válido
  */
 const validarHorarioCheckout = () => {
-    const horaActualLima = obtenerHoraLima();
-    
     // Permitir bypass en desarrollo si está configurado
     if (process.env.NODE_ENV === 'development' && process.env.BYPASS_SCHEDULE_VALIDATION === 'true') {
         console.log('⚠️  DEVELOPMENT: Schedule validation bypassed for check-out');
         return true;
     }
-    
-    // Horario empresarial: 2:00 PM - 10:00 PM (más flexible)
-    return horaActualLima >= 14 && horaActualLima <= 22;
+
+    const fechaHoraLima = obtenerFechaHoraLima();
+    const diaSemana = fechaHoraLima.getDay(); // 0=Domingo, 1=Lunes, ..., 6=Sábado
+    const hora = fechaHoraLima.getHours();
+    const minutos = fechaHoraLima.getMinutes();
+
+    // Domingo: No se permite check-out
+    if (diaSemana === 0) {
+        return false;
+    }
+
+    // Sábado: 11:00 AM - 12:00 PM (mediodía)
+    if (diaSemana === 6) {
+        return hora === 11 || (hora === 12 && minutos === 0);
+    }
+
+    // Lunes a Viernes: 5:00 PM - 6:10 PM
+    // Después de 5:00 PM (17:00)
+    if (hora > 17 || (hora === 17 && minutos >= 0)) {
+        // Antes de 6:10 PM (18:10)
+        if (hora < 18 || (hora === 18 && minutos <= 10)) {
+            return true;
+        }
+    }
+
+    return false;
+};
+
+/**
+ * Obtener horarios permitidos según día de la semana
+ * @returns {Object} - Horarios de check-in y check-out
+ */
+const obtenerHorariosPermitidos = () => {
+    const diaSemana = obtenerDiaSemanaLima();
+
+    // Domingo
+    if (diaSemana === 0) {
+        return {
+            check_in: 'No disponible los domingos',
+            check_out: 'No disponible los domingos'
+        };
+    }
+
+    // Sábado
+    if (diaSemana === 6) {
+        return {
+            check_in: '9:15 AM - 10:00 AM',
+            check_out: '11:00 AM - 12:00 PM'
+        };
+    }
+
+    // Lunes a Viernes
+    return {
+        check_in: '8:00 AM - 12:00 PM',
+        check_out: '5:00 PM - 6:10 PM'
+    };
 };
 
 /**
@@ -163,19 +260,22 @@ exports.getEstadoHoy = async (req, res) => {
         console.log('- fechaHoy calculada (Lima):', fechaHoy);
         console.log('- Hora actual Lima:', horaActualLima);
         
-        // ✅ CORRECCIÓN 2: Consulta con fecha Lima
+        // ✅ CORRECCIÓN 2: Consulta con fecha Lima y timestamps convertidos
         const actividadResult = await query(`
-            SELECT 
-                id, fecha, check_in_time, check_out_time, estado_jornada,
+            SELECT
+                id, fecha,
+                check_in_time AT TIME ZONE 'UTC' AT TIME ZONE 'America/Lima' as check_in_time,
+                check_out_time AT TIME ZONE 'UTC' AT TIME ZONE 'America/Lima' as check_out_time,
+                estado_jornada,
                 created_at, updated_at,
                 mensajes_meta + mensajes_whatsapp + mensajes_instagram + mensajes_tiktok as total_mensajes_recibidos,
                 llamadas_realizadas + llamadas_recibidas as total_llamadas,
-                CASE 
+                CASE
                     WHEN check_in_time IS NOT NULL AND check_out_time IS NOT NULL THEN
                         EXTRACT(EPOCH FROM (check_out_time - check_in_time)) / 3600.0
                     ELSE 0
                 END as jornada_horas
-            FROM actividad_diaria 
+            FROM actividad_diaria
             WHERE usuario_id = $1 AND fecha = $2
         `, [userId, fechaHoy]);
 
@@ -185,6 +285,34 @@ exports.getEstadoHoy = async (req, res) => {
             fecha_buscada: fechaHoy,
             primer_registro: actividadResult.rows[0] || 'ninguno'
         });
+
+        // ✅ NUEVA FUNCIONALIDAD: Detectar jornadas pendientes (check-in sin check-out)
+        const jornadaPendienteResult = await query(`
+            SELECT
+                id, fecha,
+                check_in_time AT TIME ZONE 'UTC' AT TIME ZONE 'America/Lima' as check_in_time,
+                estado_jornada,
+                mensajes_meta + mensajes_whatsapp + mensajes_instagram + mensajes_tiktok as total_mensajes_recibidos,
+                llamadas_realizadas + llamadas_recibidas as total_llamadas
+            FROM actividad_diaria
+            WHERE usuario_id = $1
+                AND fecha < $2
+                AND check_in_time IS NOT NULL
+                AND check_out_time IS NULL
+                AND fecha >= $3
+            ORDER BY fecha DESC
+            LIMIT 1
+        `, [userId, fechaHoy, new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]]); // Máximo 7 días atrás
+
+        const jornadaPendiente = jornadaPendienteResult.rows[0] || null;
+
+        if (jornadaPendiente) {
+            console.log('⚠️  JORNADA PENDIENTE DETECTADA:', {
+                fecha: jornadaPendiente.fecha,
+                check_in: jornadaPendiente.check_in_time,
+                dias_atras: Math.floor((new Date(fechaHoy) - new Date(jornadaPendiente.fecha)) / (1000 * 60 * 60 * 24))
+            });
+        }
 
         const actividad = actividadResult.rows[0];
 
@@ -267,8 +395,19 @@ exports.getEstadoHoy = async (req, res) => {
                 },
                 horarios: {
                     hora_actual: new Date().toLocaleTimeString('es-PE'),
-                    ventana_check_in: '6:00 AM - 2:00 PM',
-                    ventana_check_out: '2:00 PM - 10:00 PM'
+                    ventana_check_in: obtenerHorariosPermitidos().check_in,
+                    ventana_check_out: obtenerHorariosPermitidos().check_out
+                },
+                // ✅ NUEVA FUNCIONALIDAD: Jornada pendiente
+                jornada_pendiente: jornadaPendiente ? {
+                    tiene_pendiente: true,
+                    fecha: jornadaPendiente.fecha,
+                    check_in_time: jornadaPendiente.check_in_time,
+                    total_mensajes: parseInt(jornadaPendiente.total_mensajes_recibidos || 0),
+                    total_llamadas: parseInt(jornadaPendiente.total_llamadas || 0),
+                    dias_atrasados: Math.floor((new Date(fechaHoy) - new Date(jornadaPendiente.fecha)) / (1000 * 60 * 60 * 24))
+                } : {
+                    tiene_pendiente: false
                 },
                 debug_info: process.env.NODE_ENV === 'development' ? {
                     fecha_consultada: fechaHoy,
@@ -322,14 +461,9 @@ exports.checkIn = async (req, res) => {
         const validaciones = [];
 
         // ✅ CORRECCIÓN: Validar horario usando funciones Lima
+        const horariosPermitidos = obtenerHorariosPermitidos();
         if (!validarHorarioCheckin()) {
-            if (horaActualLima < 6) {
-                validaciones.push('Check-in muy temprano. Horario permitido: 6:00 AM - 2:00 PM');
-            } else if (horaActualLima > 14) {
-                validaciones.push('Check-in muy tardío. Horario permitido: 6:00 AM - 2:00 PM');
-            } else {
-                validaciones.push('Check-in fuera de horario. Horario permitido: 6:00 AM - 2:00 PM');
-            }
+            validaciones.push(`Check-in fuera de horario. Horario permitido: ${horariosPermitidos.check_in}`);
         }
 
         // Validar mensajes
@@ -344,7 +478,7 @@ exports.checkIn = async (req, res) => {
                 message: 'Errores de validación en check-in',
                 errores: validaciones,
                 horario_actual: `${horaActualLima}:00 Lima`,
-                horario_permitido: '6:00 AM - 2:00 PM'
+                horario_permitido: horariosPermitidos.check_in
             });
         }
 
@@ -405,7 +539,7 @@ exports.checkIn = async (req, res) => {
         const checkInQuery = registroExistente.rows.length > 0 ?
             // Actualizar registro existente
             `UPDATE actividad_diaria SET
-                check_in_time = (NOW() AT TIME ZONE 'UTC' AT TIME ZONE 'America/Lima'),
+                check_in_time = NOW(),
                 mensajes_meta = $3,
                 mensajes_whatsapp = $4,
                 mensajes_instagram = $5,
@@ -427,7 +561,7 @@ exports.checkIn = async (req, res) => {
                 notas_check_in, en_campana, producto_campana, campana_asesor_id,
                 estado_entrada, minutos_tardanza, estado_jornada,
                 created_at, updated_at
-             ) VALUES ($1, $2, (NOW() AT TIME ZONE 'UTC' AT TIME ZONE 'America/Lima'), $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 'en_progreso', NOW(), NOW())
+             ) VALUES ($1, $2, NOW(), $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 'en_progreso', NOW(), NOW())
              RETURNING *`;
 
         const result = await query(checkInQuery, [
@@ -502,14 +636,10 @@ exports.checkOut = async (req, res) => {
         // Validaciones de negocio
         const validaciones = [];
 
-        // ✅ CORRECCIÓN: Validar horario usando funciones Lima (más flexible para check-out)
+        // ✅ CORRECCIÓN: Validar horario usando funciones Lima
+        const horariosPermitidos = obtenerHorariosPermitidos();
         if (!validarHorarioCheckout()) {
-            if (horaActualLima < 14) {
-                validaciones.push('Check-out muy temprano. Horario recomendado: 2:00 PM - 10:00 PM');
-            } else if (horaActualLima > 22) {
-                // Solo advertencia para check-out tardío, no error
-                console.log(`⚠️  Check-out tardío (${horaActualLima}:00) para usuario ${userId}, pero se permite`);
-            }
+            validaciones.push(`Check-out fuera de horario. Horario permitido: ${horariosPermitidos.check_out}`);
         }
 
         // Validar llamadas
@@ -524,7 +654,7 @@ exports.checkOut = async (req, res) => {
                 message: 'Errores de validación en check-out',
                 errores: validaciones,
                 horario_actual: `${horaActualLima}:00 Lima`,
-                horario_recomendado: '2:00 PM - 10:00 PM'
+                horario_permitido: horariosPermitidos.check_out
             });
         }
 
@@ -586,7 +716,7 @@ exports.checkOut = async (req, res) => {
         // Realizar check-out
         const checkOutQuery = `
             UPDATE actividad_diaria SET
-                check_out_time = (NOW() AT TIME ZONE 'UTC' AT TIME ZONE 'America/Lima'),
+                check_out_time = NOW(),
                 llamadas_realizadas = $3,
                 llamadas_recibidas = $4,
                 notas_check_out = $5,
@@ -640,6 +770,199 @@ exports.checkOut = async (req, res) => {
         res.status(500).json({
             success: false,
             message: 'Error interno al realizar check-out',
+            error: process.env.NODE_ENV === 'development' ? error.message : undefined
+        });
+    }
+};
+
+// ============================================
+// CHECK-OUT RETROACTIVO: COMPLETAR JORNADA PENDIENTE
+// ============================================
+exports.checkOutRetroactivo = async (req, res) => {
+    const startTime = Date.now();
+
+    try {
+        logRequest('checkOutRetroactivo', req);
+
+        const {
+            fecha_pendiente,
+            hora_salida, // Formato: "17:30" o "5:30 PM"
+            llamadas_realizadas = 0,
+            llamadas_recibidas = 0,
+            notas_check_out = '',
+            motivo_tardanza = '' // Opcional: por qué no hizo check-out a tiempo
+        } = req.body;
+
+        const userId = req.user.id;
+
+        // Validaciones
+        const validaciones = [];
+
+        if (!fecha_pendiente) {
+            validaciones.push('Fecha pendiente es requerida');
+        }
+
+        if (!hora_salida) {
+            validaciones.push('Hora de salida es requerida');
+        }
+
+        // Validar que la fecha no sea futura
+        const fechaHoy = obtenerFechaLima();
+        if (fecha_pendiente >= fechaHoy) {
+            validaciones.push('No se puede hacer check-out retroactivo del día de hoy o futuro');
+        }
+
+        // Validar que no sea muy antigua (máximo 7 días)
+        const diasDiferencia = Math.floor((new Date(fechaHoy) - new Date(fecha_pendiente)) / (1000 * 60 * 60 * 24));
+        if (diasDiferencia > 7) {
+            validaciones.push('No se puede hacer check-out retroactivo de más de 7 días atrás');
+        }
+
+        // Validar llamadas
+        const validacionesLlamadas = validarLlamadas({
+            llamadas_realizadas, llamadas_recibidas
+        });
+        validaciones.push(...validacionesLlamadas);
+
+        if (validaciones.length > 0) {
+            return res.status(400).json({
+                success: false,
+                message: 'Errores de validación en check-out retroactivo',
+                errores: validaciones
+            });
+        }
+
+        // Verificar que existe el registro con check-in
+        const registroResult = await query(`
+            SELECT id, check_in_time, check_out_time, estado_jornada
+            FROM actividad_diaria
+            WHERE usuario_id = $1 AND fecha = $2
+        `, [userId, fecha_pendiente]);
+
+        if (registroResult.rows.length === 0) {
+            return res.status(404).json({
+                success: false,
+                message: 'No se encontró registro de check-in para la fecha especificada'
+            });
+        }
+
+        const registro = registroResult.rows[0];
+
+        if (!registro.check_in_time) {
+            return res.status(400).json({
+                success: false,
+                message: 'No hay check-in registrado para esa fecha'
+            });
+        }
+
+        if (registro.check_out_time) {
+            return res.status(400).json({
+                success: false,
+                message: 'Ya existe un check-out para esa fecha',
+                data: {
+                    check_out_existente: registro.check_out_time
+                }
+            });
+        }
+
+        // Parsear hora de salida ingresada por el usuario
+        let horaSalidaParsed;
+        try {
+            // Convertir hora ingresada a timestamp completo
+            const [horas, minutos] = hora_salida.includes(':')
+                ? hora_salida.split(':').map(Number)
+                : [parseInt(hora_salida), 0];
+
+            const fechaSalida = new Date(fecha_pendiente);
+            fechaSalida.setHours(horas, minutos, 0, 0);
+            horaSalidaParsed = fechaSalida;
+
+            console.log(`📝 Check-out retroactivo: ${fecha_pendiente} a las ${hora_salida} → ${horaSalidaParsed.toISOString()}`);
+        } catch (parseError) {
+            return res.status(400).json({
+                success: false,
+                message: 'Formato de hora inválido. Use formato HH:MM (ej: 17:30 o 5:30 PM)'
+            });
+        }
+
+        // Validar que la hora de salida sea posterior al check-in
+        const checkInTime = new Date(registro.check_in_time);
+        if (horaSalidaParsed <= checkInTime) {
+            return res.status(400).json({
+                success: false,
+                message: 'La hora de salida debe ser posterior a la hora de check-in',
+                data: {
+                    check_in: registro.check_in_time
+                }
+            });
+        }
+
+        // Calcular horas efectivas
+        const horasEfectivas = (horaSalidaParsed - checkInTime) / (1000 * 60 * 60);
+        const total_horas_efectivas = Math.round(horasEfectivas * 100) / 100;
+
+        // Determinar estado de salida (siempre será 'retroactivo' para identificarlo)
+        const estado_salida = 'retroactivo';
+
+        // Actualizar registro con check-out retroactivo
+        const updateQuery = `
+            UPDATE actividad_diaria SET
+                check_out_time = $3,
+                llamadas_realizadas = $4,
+                llamadas_recibidas = $5,
+                notas_check_out = $6,
+                estado_salida = $7,
+                total_horas_efectivas = $8,
+                estado_jornada = 'finalizada',
+                motivo_checkout_retroactivo = $9,
+                updated_at = NOW()
+            WHERE usuario_id = $1 AND fecha = $2
+            RETURNING *
+        `;
+
+        const result = await query(updateQuery, [
+            userId,
+            fecha_pendiente,
+            horaSalidaParsed,
+            llamadas_realizadas,
+            llamadas_recibidas,
+            notas_check_out,
+            estado_salida,
+            total_horas_efectivas,
+            motivo_tardanza || 'Check-out completado retroactivamente'
+        ]);
+
+        const actividad = result.rows[0];
+
+        const duration = Date.now() - startTime;
+        logSuccess('checkOutRetroactivo', {
+            action: 'check-out-retroactivo',
+            fecha: fecha_pendiente,
+            horas_efectivas: total_horas_efectivas
+        }, duration);
+
+        res.json({
+            success: true,
+            message: 'Check-out retroactivo completado exitosamente',
+            data: {
+                id: actividad.id,
+                fecha: actividad.fecha,
+                check_in_time: actividad.check_in_time,
+                check_out_time: actividad.check_out_time,
+                estado_jornada: actividad.estado_jornada,
+                total_horas_efectivas: total_horas_efectivas,
+                total_llamadas: (llamadas_realizadas + llamadas_recibidas),
+                estado_salida: estado_salida,
+                dias_atrasados: diasDiferencia,
+                advertencia: 'Este check-out fue completado retroactivamente'
+            }
+        });
+
+    } catch (error) {
+        logError('checkOutRetroactivo', error, { userId: req.user.id });
+        res.status(500).json({
+            success: false,
+            message: 'Error interno al realizar check-out retroactivo',
             error: process.env.NODE_ENV === 'development' ? error.message : undefined
         });
     }
@@ -1530,7 +1853,10 @@ console.log('🌎 TIMEZONE CORRECTION: All operations now use Lima timezone (UTC
 if (process.env.NODE_ENV === 'development' && process.env.BYPASS_SCHEDULE_VALIDATION === 'true') {
     console.log('⚠️  DEVELOPMENT MODE: Schedule validation bypassed');
 } else {
-    console.log('🕐 Business hours enforced: Check-in 6AM-2PM, Check-out 2PM-10PM (Lima time)');
+    console.log('🕐 Business hours enforced (Lima time):');
+    console.log('   Lunes-Viernes: Check-in 8AM-12PM, Check-out 5PM-6:10PM');
+    console.log('   Sábado: Check-in 9:15AM-10AM, Check-out 11AM-12PM');
+    console.log('   Domingo: No disponible');
 }
 
 console.log('');

@@ -107,20 +107,44 @@ class ActividadService {
   async checkOut(datosCheckOut = {}) {
     try {
       console.log('🔄 Llamando checkOut con:', datosCheckOut);
-      
+
       const response = await this.apiClient.post('/actividad/check-out', datosCheckOut);
-      
+
       console.log('📡 CheckOut response:', response.data);
-      
+
       return response.data; // El backend ya devuelve { success: true, data: {...} }
-      
+
     } catch (error) {
       console.error('❌ Error en checkOut:', error);
-      
+
       return {
         success: false,
         error: error.response?.data?.error || error.response?.data?.message || error.message,
         details: error.response?.data
+      };
+    }
+  }
+
+  // Realizar check-out retroactivo (para completar jornadas pendientes)
+  async checkOutRetroactivo(datosCheckOut = {}) {
+    try {
+      console.log('🔄 Llamando checkOutRetroactivo con:', datosCheckOut);
+
+      const response = await this.apiClient.post('/actividad/check-out-retroactivo', datosCheckOut);
+
+      console.log('📡 CheckOut Retroactivo response:', response.data);
+
+      return response.data; // El backend ya devuelve { success: true, data: {...} }
+
+    } catch (error) {
+      console.error('❌ Error en checkOutRetroactivo:', error);
+      console.error('📋 Error response data:', error.response?.data);
+
+      return {
+        success: false,
+        error: error.response?.data?.error || error.response?.data?.message || error.message,
+        details: error.response?.data,
+        errores: error.response?.data?.errores
       };
     }
   }
