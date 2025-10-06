@@ -619,11 +619,12 @@ const cargarProductosProspecto = async (prospectoId) => {
     }
 
     if (formData.fecha_entrega_estimada && !formData.es_venta_presencial) {
-      const fechaEntrega = new Date(formData.fecha_entrega_estimada);
-      const hoy = new Date();
-      hoy.setHours(0, 0, 0, 0);
-      
-      if (fechaEntrega < hoy) {
+      // ⚡ FIX: Usar fecha Lima para comparación correcta (evita problemas de zona horaria)
+      const fechaEntregaStr = formData.fecha_entrega_estimada; // "2025-10-05"
+      const fechaHoyLima = obtenerFechaLima(); // "2025-10-05"
+
+      // Comparar strings directamente (formato YYYY-MM-DD)
+      if (fechaEntregaStr < fechaHoyLima) {
         newErrors.fecha_entrega_estimada = 'La fecha de entrega no puede ser anterior a hoy';
       }
     }
