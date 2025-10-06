@@ -618,13 +618,13 @@ router.get('/dashboard/seguimientos',
 );
 
 // Dashboard de seguimientos filtrado por asesor
-router.get('/dashboard/seguimientos/:asesorId', 
+// 🔒 FILTRADO AUTOMÁTICO POR ROL (sin requireOwnership)
+router.get('/dashboard/seguimientos/:asesorId',
     requireRole(GRUPOS_ROLES.VENTAS_COMPLETO),
-    requireOwnership,
     async (req, res) => {
         try {
             const { asesorId } = req.params;
-            
+
             if (!asesorId || isNaN(asesorId)) {
                 return res.status(400).json({
                     success: false,
@@ -632,12 +632,29 @@ router.get('/dashboard/seguimientos/:asesorId',
                 });
             }
 
-            const datosCompletos = await procesarSeguimientos(asesorId);
-            
+            // 🔒 FILTRADO AUTOMÁTICO POR ROL
+            const usuarioActual = req.user;
+            const rolUsuario = usuarioActual?.rol;
+            const idUsuario = usuarioActual?.userId;
+
+            let asesorIdFinal = asesorId;
+
+            // Si es VENDEDOR, SIEMPRE forzar su propio ID (seguridad)
+            if (rolUsuario === 'VENDEDOR') {
+                asesorIdFinal = idUsuario;
+                console.log(`🔒 VENDEDOR ${idUsuario} - Seguimientos personales forzados`);
+            }
+            // Si es JEFE/ADMIN/SUPER_ADMIN, permitir ver el asesor solicitado
+            else {
+                console.log(`👔 ${rolUsuario} - Viendo seguimientos del asesor ${asesorId}`);
+            }
+
+            const datosCompletos = await procesarSeguimientos(asesorIdFinal);
+
             res.json({
                 success: true,
                 data: datosCompletos,
-                message: `Seguimientos para asesor ${asesorId}: ${datosCompletos.conteos.total} encontrados`
+                message: `Seguimientos para asesor ${asesorIdFinal}: ${datosCompletos.conteos.total} encontrados`
             });
 
         } catch (error) {

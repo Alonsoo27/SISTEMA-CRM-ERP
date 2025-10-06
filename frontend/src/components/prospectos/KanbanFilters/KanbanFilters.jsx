@@ -1,13 +1,43 @@
 // src/components/prospectos/KanbanFilters/KanbanFilters.jsx
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Filter, Download, X, Calendar, User, Search } from 'lucide-react';
 import prospectosService from '../../../services/prospectosService';
+import axios from 'axios';
+import { API_CONFIG } from '../../../config/apiConfig';
 
 const KanbanFilters = ({ filtros, onFiltrosChange, onExportar }) => {
   const [showFilters, setShowFilters] = useState(false);
+  const [vendedores, setVendedores] = useState([]);
+  const [loadingVendedores, setLoadingVendedores] = useState(true);
+  const [usuarioActual, setUsuarioActual] = useState(null);
 
   const estados = ['Prospecto', 'Cotizado', 'Negociacion', 'Cerrado', 'Perdido'];
   const canales = ['WhatsApp', 'Facebook', 'TikTok', 'Llamada', 'Email', 'Presencial'];
+
+  // Cargar usuario actual y vendedores al montar
+  useEffect(() => {
+    const user = JSON.parse(localStorage.getItem('user') || '{}');
+    setUsuarioActual(user);
+    cargarVendedores();
+  }, []);
+
+  const cargarVendedores = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await axios.get(`${API_CONFIG.BASE_URL}/api/usuarios/vendedores`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      if (response.data.success) {
+        setVendedores(response.data.data || []);
+      }
+    } catch (error) {
+      console.error('Error cargando vendedores:', error);
+      setVendedores([]);
+    } finally {
+      setLoadingVendedores(false);
+    }
+  };
 
   const handleFiltroChange = (campo, valor) => {
     onFiltrosChange({ ...filtros, [campo]: valor });
@@ -67,17 +97,29 @@ const KanbanFilters = ({ filtros, onFiltrosChange, onExportar }) => {
     }
   };
 
+  // Verificar si el usuario puede ver otros asesores
+  const esJefeOSuperior = usuarioActual?.rol && ['JEFE_VENTAS', 'ADMIN', 'GERENTE', 'SUPER_ADMIN'].includes(usuarioActual.rol?.nombre || usuarioActual.rol);
+
   return (
     <div className="flex items-center space-x-3">
-      {/* Filtro rápido de asesor */}
-      <select
-        value={filtros.asesor_id || ''}
-        onChange={(e) => handleFiltroChange('asesor_id', e.target.value || null)}
-        className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-      >
-        <option value="">Todos los asesores</option>
-        <option value="1">Mi pipeline</option>
-      </select>
+      {/* Filtro rápido de asesor - Solo visible para jefes y superiores */}
+      {esJefeOSuperior && (
+        <select
+          value={filtros.asesor_id || ''}
+          onChange={(e) => handleFiltroChange('asesor_id', e.target.value || null)}
+          className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 min-w-[200px]"
+          disabled={loadingVendedores}
+        >
+          <option value="">🌐 Todos los asesores</option>
+          <option value={usuarioActual?.id}>👤 Mi pipeline</option>
+          <option disabled>──────────</option>
+          {vendedores.map(vendedor => (
+            <option key={vendedor.id} value={vendedor.id}>
+              {vendedor.nombre_completo || `${vendedor.nombre} ${vendedor.apellido || ''}`}
+            </option>
+          ))}
+        </select>
+      )}
 
       {/* Botón de filtros avanzados */}
       <button

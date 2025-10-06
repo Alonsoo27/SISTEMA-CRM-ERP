@@ -556,6 +556,8 @@ const actualizarPermisosUsuario = async (req, res) => {
 // ============================================
 const listarVendedores = async (req, res) => {
     try {
+        // 🔒 CORREGIDO: Obtener TODOS los usuarios que pueden vender
+        // Incluye: VENDEDOR, JEFE_VENTAS (si vende), SUPER_ADMIN (si vende)
         const result = await query(`
             SELECT
                 u.id,
@@ -568,9 +570,16 @@ const listarVendedores = async (req, res) => {
             FROM usuarios u
             LEFT JOIN roles r ON u.rol_id = r.id
             WHERE u.deleted_at IS NULL
-              AND r.nombre IN ('VENDEDOR', 'ASESOR_VENTAS', 'SUPER_ADMIN')
-              AND u.estado = 'ACTIVO'
-            ORDER BY u.nombre, u.apellido
+              AND u.activo = true
+              AND (u.vende = true OR r.nombre IN ('VENDEDOR', 'JEFE_VENTAS', 'SUPER_ADMIN'))
+            ORDER BY
+              CASE
+                WHEN r.nombre = 'SUPER_ADMIN' THEN 1
+                WHEN r.nombre = 'JEFE_VENTAS' THEN 2
+                WHEN r.nombre = 'VENDEDOR' THEN 3
+                ELSE 4
+              END,
+              u.nombre, u.apellido
         `);
 
         res.json({
