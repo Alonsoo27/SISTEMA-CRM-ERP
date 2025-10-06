@@ -111,39 +111,61 @@ class ProspectosController {
     /**
      * GET /api/prospectos
      * Obtener todos los prospectos con filtros
+     * 🔒 FILTRADO AUTOMÁTICO POR ROL:
+     * - VENDEDOR: Solo ve sus propios prospectos
+     * - JEFE_VENTAS/ADMIN/GERENTE: Ve todos o filtra por asesor
+     * - SUPER_ADMIN: Ve todo (incluyendo los suyos)
      */
     static async obtenerTodos(req, res) {
         try {
-            const { 
-                asesor_id, 
-                estado, 
-                canal_contacto, 
-                fecha_desde, 
-                fecha_hasta, 
+            const {
+                asesor_id,
+                estado,
+                canal_contacto,
+                fecha_desde,
+                fecha_hasta,
                 antiguedad,
                 busqueda,
                 page = 1,
                 limit = 50
             } = req.query;
 
+            // 🔒 OBTENER ROL Y ID DEL USUARIO ACTUAL
+            const usuarioActual = req.user;
+            const rolUsuario = usuarioActual?.rol;
+            const idUsuario = usuarioActual?.userId;
+
             // Construir query base con JOIN
             let sqlQuery = `
-                SELECT 
-                    p.*, 
+                SELECT
+                    p.*,
                     u.nombre, u.apellido
                 FROM prospectos p
                 LEFT JOIN usuarios u ON p.asesor_id = u.id
                 WHERE p.activo = $1
             `;
-            
+
             let params = [true];
             let paramIndex = 2;
 
-            // Aplicar filtros
-            if (asesor_id) {
+            // 🔒 FILTRADO AUTOMÁTICO POR ROL
+            // Si es VENDEDOR, solo puede ver sus propios prospectos
+            if (rolUsuario === 'VENDEDOR') {
+                sqlQuery += ` AND p.asesor_id = $${paramIndex}`;
+                params.push(idUsuario);
+                paramIndex++;
+                console.log(`🔒 VENDEDOR ${idUsuario} - Filtrando solo sus prospectos`);
+            }
+            // Si es JEFE/ADMIN/GERENTE y pasa asesor_id, filtrar por ese asesor
+            else if (asesor_id) {
                 sqlQuery += ` AND p.asesor_id = $${paramIndex}`;
                 params.push(asesor_id);
                 paramIndex++;
+                console.log(`👔 ${rolUsuario} - Filtrando por asesor ${asesor_id}`);
+            }
+            // Si es SUPER_ADMIN o JEFE sin filtro, ve todos
+            else {
+                console.log(`👑 ${rolUsuario} - Vista global de todos los prospectos`);
             }
 
             if (estado) {
@@ -230,13 +252,18 @@ class ProspectosController {
             let countParams = [true];
             let countParamIndex = 2;
 
-            // Aplicar los mismos filtros para el count
-            if (asesor_id) {
+            // 🔒 APLICAR EL MISMO FILTRADO POR ROL AL COUNT
+            if (rolUsuario === 'VENDEDOR') {
+                countQuery += ` AND p.asesor_id = $${countParamIndex}`;
+                countParams.push(idUsuario);
+                countParamIndex++;
+            }
+            else if (asesor_id) {
                 countQuery += ` AND p.asesor_id = $${countParamIndex}`;
                 countParams.push(asesor_id);
                 countParamIndex++;
             }
-            // ... repetir todos los filtros para el count
+            // ... aplicar otros filtros para el count si es necesario
 
             const countResult = await query(countQuery, countParams);
             const count = parseInt(countResult.rows[0].total);
@@ -266,18 +293,47 @@ class ProspectosController {
      * GET /api/prospectos/kanban/:asesorId?
      * Obtener datos organizados para Kanban Board
      */
+    /**
+     * GET /api/prospectos/kanban
+     * 🔒 FILTRADO AUTOMÁTICO POR ROL:
+     * - VENDEDOR: Solo ve su kanban personal
+     * - JEFE_VENTAS/ADMIN/GERENTE: Ve kanban global o de un asesor específico
+     * - SUPER_ADMIN: Ve todo
+     */
     static async obtenerKanban(req, res) {
         try {
             const { asesorId } = req.params;
             const { incluir_modo_libre = false } = req.query;
 
+            // 🔒 OBTENER ROL Y ID DEL USUARIO ACTUAL
+            const usuarioActual = req.user;
+            const rolUsuario = usuarioActual?.rol;
+            const idUsuario = usuarioActual?.userId;
+
+            // 🔒 DETERMINAR QUÉ ASESOR FILTRAR SEGÚN EL ROL
+            let asesorIdFinal = asesorId;
+
+            // Si es VENDEDOR, SIEMPRE filtra por su propio ID (ignora asesorId de parámetros)
+            if (rolUsuario === 'VENDEDOR') {
+                asesorIdFinal = idUsuario;
+                console.log(`🔒 VENDEDOR ${idUsuario} - Kanban personal forzado`);
+            }
+            // Si es JEFE/ADMIN y no especifica asesor, ve todos
+            else if (!asesorId || asesorId === 'todos') {
+                asesorIdFinal = null; // Vista global
+                console.log(`👑 ${rolUsuario} - Kanban global`);
+            }
+            else {
+                console.log(`👔 ${rolUsuario} - Kanban del asesor ${asesorId}`);
+            }
+
             // Intentar obtener del cache primero
-            const cacheParams = { incluir_modo_libre };
+            const cacheParams = { incluir_modo_libre, rol: rolUsuario };
             const resultado = await cacheService.conCache(
                 'kanban_data',
-                asesorId || 'todos',
+                asesorIdFinal || 'todos',
                 async () => {
-                    return await ProspectosController.obtenerDatosKanbanFresh(asesorId, incluir_modo_libre);
+                    return await ProspectosController.obtenerDatosKanbanFresh(asesorIdFinal, incluir_modo_libre);
                 },
                 cacheParams
             );
@@ -295,30 +351,35 @@ class ProspectosController {
 
     /**
      * Función auxiliar para obtener datos Kanban sin cache
+     * @param {number|null} asesorId - ID del asesor a filtrar, o null para vista global
+     * @param {boolean} incluir_modo_libre - Incluir prospectos en modo libre
      */
     static async obtenerDatosKanbanFresh(asesorId, incluir_modo_libre) {
         let sqlQuery = `
             SELECT
-                id, codigo, nombre_cliente, apellido_cliente, empresa, telefono, email,
-                canal_contacto, estado, valor_estimado, probabilidad_cierre,
-                fecha_contacto, fecha_seguimiento, observaciones,
-                asesor_id, asesor_nombre, modo_libre, numero_reasignaciones
-            FROM prospectos
-            WHERE activo = $1
+                p.id, p.codigo, p.nombre_cliente, p.apellido_cliente, p.empresa, p.telefono, p.email,
+                p.canal_contacto, p.estado, p.valor_estimado, p.probabilidad_cierre,
+                p.fecha_contacto, p.fecha_seguimiento, p.observaciones,
+                p.asesor_id, p.modo_libre, p.numero_reasignaciones,
+                u.nombre as asesor_nombre,
+                u.apellido as asesor_apellido
+            FROM prospectos p
+            LEFT JOIN usuarios u ON p.asesor_id = u.id
+            WHERE p.activo = $1
         `;
 
         let params = [true];
         let paramIndex = 2;
 
-        // Filtrar por asesor si se especifica
-        if (asesorId && asesorId !== 'todos') {
+        // 🔒 FILTRAR POR ASESOR SI SE ESPECIFICA (ya viene filtrado por rol desde obtenerKanban)
+        if (asesorId) {
             if (incluir_modo_libre === 'true') {
                 // Incluir prospectos del asesor + los en modo libre
-                sqlQuery += ` AND (asesor_id = $${paramIndex} OR modo_libre = $${paramIndex + 1})`;
+                sqlQuery += ` AND (p.asesor_id = $${paramIndex} OR p.modo_libre = $${paramIndex + 1})`;
                 params.push(asesorId, true);
                 paramIndex += 2;
             } else {
-                sqlQuery += ` AND asesor_id = $${paramIndex} AND modo_libre = $${paramIndex + 1}`;
+                sqlQuery += ` AND p.asesor_id = $${paramIndex} AND p.modo_libre = $${paramIndex + 1}`;
                 params.push(asesorId, false);
                 paramIndex += 2;
             }

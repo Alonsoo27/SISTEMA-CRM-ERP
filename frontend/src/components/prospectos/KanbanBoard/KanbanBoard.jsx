@@ -744,7 +744,16 @@ const KanbanBoard = ({
             <h4 className="font-semibold text-gray-900 truncate">
               {prospecto.nombre_cliente || 'Sin nombre'} {prospecto.apellido_cliente || ''}
             </h4>
-            <p className="text-xs text-gray-500 truncate">{prospecto.codigo || 'Sin código'}</p>
+            <div className="flex items-center gap-2 mt-1">
+              <p className="text-xs text-gray-500 truncate">{prospecto.codigo || 'Sin código'}</p>
+              {/* Badge del asesor (solo en vista global) */}
+              {(prospecto.asesor_nombre || prospecto.nombre) && (
+                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-700 border border-purple-200">
+                  <User className="h-3 w-3 mr-1" />
+                  {prospecto.asesor_nombre || prospecto.nombre} {prospecto.asesor_apellido || prospecto.apellido || ''}
+                </span>
+              )}
+            </div>
           </div>
           
           {/* Botón de menú con desplegable */}
