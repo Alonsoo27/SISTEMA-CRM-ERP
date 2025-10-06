@@ -595,12 +595,30 @@ router.delete('/:id',
 // ============================================================================
 
 // Dashboard principal de seguimientos (sin filtro de asesor)
-router.get('/dashboard/seguimientos', 
+// 🔒 FILTRADO AUTOMÁTICO POR ROL (incluso sin parámetro)
+router.get('/dashboard/seguimientos',
     requireRole(GRUPOS_ROLES.VENTAS_COMPLETO),
     async (req, res) => {
         try {
-            const datosCompletos = await procesarSeguimientos();
-            
+            // 🔒 FILTRADO AUTOMÁTICO POR ROL
+            const usuarioActual = req.user;
+            const rolUsuario = usuarioActual?.rol;
+            const idUsuario = usuarioActual?.userId;
+
+            let asesorIdFinal = null; // Por defecto vista global
+
+            // Si es VENDEDOR, SIEMPRE forzar su propio ID (seguridad)
+            if (rolUsuario === 'VENDEDOR') {
+                asesorIdFinal = idUsuario;
+                console.log(`🔒 VENDEDOR ${idUsuario} - Seguimientos personales forzados (sin parámetro)`);
+            }
+            // Si es JEFE/ADMIN/SUPER_ADMIN, vista global
+            else {
+                console.log(`👑 ${rolUsuario} - Vista global de seguimientos (sin parámetro)`);
+            }
+
+            const datosCompletos = await procesarSeguimientos(asesorIdFinal);
+
             res.json({
                 success: true,
                 data: datosCompletos,
