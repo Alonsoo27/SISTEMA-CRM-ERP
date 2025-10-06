@@ -18,7 +18,16 @@ const KanbanFilters = ({ filtros, onFiltrosChange, onExportar }) => {
   useEffect(() => {
     const user = JSON.parse(localStorage.getItem('user') || '{}');
     setUsuarioActual(user);
-    cargarVendedores();
+
+    // 🔒 SOLO cargar vendedores si es JEFE o superior
+    const rolUsuario = user?.rol?.nombre || user?.rol;
+    const esJefeOSuperior = ['JEFE_VENTAS', 'ADMIN', 'GERENTE', 'SUPER_ADMIN'].includes(rolUsuario);
+
+    if (esJefeOSuperior) {
+      cargarVendedores();
+    } else {
+      setLoadingVendedores(false); // Marcar como completado sin cargar
+    }
   }, []);
 
   const cargarVendedores = async () => {
