@@ -1,1 +1,1 @@
-SELECT schemaname, viewname, definition FROM pg_views WHERE schemaname = 'public' ORDER BY viewname;
+SELECT column_name, data_type FROM information_schema.columns WHERE table_name = 'ventas' ORDER BY ordinal_position;

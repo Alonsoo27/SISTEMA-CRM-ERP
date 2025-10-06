@@ -233,6 +233,12 @@ const actualizarUsuario = async (req, res) => {
             }
         }
 
+        // Convertir strings vacías a null para campos numéricos
+        const area_id_clean = area_id === '' || area_id === undefined ? null : area_id;
+        const jefe_id_clean = jefe_id === '' || jefe_id === undefined ? null : jefe_id;
+        const telefono_clean = telefono === '' ? null : telefono;
+        const rol_id_clean = rol_id === '' || rol_id === undefined ? null : rol_id;
+
         // Actualizar usuario
         const result = await query(`
             UPDATE usuarios SET
@@ -240,7 +246,7 @@ const actualizarUsuario = async (req, res) => {
                 nombre = COALESCE($2, nombre),
                 apellido = COALESCE($3, apellido),
                 rol_id = COALESCE($4, rol_id),
-                area_id = COALESCE($5, area_id),
+                area_id = $5,
                 jefe_id = $6,
                 telefono = $7,
                 es_jefe = COALESCE($8, es_jefe),
@@ -253,10 +259,10 @@ const actualizarUsuario = async (req, res) => {
             email,
             nombre,
             apellido,
-            rol_id,
-            area_id,
-            jefe_id,
-            telefono,
+            rol_id_clean,
+            area_id_clean,
+            jefe_id_clean,
+            telefono_clean,
             es_jefe,
             vende,
             estado,

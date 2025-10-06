@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "WebSearch",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Bash(curl:*)",
+      "Bash(mkdir:*)",
+      "Bash(python:*)",
+      "Bash(git add:*)",
+      "Bash(git commit -m \"$(cat <<''EOF''\nFeature: Mapa geográfico con polígonos oficiales del Perú\n\n- Reemplazar polígonos manuales aproximados por GeoJSON oficial\n- Integrar datos geográficos precisos de INEI/GADM (25 departamentos)\n- Mejorar precisión: polígonos ahora coinciden con mapa base Mapbox\n- Agregar carga asíncrona del GeoJSON (137KB)\n- Implementar estado de loading durante carga del mapa\n- Configurar Vite para soportar archivos .geojson\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF\n)\")",
+      "Bash(git push:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

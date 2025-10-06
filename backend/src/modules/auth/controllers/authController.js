@@ -35,7 +35,7 @@ const login = async (req, res) => {
         }
 
         // Buscar usuario con datos completos
-        const userQuery = 'SELECT u.id, u.email, u.password_hash, u.nombre, u.apellido, u.telefono, u.es_jefe, u.vende, u.jefe_id, u.activo, u.ultimo_login, r.id as rol_id, r.nombre as rol_nombre, r.permisos, a.id as area_id, a.nombre as area_nombre, a.descripcion as area_descripcion FROM usuarios u JOIN roles r ON u.rol_id = r.id JOIN areas a ON u.area_id = a.id WHERE u.email = $1 AND u.activo = true';
+        const userQuery = 'SELECT u.id, u.email, u.password_hash, u.nombre, u.apellido, u.telefono, u.es_jefe, u.vende, u.jefe_id, u.activo, u.ultimo_login, u.debe_cambiar_password, r.id as rol_id, r.nombre as rol_nombre, r.permisos, a.id as area_id, a.nombre as area_nombre, a.descripcion as area_descripcion FROM usuarios u JOIN roles r ON u.rol_id = r.id JOIN areas a ON u.area_id = a.id WHERE u.email = $1 AND u.activo = true';
 
         const userResult = await query(userQuery, [email.toLowerCase()]);
 
@@ -167,7 +167,8 @@ const login = async (req, res) => {
 
                     // Metadata
                     activo: user.activo,
-                    ultimo_login: user.ultimo_login
+                    ultimo_login: user.ultimo_login,
+                    debe_cambiar_password: user.debe_cambiar_password || false
                 }
             }
         });

@@ -48,7 +48,11 @@
       "Read(//c/**)",
       "Bash(findstr:*)",
       "Bash(Invoke-WebRequest -Uri \"https://sistema-crm-erp-production.up.railway.app/api/auth/login\" -Method POST -Body '{\"\"\"\"email\"\"\"\":\"\"\"\"jventasmundipaci@gmail.com\"\"\"\",\"\"\"\"password\"\"\"\":\"\"\"\"Test1234\"\"\"\"}' -ContentType \"application/json\")",
-      "Bash(git restore:*)"
+      "Bash(git restore:*)",
+      "Bash(fc /N \"C:\\Users\\SUS\\Documents\\SISTEMA-CRM-ERP\\backend\\src\\modules\\ventas\\controllers\\ActividadDiariaController.js\" \"C:\\temp\\github_actividad.js\")",
+      "Bash(fc /N \"C:\\Users\\SUS\\Documents\\SISTEMA-CRM-ERP\\backend\\src\\modules\\ventas\\controllers\\CampanasAsesorController.js\" \"C:\\temp\\github_campanas.js\")",
+      "Bash(ConvertTo-Json -Depth 5)",
+      "Bash(powershell -Command \"(Get-Content prospectosRoutes.js) -replace ''requireRole\\(\\[ROLES\\.VENDEDOR, ROLES\\.ADMIN, ROLES\\.JEFE_VENTAS, ROLES\\.SUPER_ADMIN\\]\\)'', ''requireRole(GRUPOS_ROLES.VENTAS_COMPLETO)'' | Set-Content prospectosRoutes_temp.js\")"
     ],
     "deny": [],
     "ask": []

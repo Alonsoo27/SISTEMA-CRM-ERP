@@ -4,11 +4,13 @@ import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
 import NotificationBell from '../NotificationBell';
 import authService from '../../services/authService';
 import { canAccessModule } from '../../utils/userUtils';
+import CambioPasswordObligatorio from '../auth/CambioPasswordObligatorio';
 
 const Layout = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const [usuarioActual, setUsuarioActual] = useState(null);
+  const [mostrarCambioPassword, setMostrarCambioPassword] = useState(false);
 
   // Cargar usuario al montar componente
   useEffect(() => {
@@ -29,8 +31,15 @@ const Layout = () => {
       console.log('✅ Layout: Usuario cargado:', {
         id: usuario.id,
         nombre: usuario.nombre_completo || usuario.nombre,
-        rol: usuario.rol?.nombre || usuario.rol
+        rol: usuario.rol?.nombre || usuario.rol,
+        debe_cambiar_password: usuario.debe_cambiar_password
       });
+
+      // Verificar si debe cambiar contraseña
+      if (usuario.debe_cambiar_password === true) {
+        console.log('🔐 Layout: Usuario debe cambiar contraseña');
+        setMostrarCambioPassword(true);
+      }
     } else {
       console.warn('⚠️ Layout: No se pudo obtener usuario');
       navigate('/login', { replace: true });
@@ -200,8 +209,25 @@ const Layout = () => {
     return rolesFormato[rol] || rol;
   };
 
+  // Manejar éxito del cambio de contraseña
+  const handlePasswordChangeSuccess = () => {
+    console.log('✅ Layout: Contraseña cambiada exitosamente');
+    setMostrarCambioPassword(false);
+
+    // Actualizar usuario actual
+    const usuarioActualizado = authService.getUser();
+    if (usuarioActualizado) {
+      setUsuarioActual(usuarioActualizado);
+    }
+  };
+
   return (
     <div className="h-screen flex bg-gray-100">
+      {/* Modal de cambio de contraseña obligatorio */}
+      {mostrarCambioPassword && (
+        <CambioPasswordObligatorio onSuccess={handlePasswordChangeSuccess} />
+      )}
+
       {/* Sidebar */}
       <div className="w-64 bg-white shadow-lg flex flex-col">
         {/* Logo y título */}
