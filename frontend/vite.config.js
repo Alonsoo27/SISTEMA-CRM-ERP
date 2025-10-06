@@ -9,6 +9,10 @@ export default defineConfig({
       "@": path.resolve(__dirname, "./src"),
     },
   },
+  assetsInclude: ['**/*.geojson'],
+  json: {
+    stringify: false
+  },
   server: {
     port: 5173,
     host: true,
