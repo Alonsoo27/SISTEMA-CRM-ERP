@@ -257,11 +257,11 @@ const VentaForm = ({
     { codigo: 'Email', nombre: 'Correo Electrónico', icono: '📧', color: 'gray', tooltip: 'Contacto vía email' }
   ];
 
-  // Tipos de venta
+  // Tipos de venta (sin descripciones, auto-aplica IGV 18% en factura/boleta)
   const tiposVenta = [
-    { value: 'factura', label: 'Factura', descripcion: 'Para empresas con RUC' },
-    { value: 'boleta', label: 'Boleta', descripcion: 'Para personas naturales' },
-    { value: 'nota_venta', label: 'Nota de Venta', descripcion: 'Sin comprobante fiscal' }
+    { value: 'factura', label: 'Factura', incluyeIgv: true },
+    { value: 'boleta', label: 'Boleta', incluyeIgv: true },
+    { value: 'nota_venta', label: 'Nota de Venta', incluyeIgv: false }
   ];
 
   // Estados detallados
@@ -438,17 +438,55 @@ useEffect(() => {
   // NUEVO USEEFFECT PARA RECÁLCULO AUTOMÁTICO
   useEffect(() => {
     const totales = calcularTotalesConProductos(
-      formData.productos, 
-      formData.descuento_porcentaje, 
+      formData.productos,
+      formData.descuento_porcentaje,
       formData.descuento_monto
     );
-    
+
     setFormData(prev => ({
       ...prev,
       valor_total: totales.subtotal.toString(),
       valor_final: totales.total.toString()
     }));
   }, [formData.productos, formData.descuento_porcentaje, formData.descuento_monto]);
+
+  // ⚡ USEEFFECT: Recalcular precios cuando cambia tipo_venta
+  useEffect(() => {
+    if (formData.productos.length === 0) return;
+
+    const productosActualizados = formData.productos.map(producto => {
+      // Si el producto tiene precio_base_sin_igv guardado, usarlo
+      // Si no, asumir que precio_unitario actual es el precio sin IGV
+      const precioBase = producto.precio_base_sin_igv || producto.precio_unitario / 1.18;
+      const nuevoPrecio = aplicarIgvSiCorresponde(precioBase, formData.tipo_venta);
+
+      const cantidad = parseFloat(producto.cantidad) || 0;
+      const subtotal = cantidad * nuevoPrecio;
+
+      const descuentoPorcentaje = parseFloat(producto.descuento_porcentaje) || 0;
+      const descuentoMonto = parseFloat(producto.descuento_monto) || 0;
+
+      let totalLinea = subtotal;
+      if (descuentoPorcentaje > 0) {
+        totalLinea = subtotal * (1 - descuentoPorcentaje / 100);
+      } else if (descuentoMonto > 0) {
+        totalLinea = subtotal - descuentoMonto;
+      }
+
+      return {
+        ...producto,
+        precio_base_sin_igv: precioBase,
+        precio_unitario: nuevoPrecio,
+        subtotal: subtotal,
+        total_linea: totalLinea
+      };
+    });
+
+    setFormData(prev => ({
+      ...prev,
+      productos: productosActualizados
+    }));
+  }, [formData.tipo_venta, aplicarIgvSiCorresponde]);
 
   // NUEVA FUNCIÓN CALCULAR TOTALES CON PRODUCTOS
   const calcularTotalesConProductos = useCallback((productos, descuentoPorcentaje = 0, descuentoMonto = 0) => {
@@ -750,9 +788,21 @@ const cargarProductosProspecto = async (prospectoId) => {
     setClientesBusqueda([]);
   }, []);
 
+  // ⚡ FUNCIÓN HELPER: Aplicar IGV al precio según tipo de venta
+  const aplicarIgvSiCorresponde = useCallback((precioBase, tipoVenta) => {
+    // Precio en BD está SIN IGV
+    // Si es factura o boleta, agregar 18% IGV
+    // Si es nota de venta, dejar sin IGV
+    const incluyeIgv = tipoVenta === 'factura' || tipoVenta === 'boleta';
+    return incluyeIgv ? precioBase * 1.18 : precioBase;
+  }, []);
+
   // Seleccionar producto del autocompletado
   const seleccionarProducto = useCallback((producto) => {
     setFormData(prev => {
+      // Aplicar IGV según tipo de venta actual
+      const precioConIgv = aplicarIgvSiCorresponde(producto.precio_base, prev.tipo_venta);
+
       const nuevoProducto = {
         id: Date.now(),
         producto_id: producto.id,
@@ -762,20 +812,21 @@ const cargarProductosProspecto = async (prospectoId) => {
         categoria: producto.categoria,
         unidad: producto.unidad,
         cantidad: 1,
-        precio_unitario: producto.precio_base,
-        subtotal: producto.precio_base,
-        total_linea: producto.precio_base,
+        precio_base_sin_igv: producto.precio_base, // Guardar precio original
+        precio_unitario: precioConIgv, // Precio con IGV aplicado si corresponde
+        subtotal: precioConIgv,
+        total_linea: precioConIgv,
         descuento_porcentaje: 0,
         descuento_monto: 0,
         descripcion_personalizada: '',
         notas: '',
         orden_linea: prev.productos.length + 1
       };
-      
+
       const nuevosProductos = [...prev.productos, nuevoProducto];
-      
+
       const totales = calcularTotalesConProductos(nuevosProductos, prev.descuento_porcentaje, prev.descuento_monto);
-      
+
       return {
         ...prev,
         productos: nuevosProductos,
@@ -787,7 +838,7 @@ const cargarProductosProspecto = async (prospectoId) => {
     setBusquedaProducto('');
     setProductosEncontrados([]);
     setShowProductosDropdown(false);
-  }, [calcularTotalesConProductos]);
+  }, [calcularTotalesConProductos, aplicarIgvSiCorresponde]);
 
   // Eliminar producto
   const eliminarProducto = useCallback((productoId) => {
@@ -1422,10 +1473,15 @@ const response = await ventasService.crearVentaCompleta(datosVenta);
                 >
                   {opcionesTipoVenta.map(tipo => (
                     <option key={tipo.value} value={tipo.value}>
-                      {tipo.label} - {tipo.descripcion}
+                      {tipo.label}{tipo.incluyeIgv ? ' (+IGV 18%)' : ' (Sin IGV)'}
                     </option>
                   ))}
                 </select>
+                <p className="mt-1 text-xs text-gray-500">
+                  {formData.tipo_venta === 'nota_venta'
+                    ? '📝 Precio sin IGV (tal cual del producto)'
+                    : '💰 Se agrega IGV 18% automáticamente al precio base'}
+                </p>
               </div>
 
               <div style={{ display: 'none' }}>

@@ -649,6 +649,13 @@ exports.crearVenta = async (req, res) => {
                 }
             }
 
+            // ⚡ CALCULAR CAMPOS DE IGV
+            const incluyeIgv = tipo_venta === 'factura' || tipo_venta === 'boleta';
+            const baseImponible = incluyeIgv ? parseFloat((valorFinal / 1.18).toFixed(2)) : valorFinal;
+            const igvMonto = incluyeIgv ? parseFloat((valorFinal - baseImponible).toFixed(2)) : 0;
+
+            console.log(`💰 IGV Calculado - Tipo: ${tipo_venta}, Incluye IGV: ${incluyeIgv}, Base: ${baseImponible}, IGV: ${igvMonto}, Total: ${valorFinal}`);
+
             const ventaQuery = `
     INSERT INTO ventas (
         codigo, correlativo_asesor, prospecto_id, asesor_id, cliente_id,
@@ -656,13 +663,14 @@ exports.crearVenta = async (req, res) => {
         cliente_email, cliente_telefono, canal_contacto,
         ciudad, departamento, distrito,
         valor_total, descuento_porcentaje, descuento_monto, valor_final,
+        incluye_igv, base_imponible, igv_monto,
         estado_detallado, canal_origen, tipo_venta,
         probabilidad_cierre, fecha_entrega_estimada, fecha_venta,
         notas_internas, condiciones_especiales,
         es_venta_presencial, se_lo_llevo_directamente, recibio_capacitacion_inmediata,
         observaciones_almacen, activo, created_by, updated_by, created_at, updated_at
     ) VALUES (
-        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, true, $31, $31, NOW(), NOW()
+        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, true, $34, $34, NOW(), NOW()
     ) RETURNING *
 `;
 
@@ -672,6 +680,7 @@ exports.crearVenta = async (req, res) => {
                 cliente_email, cliente_telefono, canal_contacto || 'WhatsApp',
                 ciudad?.trim() || '', departamento?.trim() || '', distrito?.trim() || '',
                 valorTotalNum, descuentoPorcentajeNum, descuentoMontoNum, valorFinal,
+                incluyeIgv, baseImponible, igvMonto, // ⚡ NUEVOS CAMPOS IGV
                 estado_detallado, canal_origen, tipo_venta,
                 probabilidad_cierre,
                     fecha_entrega_estimada ? convertirLimaAUTC(fecha_entrega_estimada) : null,
