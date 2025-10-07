@@ -1304,16 +1304,23 @@ static async obtenerPorId(req, res) {
                 console.log(`⚠️ [Métricas] Rol ${rolUsuario} - Vista personal forzada`);
             }
 
-            // Intentar obtener del cache primero
-            const cacheParams = { fecha_desde, fecha_hasta };
+            // Intentar obtener del cache primero (incluir rol en params para evitar colisiones)
+            const cacheParams = { fecha_desde, fecha_hasta, rol: rolUsuario, asesor: asesorIdFinal };
             const resultado = await cacheService.conCache(
                 'dashboard_metricas',
-                asesorIdFinal || 'todos',
+                asesorIdFinal ? `asesor_${asesorIdFinal}` : 'global',
                 async () => {
                     return await ProspectosController.obtenerMetricasFresh(asesorIdFinal, fecha_desde, fecha_hasta);
                 },
                 cacheParams
             );
+
+            // 🔍 LOG DETALLADO del resultado
+            console.log(`📊 [DEBUG Métricas] Resultado para ${asesorIdFinal ? `asesor ${asesorIdFinal}` : 'global'}:`, {
+                total_prospectos: resultado.data?.total_prospectos,
+                prospectos_activos: resultado.data?.prospectos_activos,
+                asesorId: asesorIdFinal
+            });
 
             res.json(resultado);
 
