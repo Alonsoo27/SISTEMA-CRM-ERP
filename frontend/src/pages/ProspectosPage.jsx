@@ -70,18 +70,31 @@ const ProspectosPage = () => {
   const cargarStatsGenerales = useCallback(async (silencioso = false) => {
     try {
       if (!silencioso) setStatsLoading(true);
-      
-      const response = await prospectosService.obtenerMetricas();
+
+      // 🔒 FILTRADO AUTOMÁTICO POR ROL
+      const rolUsuario = usuarioActual?.rol;
+      const esVendedor = rolUsuario === 'VENDEDOR';
+
+      // Si es VENDEDOR, solo sus métricas. Si es ejecutivo, métricas globales
+      const asesorIdParaMetricas = esVendedor ? usuarioActual?.id : null;
+
+      console.log('📊 [Stats] Cargando métricas:', {
+        rol: rolUsuario,
+        asesorId: asesorIdParaMetricas,
+        usuario: usuarioActual?.id
+      });
+
+      const response = await prospectosService.obtenerMetricas(asesorIdParaMetricas);
       setStatsGenerales(response.data);
       setLastUpdated(new Date());
-      
+
     } catch (err) {
       console.error('Error cargando stats generales:', err);
       showNotification('Error al cargar estadísticas', 'error');
     } finally {
       if (!silencioso) setStatsLoading(false);
     }
-  }, []);
+  }, [usuarioActual]);
 
   const handleRefresh = useCallback(() => {
     setRefreshTrigger(prev => prev + 1);

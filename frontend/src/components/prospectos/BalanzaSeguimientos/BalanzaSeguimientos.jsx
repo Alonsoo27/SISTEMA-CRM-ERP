@@ -322,7 +322,7 @@ const BalanzaSeguimientos = ({ asesorId: asesorIdProp = null, refreshTrigger = 0
         </div>
 
         {/* Header con Selector de Vista */}
-        <div className="text-center mb-8 relative z-10">
+        <div className="text-center mb-8 relative z-[110]">
           <div className="inline-flex items-center justify-center w-20 h-20 bg-gradient-to-br from-yellow-400 via-orange-500 to-yellow-600 rounded-full mb-4 shadow-2xl shadow-yellow-500/50 border-4 border-yellow-300">
             <span className="text-4xl drop-shadow-lg">⚖️</span>
           </div>

@@ -1281,13 +1281,36 @@ static async obtenerPorId(req, res) {
             const { asesorId } = req.params;
             const { fecha_desde, fecha_hasta } = req.query;
 
+            // 🔒 CONTROL DE ACCESO POR ROL (igual que seguimientos)
+            const usuarioActual = req.user || {};
+            const rolUsuario = usuarioActual.rol_id;
+            const idUsuarioActual = usuarioActual.id;
+
+            const ROLES_EJECUTIVOS = [1, 2, 3, 4, 6]; // SUPER_ADMIN, ADMIN, GERENTE, JEFE_VENTAS, SUPERVISOR
+            const esEjecutivo = ROLES_EJECUTIVOS.includes(rolUsuario);
+
+            let asesorIdFinal;
+            if (rolUsuario === 7) {
+                // 🔒 VENDEDOR: Forzar su propio ID
+                asesorIdFinal = idUsuarioActual;
+                console.log(`🔒 [Métricas] VENDEDOR ${idUsuarioActual} - Vista personal forzada`);
+            } else if (esEjecutivo) {
+                // ✅ EJECUTIVO: Puede ver global (null) o específico
+                asesorIdFinal = asesorId || null;
+                console.log(`✅ [Métricas] EJECUTIVO (rol ${rolUsuario}) - Vista: ${asesorIdFinal ? `asesor ${asesorIdFinal}` : 'global'}`);
+            } else {
+                // 🔒 OTROS ROLES: Solo vista personal
+                asesorIdFinal = idUsuarioActual;
+                console.log(`⚠️ [Métricas] Rol ${rolUsuario} - Vista personal forzada`);
+            }
+
             // Intentar obtener del cache primero
             const cacheParams = { fecha_desde, fecha_hasta };
             const resultado = await cacheService.conCache(
                 'dashboard_metricas',
-                asesorId || 'todos',
+                asesorIdFinal || 'todos',
                 async () => {
-                    return await ProspectosController.obtenerMetricasFresh(asesorId, fecha_desde, fecha_hasta);
+                    return await ProspectosController.obtenerMetricasFresh(asesorIdFinal, fecha_desde, fecha_hasta);
                 },
                 cacheParams
             );
