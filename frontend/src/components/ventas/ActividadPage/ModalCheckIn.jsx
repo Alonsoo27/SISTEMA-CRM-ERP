@@ -4,6 +4,7 @@ import {
   X, MessageSquare, Phone, Instagram, Mic,
   Save, AlertCircle, CheckCircle, Target, ChevronDown
 } from 'lucide-react';
+import { API_CONFIG } from '../../../config/apiConfig';
 
 const ModalCheckIn = ({ 
   isOpen, 
@@ -50,7 +51,7 @@ const ModalCheckIn = ({
   const cargarLineasProductos = async () => {
     try {
       setLoadingLineas(true);
-      const response = await fetch('/api/productos/lineas', {
+      const response = await fetch(`${API_CONFIG.BASE_URL}/api/productos/lineas`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`,
           'Content-Type': 'application/json'
@@ -73,7 +74,7 @@ const ModalCheckIn = ({
   const cargarCampanaActiva = async () => {
     try {
       // Consultar campaña activa del asesor en el nuevo sistema
-      const response = await fetch('/api/campanas-asesor/campana-activa', {
+      const response = await fetch(`${API_CONFIG.BASE_URL}/api/campanas-asesor/campana-activa`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`,
           'Content-Type': 'application/json'
