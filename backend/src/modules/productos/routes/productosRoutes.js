@@ -105,27 +105,41 @@ const monitorearPerformance = (req, res, next) => {
 };
 
 // MIDDLEWARE DE AUTORIZACIÓN PARA PRODUCTOS
-// ✅ ACTUALIZADO: Usa constantes centralizadas de roles
+// ✅ ACTUALIZADO: Diferenciar entre lectura (GET) y escritura (POST/PUT/DELETE)
 const requireProductsAuth = (req, res, next) => {
     // Permitir healthcheck básico sin restricción de rol
     if (req.path === '/health/basic') {
         return next();
     }
 
-    // Aplicar restricción de rol para todas las demás rutas
     const rolUsuario = req.user?.rol?.toUpperCase();
-    if (!GRUPOS_ROLES.EJECUTIVOS.includes(rolUsuario)) {
-        return res.status(403).json({
-            success: false,
-            error: 'Sin autorización',
-            message: 'Solo ejecutivos pueden acceder al módulo de productos',
-            codigo: 'INSUFFICIENT_PERMISSIONS',
-            rol_requerido: GRUPOS_ROLES.EJECUTIVOS,
-            rol_actual: req.user?.rol || 'sin_rol'
-        });
+    const metodo = req.method;
+
+    // 📖 LECTURA (GET): Permitir a TODO el equipo de ventas (incluye VENDEDOR)
+    if (metodo === 'GET') {
+        if (GRUPOS_ROLES.VENTAS_COMPLETO.includes(rolUsuario)) {
+            return next();
+        }
     }
 
-    next();
+    // ✍️ ESCRITURA (POST/PUT/DELETE): Solo EJECUTIVOS
+    if (['POST', 'PUT', 'DELETE'].includes(metodo)) {
+        if (GRUPOS_ROLES.EJECUTIVOS.includes(rolUsuario)) {
+            return next();
+        }
+    }
+
+    // 🔒 Acceso denegado
+    return res.status(403).json({
+        success: false,
+        error: 'Sin autorización',
+        message: metodo === 'GET'
+            ? 'Solo el equipo de ventas puede ver productos'
+            : 'Solo ejecutivos pueden modificar productos',
+        codigo: 'INSUFFICIENT_PERMISSIONS',
+        rol_requerido: metodo === 'GET' ? GRUPOS_ROLES.VENTAS_COMPLETO : GRUPOS_ROLES.EJECUTIVOS,
+        rol_actual: req.user?.rol || 'sin_rol'
+    });
 };
 
 // ==================== RUTAS BÁSICAS ====================
