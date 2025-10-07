@@ -603,14 +603,16 @@ router.get('/dashboard/seguimientos',
             // 🔒 FILTRADO AUTOMÁTICO POR ROL
             const usuarioActual = req.user;
             const rolUsuario = usuarioActual?.rol;
-            const idUsuario = usuarioActual?.userId;
+            const idUsuario = usuarioActual?.id || usuarioActual?.userId; // ← FIX: probar ambas propiedades
+
+            console.log('🔍 [DEBUG ROUTE] Usuario:', { id: idUsuario, rol: rolUsuario, user_obj: usuarioActual });
 
             let asesorIdFinal = null; // Por defecto vista global
 
             // Si es VENDEDOR, SIEMPRE forzar su propio ID (seguridad)
             if (rolUsuario === 'VENDEDOR') {
                 asesorIdFinal = idUsuario;
-                console.log(`🔒 VENDEDOR ${idUsuario} - Seguimientos personales forzados (sin parámetro)`);
+                console.log(`🔒 VENDEDOR ID ${idUsuario} - Seguimientos personales forzados (sin parámetro)`);
             }
             // Si es JEFE/ADMIN/SUPER_ADMIN, vista global
             else {
@@ -653,18 +655,20 @@ router.get('/dashboard/seguimientos/:asesorId',
             // 🔒 FILTRADO AUTOMÁTICO POR ROL
             const usuarioActual = req.user;
             const rolUsuario = usuarioActual?.rol;
-            const idUsuario = usuarioActual?.userId;
+            const idUsuario = usuarioActual?.id || usuarioActual?.userId; // ← FIX: probar ambas propiedades
 
-            let asesorIdFinal = asesorId;
+            console.log('🔍 [DEBUG ROUTE CON PARAM] Usuario:', { id: idUsuario, rol: rolUsuario, asesorId_param: asesorId });
+
+            let asesorIdFinal = parseInt(asesorId);
 
             // Si es VENDEDOR, SIEMPRE forzar su propio ID (seguridad)
             if (rolUsuario === 'VENDEDOR') {
                 asesorIdFinal = idUsuario;
-                console.log(`🔒 VENDEDOR ${idUsuario} - Seguimientos personales forzados`);
+                console.log(`🔒 VENDEDOR ID ${idUsuario} - Seguimientos personales forzados. Ignorando parámetro: ${asesorId}`);
             }
             // Si es JEFE/ADMIN/SUPER_ADMIN, permitir ver el asesor solicitado
             else {
-                console.log(`👔 ${rolUsuario} - Viendo seguimientos del asesor ${asesorId}`);
+                console.log(`👔 ${rolUsuario} (ID ${idUsuario}) - Viendo seguimientos del asesor ${asesorId}`);
             }
 
             const datosCompletos = await procesarSeguimientos(asesorIdFinal);

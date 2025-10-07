@@ -43,10 +43,10 @@ router.get('/vendedores',
 // RUTAS PROTEGIDAS - CRUD DE USUARIOS
 // ============================================
 
-// Listar todos los usuarios (solo SUPER_ADMIN)
+// Listar todos los usuarios (ejecutivos y jefes pueden ver la lista)
 router.get('/',
     authenticateToken,
-    requireRole(GRUPOS_ROLES.SOLO_ADMINISTRADORES),
+    requireRole(GRUPOS_ROLES.JEFES_Y_EJECUTIVOS), // ← CAMBIADO: permitir JEFE_VENTAS
     listarUsuarios
 );
 

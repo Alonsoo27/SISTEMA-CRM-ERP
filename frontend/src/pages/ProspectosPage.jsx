@@ -433,19 +433,7 @@ const ProspectosPage = () => {
         {vistaActual === 'seguimientos' && (
           <div className="h-full p-6 overflow-y-auto">
             <BalanzaSeguimientos
-              asesorId={(() => {
-                // 🔒 LÓGICA DE FILTRADO POR ROL
-                const rolUsuario = usuarioActual?.rol;
-                const esVendedor = rolUsuario === 'VENDEDOR';
-
-                // VENDEDOR siempre ve solo sus datos
-                if (esVendedor) {
-                  return usuarioActual?.id;
-                }
-
-                // JEFE/ADMIN: si hay filtro, usarlo; si no, null (vista global)
-                return filtros.asesor_id || null;
-              })()}
+              asesorId={usuarioActual?.id}
               refreshTrigger={refreshTrigger}
             />
           </div>

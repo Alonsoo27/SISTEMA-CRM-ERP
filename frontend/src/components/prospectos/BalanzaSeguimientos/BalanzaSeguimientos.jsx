@@ -7,8 +7,9 @@ import {
 } from 'lucide-react';
 import prospectosService from '../../../services/prospectosService';
 import HistorialCompleto from '../HistorialCompleto/HistorialCompleto';
+import VistaSelectorSeguimientos from '../../common/VistaSelectorSeguimientos';
 
-const BalanzaSeguimientos = ({ asesorId = null, refreshTrigger = 0 }) => {
+const BalanzaSeguimientos = ({ asesorId: asesorIdProp = null, refreshTrigger = 0 }) => {
   const [dashboardData, setDashboardData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -34,6 +35,9 @@ const BalanzaSeguimientos = ({ asesorId = null, refreshTrigger = 0 }) => {
     urgencia: 'todos', // 'todos', 'vencidos', 'hoy', 'proximos'
     busqueda: ''
   });
+
+  // 🎯 NUEVO: Estado interno de vista (para selector ejecutivo)
+  const [vistaSeleccionada, setVistaSeleccionada] = useState(asesorIdProp);
 
   // 🔒 OBTENER USUARIO REAL del localStorage
   const usuarioActual = useMemo(() => {
@@ -75,7 +79,7 @@ const BalanzaSeguimientos = ({ asesorId = null, refreshTrigger = 0 }) => {
 
   useEffect(() => {
     cargarDatos();
-  }, [asesorId, refreshTrigger]);
+  }, [vistaSeleccionada, refreshTrigger]);
 
   useEffect(() => {
     let interval;
@@ -87,16 +91,20 @@ const BalanzaSeguimientos = ({ asesorId = null, refreshTrigger = 0 }) => {
     };
   }, [autoRefresh]);
 
+  // 🎯 Handler para cambio de vista desde selector
+  const handleCambioVista = useCallback((nuevoAsesorId) => {
+    console.log('🔄 Cambiando vista a:', nuevoAsesorId === null ? 'global' : `asesor ${nuevoAsesorId}`);
+    setVistaSeleccionada(nuevoAsesorId);
+  }, []);
+
   const cargarDatos = async () => {
     try {
       setLoading(true);
       setError(null);
 
-      // 🔒 RESPETAR EL asesorId QUE VIENE DE LA PROP
-      // - null = vista global (para JEFES/ADMINS sin filtro)
-      // - number = vista filtrada por ese asesor
-      // - Si es undefined, usar el usuario actual como fallback
-      const asesorIdFinal = asesorId !== undefined ? asesorId : usuarioActual?.id;
+      // 🔒 USAR LA VISTA SELECCIONADA INTERNAMENTE
+      // El backend validará los permisos automáticamente
+      const asesorIdFinal = vistaSeleccionada;
 
       console.log('🔍 BalanzaSeguimientos: Cargando con asesorId=', asesorIdFinal,
                   asesorIdFinal === null ? '(vista global)' : `(asesor específico)`);
@@ -313,7 +321,7 @@ const BalanzaSeguimientos = ({ asesorId = null, refreshTrigger = 0 }) => {
           <div className="absolute inset-0 bg-gradient-to-br from-slate-800/30 via-transparent to-gray-800/30"></div>
         </div>
 
-        {/* Header */}
+        {/* Header con Selector de Vista */}
         <div className="text-center mb-8 relative z-10">
           <div className="inline-flex items-center justify-center w-20 h-20 bg-gradient-to-br from-yellow-400 via-orange-500 to-yellow-600 rounded-full mb-4 shadow-2xl shadow-yellow-500/50 border-4 border-yellow-300">
             <span className="text-4xl drop-shadow-lg">⚖️</span>
@@ -321,6 +329,15 @@ const BalanzaSeguimientos = ({ asesorId = null, refreshTrigger = 0 }) => {
           <h2 className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 via-orange-400 to-yellow-300 drop-shadow-2xl">
             ⚖️ BALANZA DE SEGUIMIENTOS ⚖️
           </h2>
+
+          {/* 🎯 SELECTOR DE VISTA - Integrado en el centro */}
+          <div className="flex justify-center mt-4">
+            <VistaSelectorSeguimientos
+              usuarioActual={usuarioActual}
+              onVistaChange={handleCambioVista}
+              vistaActual={vistaSeleccionada}
+            />
+          </div>
         </div>
 
         {/* Balanza Rediseñada */}

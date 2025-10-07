@@ -916,57 +916,133 @@ class SeguimientosController {
     /**
      * GET /api/prospectos/dashboard/seguimientos/:asesorId
      * Dashboard completo de seguimientos para un asesor
+     * 🔒 SEGURIDAD: Filtrado automático por rol
      */
     static async dashboardSeguimientos(req, res) {
         try {
             const { asesorId } = req.params;
-            const asesor_id = asesorId && !isNaN(asesorId) ? parseInt(asesorId) : (req.user?.id || 1);
-            
-            // Obtener seguimientos pendientes (visibles para el asesor)
-            const seguimientosResult = await query(`
-                SELECT s.*,
+
+            // 🔒 CONTROL DE ACCESO POR ROL
+            const usuarioActual = req.user || {};
+            const rolUsuario = usuarioActual.rol_id;
+            const idUsuarioActual = usuarioActual.id;
+
+            // 🔍 LOG DETALLADO PARA DEBUG
+            console.log('🔍 [DEBUG] Usuario actual:', {
+                id: idUsuarioActual,
+                rol_id: rolUsuario,
+                nombre: usuarioActual.nombre,
+                asesorId_param: asesorId
+            });
+
+            // Roles que pueden ver vista global
+            const ROLES_EJECUTIVOS = [1, 2, 3, 4, 6]; // SUPER_ADMIN, ADMIN, GERENTE, JEFE_VENTAS, SUPERVISOR
+            const esEjecutivo = ROLES_EJECUTIVOS.includes(rolUsuario);
+
+            // VENDEDOR (rol_id = 7) SOLO puede ver sus propios datos
+            let asesor_id;
+            if (rolUsuario === 7) {
+                // 🔒 VENDEDOR: Forzar su propio ID, ignorar parámetro
+                asesor_id = idUsuarioActual;
+                console.log(`🔒 [Seguimientos] VENDEDOR detectado (ID: ${idUsuarioActual}). Forzando vista personal. Ignorando parámetro: ${asesorId}`);
+                logger.info(`🔒 [Seguimientos] VENDEDOR detectado (${idUsuarioActual}). Forzando vista personal.`);
+            } else if (esEjecutivo) {
+                // ✅ EJECUTIVO: Puede ver vista global (null) o específica (asesorId)
+                asesor_id = asesorId && !isNaN(asesorId) ? parseInt(asesorId) : null;
+                console.log(`✅ [Seguimientos] EJECUTIVO detectado (rol ${rolUsuario}). Vista: ${asesor_id ? `asesor ${asesor_id}` : 'global'}`);
+                logger.info(`✅ [Seguimientos] EJECUTIVO detectado (rol ${rolUsuario}). Vista: ${asesor_id ? `asesor ${asesor_id}` : 'global'}`);
+            } else {
+                // 🔒 OTROS ROLES: Solo su vista personal
+                asesor_id = idUsuarioActual;
+                console.log(`⚠️ [Seguimientos] Rol desconocido (${rolUsuario}). Forzando vista personal.`);
+                logger.warn(`⚠️ [Seguimientos] Rol desconocido (${rolUsuario}). Forzando vista personal.`);
+            }
+
+            console.log(`🎯 [DEBUG] asesor_id FINAL usado en queries: ${asesor_id}`);
+
+            // Construir query con filtrado condicional
+            const seguimientosQuery = asesor_id
+                ? `SELECT s.*,
                        p.codigo, p.nombre_cliente, p.empresa, p.telefono, p.estado, p.valor_estimado
                 FROM seguimientos s
                 INNER JOIN prospectos p ON s.prospecto_id = p.id
                 WHERE s.asesor_id = $1 AND s.completado = $2 AND p.activo = $3
                 AND s.visible_para_asesor = $4
-                ORDER BY s.fecha_programada ASC
-            `, [asesor_id, false, true, true]);
+                ORDER BY s.fecha_programada ASC`
+                : `SELECT s.*,
+                       p.codigo, p.nombre_cliente, p.empresa, p.telefono, p.estado, p.valor_estimado
+                FROM seguimientos s
+                INNER JOIN prospectos p ON s.prospecto_id = p.id
+                WHERE s.completado = $1 AND p.activo = $2
+                AND s.visible_para_asesor = $3
+                ORDER BY s.fecha_programada ASC`;
+
+            const seguimientosParams = asesor_id
+                ? [asesor_id, false, true, true]
+                : [false, true, true];
+
+            const seguimientosResult = await query(seguimientosQuery, seguimientosParams);
 
             const seguimientos = seguimientosResult.rows;
 
-            // Obtener seguimientos realizados (último mes)
+            // Obtener seguimientos realizados (último mes) - con filtrado por rol
             const unMesAtras = new Date();
             unMesAtras.setMonth(unMesAtras.getMonth() - 1);
 
-            const realizadosResult = await query(`
-                SELECT s.*,
+            const realizadosQuery = asesor_id
+                ? `SELECT s.*,
                        p.codigo, p.nombre_cliente, p.empresa, p.telefono, p.estado, p.valor_estimado
                 FROM seguimientos s
                 INNER JOIN prospectos p ON s.prospecto_id = p.id
                 WHERE s.completado_por = $1 AND s.completado = $2
                 AND s.fecha_completado >= $3
-                ORDER BY s.fecha_completado DESC
-            `, [asesor_id, true, unMesAtras.toISOString()]);
+                ORDER BY s.fecha_completado DESC`
+                : `SELECT s.*,
+                       p.codigo, p.nombre_cliente, p.empresa, p.telefono, p.estado, p.valor_estimado
+                FROM seguimientos s
+                INNER JOIN prospectos p ON s.prospecto_id = p.id
+                WHERE s.completado = $1 AND s.fecha_completado >= $2
+                ORDER BY s.fecha_completado DESC`;
 
+            const realizadosParams = asesor_id
+                ? [asesor_id, true, unMesAtras.toISOString()]
+                : [true, unMesAtras.toISOString()];
+
+            const realizadosResult = await query(realizadosQuery, realizadosParams);
             const seguimientosRealizados = realizadosResult.rows;
 
-            // Obtener prospectos en modo libre
+            // Calcular realizados última semana (para la balanza)
+            const unaSemanaAtras = new Date();
+            unaSemanaAtras.setDate(unaSemanaAtras.getDate() - 7);
+            const seguimientosRealizadosSemana = seguimientosRealizados.filter(s =>
+                new Date(s.fecha_completado) >= unaSemanaAtras
+            );
+
+            // Obtener prospectos en modo libre (no filtrar por asesor, es para todos)
             const modoLibreResult = await query(
                 'SELECT * FROM prospectos WHERE modo_libre = $1 AND activo = $2',
                 [true, true]
             );
-
             const modoLibre = modoLibreResult.rows;
-            
-            // Obtener prospectos listos para conversión
-            const listosConversionResult = await query(`
-                SELECT p.*, s.resultado, s.fecha_completado, s.completado
+
+            // Obtener prospectos listos para conversión - con filtrado por rol
+            const listosConversionQuery = asesor_id
+                ? `SELECT p.*, s.resultado, s.fecha_completado, s.completado
                 FROM prospectos p
                 INNER JOIN seguimientos s ON p.id = s.prospecto_id
                 WHERE p.asesor_id = $1 AND p.activo = $2 AND p.convertido = $3
-                AND s.completado = $4 AND s.resultado = ANY($5::text[])
-            `, [asesor_id, true, false, true, RESULTADOS_QUE_CONVIERTEN]);
+                AND s.completado = $4 AND s.resultado = ANY($5::text[])`
+                : `SELECT p.*, s.resultado, s.fecha_completado, s.completado
+                FROM prospectos p
+                INNER JOIN seguimientos s ON p.id = s.prospecto_id
+                WHERE p.activo = $1 AND p.convertido = $2
+                AND s.completado = $3 AND s.resultado = ANY($4::text[])`;
+
+            const listosConversionParams = asesor_id
+                ? [asesor_id, true, false, true, RESULTADOS_QUE_CONVIERTEN]
+                : [true, false, true, RESULTADOS_QUE_CONVIERTEN];
+
+            const listosConversionResult = await query(listosConversionQuery, listosConversionParams);
 
             const listosConversion = listosConversionResult.rows;
             
@@ -984,13 +1060,17 @@ class SeguimientosController {
                 }) || []
             };
             
-            // Obtener métricas del asesor (últimos 30 días)
+            // Obtener métricas (últimos 30 días) - con filtrado por rol
             const fechaLimite = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
-            const metricasResult = await query(`
-                SELECT completado, vencido, pospuesto FROM seguimientos
-                WHERE asesor_id = $1 AND created_at >= $2
-            `, [asesor_id, fechaLimite]);
 
+            const metricasQuery = asesor_id
+                ? `SELECT completado, vencido, pospuesto FROM seguimientos
+                   WHERE asesor_id = $1 AND created_at >= $2`
+                : `SELECT completado, vencido, pospuesto FROM seguimientos
+                   WHERE created_at >= $1`;
+
+            const metricasParams = asesor_id ? [asesor_id, fechaLimite] : [fechaLimite];
+            const metricasResult = await query(metricasQuery, metricasParams);
             const metricas = metricasResult.rows;
             
             const totalSeguimientos = metricas?.length || 0;
@@ -1002,6 +1082,7 @@ class SeguimientosController {
                     ...seguimientosCategorias,
                     pendientes: seguimientos || [],
                     realizados: seguimientosRealizados || [],
+                    realizados_semana: seguimientosRealizadosSemana || [],
                     conteos: {
                         total: seguimientos?.length || 0,
                         pendientes: seguimientos?.length || 0,
@@ -1009,6 +1090,7 @@ class SeguimientosController {
                         hoy: seguimientosCategorias.hoy.length,
                         proximos: seguimientosCategorias.proximos.length,
                         realizados_mes: seguimientosRealizados?.length || 0,
+                        realizados_semana: seguimientosRealizadosSemana?.length || 0,
                         completados_hoy: seguimientosRealizados?.filter(s => {
                             const fechaComp = new Date(s.fecha_completado);
                             return fechaComp.toDateString() === new Date().toDateString();
@@ -1029,12 +1111,12 @@ class SeguimientosController {
                     vencidos_30d: vencidos,
                     porcentaje_completados: totalSeguimientos > 0 ? ((completados / totalSeguimientos) * 100).toFixed(2) : 0,
                     porcentaje_vencidos: totalSeguimientos > 0 ? ((vencidos / totalSeguimientos) * 100).toFixed(2) : 0,
-                    // 📊 PERFORMANCE SCORE para la balanza (0-100)
+                    // 📊 PERFORMANCE SCORE para la balanza (0-100) - con filtrado por rol
                     score_productividad: await (async () => {
                         try {
                             // Obtener datos para el score de los últimos 30 días
-                            const scoreQuery = `
-                                SELECT
+                            const scoreQuery = asesor_id
+                                ? `SELECT
                                     COUNT(*) as total_actividades,
                                     COUNT(CASE WHEN v.id IS NOT NULL THEN 1 END) as conversiones,
                                     AVG(COALESCE(
@@ -1046,11 +1128,24 @@ class SeguimientosController {
                                 FROM seguimientos s
                                 INNER JOIN prospectos p ON s.prospecto_id = p.id
                                 LEFT JOIN ventas v ON p.id = v.prospecto_id
-                                WHERE p.asesor_id = $1 AND s.created_at >= $2
-                            `;
+                                WHERE p.asesor_id = $1 AND s.created_at >= $2`
+                                : `SELECT
+                                    COUNT(*) as total_actividades,
+                                    COUNT(CASE WHEN v.id IS NOT NULL THEN 1 END) as conversiones,
+                                    AVG(COALESCE(
+                                        EXTRACT(EPOCH FROM (v.fecha_venta - p.created_at))/86400,
+                                        EXTRACT(EPOCH FROM (s.fecha_completado - p.created_at))/86400,
+                                        30
+                                    )) as dias_promedio_proceso,
+                                    AVG(p.probabilidad_cierre) as probabilidad_promedio
+                                FROM seguimientos s
+                                INNER JOIN prospectos p ON s.prospecto_id = p.id
+                                LEFT JOIN ventas v ON p.id = v.prospecto_id
+                                WHERE s.created_at >= $1`;
 
                             const fechaLimiteScore = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
-                            const scoreResult = await query(scoreQuery, [asesor_id, fechaLimiteScore]);
+                            const scoreParams = asesor_id ? [asesor_id, fechaLimiteScore] : [fechaLimiteScore];
+                            const scoreResult = await query(scoreQuery, scoreParams);
                             const scoreData = scoreResult.rows[0];
 
                             const totalActividades = parseInt(scoreData.total_actividades || 0);
@@ -1082,7 +1177,17 @@ class SeguimientosController {
                     performance_baja: totalSeguimientos > 0 && ((completados / totalSeguimientos) * 100) < 80
                 }
             };
-            
+
+            // 📊 Agregar metadatos de vista para el frontend
+            resultado.vista_info = {
+                tipo_vista: asesor_id ? 'personal' : 'global',
+                asesor_id: asesor_id,
+                asesor_nombre: asesor_id ? (await query('SELECT nombre, apellido FROM usuarios WHERE id = $1', [asesor_id])).rows[0] : null,
+                rol_usuario: rolUsuario,
+                es_ejecutivo: esEjecutivo,
+                puede_cambiar_vista: esEjecutivo
+            };
+
             res.json({
                 success: true,
                 data: resultado
