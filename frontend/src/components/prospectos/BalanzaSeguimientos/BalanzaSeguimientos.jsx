@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 import prospectosService from '../../../services/prospectosService';
 import HistorialCompleto from '../HistorialCompleto/HistorialCompleto';
-import VistaSelectorSeguimientos from '../../common/VistaSelectorSeguimientos';
+import VistaSelector from '../../common/VistaSelector';
 
 const BalanzaSeguimientos = ({ asesorId: asesorIdProp = null, refreshTrigger = 0 }) => {
   const [dashboardData, setDashboardData] = useState(null);
@@ -36,9 +36,6 @@ const BalanzaSeguimientos = ({ asesorId: asesorIdProp = null, refreshTrigger = 0
     busqueda: ''
   });
 
-  // 🎯 NUEVO: Estado interno de vista (para selector ejecutivo)
-  const [vistaSeleccionada, setVistaSeleccionada] = useState(asesorIdProp);
-
   // 🔒 OBTENER USUARIO REAL del localStorage
   const usuarioActual = useMemo(() => {
     try {
@@ -54,6 +51,30 @@ const BalanzaSeguimientos = ({ asesorId: asesorIdProp = null, refreshTrigger = 0
       return null;
     }
   }, []);
+
+  // 🎯 CALCULAR VISTA INICIAL SEGÚN ROL (síncrono)
+  const getVistaInicial = useCallback(() => {
+    if (!usuarioActual) return null;
+
+    const rolUsuario = usuarioActual.rol?.toUpperCase();
+    if (rolUsuario === 'VENDEDOR') {
+      return usuarioActual.id; // VENDEDOR: vista personal
+    } else {
+      return asesorIdProp !== undefined ? asesorIdProp : null; // EJECUTIVOS: prop o global
+    }
+  }, [usuarioActual, asesorIdProp]);
+
+  // 🎯 Estado interno de vista (inicializado correctamente)
+  const [vistaSeleccionada, setVistaSeleccionada] = useState(getVistaInicial());
+
+  // 🔄 Actualizar vista si cambian las dependencias
+  useEffect(() => {
+    const nuevaVista = getVistaInicial();
+    if (nuevaVista !== vistaSeleccionada) {
+      setVistaSeleccionada(nuevaVista);
+      console.log('🔄 [BalanzaSeguimientos] Vista actualizada a:', nuevaVista);
+    }
+  }, [getVistaInicial]);
 
   // Control de permisos
   const esRolAlto = useCallback(() => {
@@ -78,8 +99,12 @@ const BalanzaSeguimientos = ({ asesorId: asesorIdProp = null, refreshTrigger = 0
   };
 
   useEffect(() => {
-    cargarDatos();
-  }, [vistaSeleccionada, refreshTrigger]);
+    // Solo cargar si vistaSeleccionada ya fue inicializada (no es el valor inicial null)
+    // El useEffect de inicialización seteará el valor correcto primero
+    if (usuarioActual) {
+      cargarDatos();
+    }
+  }, [vistaSeleccionada, refreshTrigger, usuarioActual]);
 
   useEffect(() => {
     let interval;
@@ -106,14 +131,9 @@ const BalanzaSeguimientos = ({ asesorId: asesorIdProp = null, refreshTrigger = 0
       // El backend validará los permisos automáticamente
       const asesorIdFinal = vistaSeleccionada;
 
-      console.log('🔍 BalanzaSeguimientos: Cargando con asesorId=', asesorIdFinal,
-                  asesorIdFinal === null ? '(vista global)' : `(asesor específico)`);
-
       const response = await prospectosService.obtenerDashboardSeguimientos(asesorIdFinal);
 
       if (response.success) {
-        console.log('🎯 Datos recibidos:', response.data);
-        console.log('🎯 Conteos:', response.data?.seguimientos?.conteos);
         setDashboardData(response.data);
       } else {
         setError(response.error || 'Error al cargar datos');
@@ -128,15 +148,10 @@ const BalanzaSeguimientos = ({ asesorId: asesorIdProp = null, refreshTrigger = 0
 
   // Calcular datos para la balanza con lógica real del negocio
   const datosBalanza = useMemo(() => {
-    console.log('🔄 Calculando datos balanza, dashboardData:', dashboardData);
-
     if (!dashboardData) return { pendientes: 0, realizados: 0, balance: 0 };
 
     const seguimientos = dashboardData.seguimientos || {};
     const conteos = dashboardData.conteos || {};
-
-    console.log('📊 Conteos extraídos:', conteos);
-    console.log('📋 Seguimientos extraídos:', Object.keys(seguimientos));
 
     // ⚖️ LÓGICA REAL DE NEGOCIO:
     // - Sistema usa 18 horas laborales para vencimiento
@@ -178,7 +193,6 @@ const BalanzaSeguimientos = ({ asesorId: asesorIdProp = null, refreshTrigger = 0
       horarioLaboral: 'L-V 8am-6pm, Sáb 9am-12pm'
     };
 
-    console.log('⚖️ Resultado balanza (LÓGICA REAL):', resultado);
     return resultado;
   }, [dashboardData]);
 
@@ -199,15 +213,6 @@ const BalanzaSeguimientos = ({ asesorId: asesorIdProp = null, refreshTrigger = 0
       inclinacion = (diferencia / total) * maxInclinacion * 2;
       inclinacion = Math.min(Math.max(inclinacion, -maxInclinacion), maxInclinacion);
     }
-
-    console.log('🎯 Balance calculado:', {
-      pendientes,
-      realizados,
-      diferencia,
-      total,
-      porcentajeDiferencia: (porcentajeDiferencia * 100).toFixed(1) + '%',
-      inclinacion: inclinacion.toFixed(1) + '°'
-    });
 
     return inclinacion;
   };
@@ -332,10 +337,17 @@ const BalanzaSeguimientos = ({ asesorId: asesorIdProp = null, refreshTrigger = 0
 
           {/* 🎯 SELECTOR DE VISTA - Integrado en el centro */}
           <div className="flex justify-center mt-4">
-            <VistaSelectorSeguimientos
+            <VistaSelector
               usuarioActual={usuarioActual}
               onVistaChange={handleCambioVista}
               vistaActual={vistaSeleccionada}
+              textos={{
+                global: 'Vista Global',
+                globalDesc: 'Todos los seguimientos',
+                personal: 'Mi Vista Personal',
+                personalDesc: 'Solo mis seguimientos',
+                otrosLabel: 'Otros Asesores'
+              }}
             />
           </div>
         </div>
@@ -1307,7 +1319,7 @@ const BalanzaSeguimientos = ({ asesorId: asesorIdProp = null, refreshTrigger = 0
       {/* Modal Historial Completo */}
       {mostrarHistorial && (
         <HistorialCompleto
-          asesorId={asesorId}
+          asesorId={vistaSeleccionada}
           onClose={() => setMostrarHistorial(false)}
         />
       )}

@@ -1,22 +1,63 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import prospectosService from '../../../services/prospectosService';
 import MapaPeruMapbox from '../../MapaPeruMapbox';
+import VistaSelector from '../../common/VistaSelector';
 import {
   LineChart, Line, BarChart, Bar, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer
 } from 'recharts';
 
 const Analytics = ({ asesorId = null }) => {
+  // 🔒 OBTENER USUARIO REAL del localStorage
+  const usuarioActual = useMemo(() => {
+    try {
+      const user = JSON.parse(localStorage.getItem('user') || '{}');
+      return {
+        id: user.id,
+        nombre: user.nombre_completo || `${user.nombre || ''} ${user.apellido || ''}`.trim(),
+        rol: user.rol?.nombre || user.rol
+      };
+    } catch (error) {
+      console.error('Error al obtener usuario:', error);
+      return null;
+    }
+  }, []);
+
   const [datos, setDatos] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [periodo, setPeriodo] = useState('mes_actual');
+  const [vistaSeleccionada, setVistaSeleccionada] = useState(null);
+
+  // 🎯 INICIALIZAR VISTA SEGÚN ROL
+  useEffect(() => {
+    if (!usuarioActual) return;
+
+    const rolUsuario = usuarioActual.rol?.toUpperCase();
+    if (rolUsuario === 'VENDEDOR') {
+      // VENDEDOR: Forzar vista personal
+      setVistaSeleccionada(usuarioActual.id);
+      console.log('🔒 [Analytics] VENDEDOR detectado - Forzando vista personal');
+    } else {
+      // EJECUTIVOS: Iniciar en vista global
+      setVistaSeleccionada(null);
+      console.log('👔 [Analytics] EJECUTIVO detectado - Vista global habilitada');
+    }
+  }, [usuarioActual]);
 
   const cargarDatos = async () => {
     try {
       setLoading(true);
       setError(null);
-      const response = await prospectosService.obtenerAnalyticsCompletos(asesorId, periodo);
+
+      console.log('📊 [Analytics] Cargando datos:', {
+        vistaSeleccionada,
+        periodo,
+        rol: usuarioActual?.rol
+      });
+
+      // 🎯 USAR vistaSeleccionada en lugar de asesorId prop
+      const response = await prospectosService.obtenerAnalyticsCompletos(vistaSeleccionada, periodo);
       if (response.success) {
         setDatos(response.data);
       } else {
@@ -31,8 +72,17 @@ const Analytics = ({ asesorId = null }) => {
   };
 
   useEffect(() => {
-    cargarDatos();
-  }, [asesorId, periodo]);
+    // Solo cargar si vistaSeleccionada ya está inicializada
+    if (vistaSeleccionada !== undefined) {
+      cargarDatos();
+    }
+  }, [vistaSeleccionada, periodo]);
+
+  // 🎯 HANDLER PARA CAMBIO DE VISTA
+  const handleCambioVista = (asesorId) => {
+    console.log('👁️ [Analytics] Cambiando vista a:', asesorId === null ? 'Global' : `Asesor ${asesorId}`);
+    setVistaSeleccionada(asesorId);
+  };
 
   const COLORS = {
     primary: '#3B82F6',
@@ -107,10 +157,12 @@ const Analytics = ({ asesorId = null }) => {
     cerrado: canal.cerrado
   })) || [];
 
-  // Usar departamentos para consistencia en lugar de distritos
+  // Usar departamentos para gráfico Pie (PROSPECTOS - INTENCIÓN DE COMPRA)
   const datosGeograficosPie = datos.departamentos?.map((departamento, index) => ({
     name: departamento.departamento,
-    value: departamento.total_ventas, // usar ventas en lugar de prospectos para el pie
+    value: departamento.total_ventas, // Ahora representa total_prospectos (backend lo mapeó)
+    prospectos: departamento.total_prospectos,
+    valor_estimado: departamento.valor_estimado_total,
     percentage: departamento.ticket_promedio
   })) || [];
 
@@ -125,19 +177,37 @@ const Analytics = ({ asesorId = null }) => {
 
   return (
     <div className="space-y-6">
-      {/* Header con selector de período */}
+      {/* Header con selector de vista y período */}
       <div className="flex justify-between items-center">
         <h2 className="text-2xl font-bold text-gray-900">📊 Analytics de Prospectos</h2>
-        <select
-          value={periodo}
-          onChange={(e) => setPeriodo(e.target.value)}
-          className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-        >
-          <option value="semana_actual">Esta Semana</option>
-          <option value="mes_actual">Este Mes</option>
-          <option value="trimestre_actual">Este Trimestre</option>
-          <option value="year_actual">Este Año</option>
-        </select>
+
+        <div className="flex items-center space-x-4">
+          {/* 👁️ SELECTOR DE VISTA (Solo para ejecutivos) */}
+          <VistaSelector
+            usuarioActual={usuarioActual}
+            onVistaChange={handleCambioVista}
+            vistaActual={vistaSeleccionada}
+            textos={{
+              global: 'Vista Global',
+              globalDesc: 'Analytics de todos los asesores',
+              personal: 'Mi Vista Personal',
+              personalDesc: 'Solo mis analytics',
+              otrosLabel: 'Otros Asesores'
+            }}
+          />
+
+          {/* 📅 SELECTOR DE PERÍODO */}
+          <select
+            value={periodo}
+            onChange={(e) => setPeriodo(e.target.value)}
+            className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          >
+            <option value="semana_actual">Esta Semana</option>
+            <option value="mes_actual">Este Mes</option>
+            <option value="trimestre_actual">Este Trimestre</option>
+            <option value="year_actual">Este Año</option>
+          </select>
+        </div>
       </div>
 
       {/* Métricas principales */}
@@ -219,7 +289,7 @@ const Analytics = ({ asesorId = null }) => {
 
         {/* Gráfico Circular - Distribución por Departamentos */}
         <div className="bg-white p-6 rounded-lg shadow-sm border">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">🗺️ Distribución por Departamentos</h3>
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">🗺️ Prospectos por Departamento</h3>
           <ResponsiveContainer width="100%" height={300}>
             <PieChart>
               <Pie

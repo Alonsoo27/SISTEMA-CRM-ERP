@@ -1,20 +1,45 @@
 // src/components/prospectos/KanbanBoard/KanbanBoard.jsx
-import React, { useState, useEffect, useRef } from 'react';
-import { 
-  Phone, Mail, Building, Calendar, DollarSign, User, 
+import React, { useState, useEffect, useRef, useMemo } from 'react';
+import {
+  Phone, Mail, Building, Calendar, DollarSign, User,
   MoreVertical, CheckCircle, XCircle, Clock, AlertCircle,
   ExternalLink, Edit, Trash2, Filter, Package, ArrowRight
 } from 'lucide-react';
 import prospectosService from '../../../services/prospectosService';
 import VentaForm from '../../ventas/VentaForm/VentaForm'; // AGREGADO: Import del VentaForm
 
-const KanbanBoard = ({ 
-  asesorId = null, 
-  onProspectoSelect, 
+const KanbanBoard = ({
+  asesorId = null,
+  onProspectoSelect,
   refreshTrigger = 0,
   filtros = {},
   onFiltrosChange
 }) => {
+  // 🔒 OBTENER USUARIO REAL del localStorage
+  const usuarioActual = useMemo(() => {
+    try {
+      const user = JSON.parse(localStorage.getItem('user') || '{}');
+      return {
+        id: user.id,
+        rol: user.rol?.nombre || user.rol
+      };
+    } catch (error) {
+      console.error('Error al obtener usuario:', error);
+      return null;
+    }
+  }, []);
+
+  // Determinar si es ejecutivo viendo vista global
+  const esVistaGlobalEjecutivo = useMemo(() => {
+    if (!usuarioActual) return false;
+    const rolesEjecutivos = ['SUPER_ADMIN', 'ADMIN', 'GERENTE', 'JEFE_VENTAS', 'SUPERVISOR'];
+    const rolNombre = usuarioActual.rol?.toUpperCase();
+    const esEjecutivo = rolesEjecutivos.includes(rolNombre);
+    // Vista global = asesorId es null o es diferente al usuario actual
+    const esVistaGlobal = asesorId === null || asesorId !== usuarioActual.id;
+    return esEjecutivo && esVistaGlobal;
+  }, [usuarioActual, asesorId]);
+
   const [kanbanData, setKanbanData] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -746,11 +771,11 @@ const KanbanBoard = ({
             </h4>
             <div className="flex items-center gap-2 mt-1">
               <p className="text-xs text-gray-500 truncate">{prospecto.codigo || 'Sin código'}</p>
-              {/* Badge del asesor (solo en vista global) */}
-              {(prospecto.asesor_nombre || prospecto.nombre) && (
+              {/* Badge del asesor (solo en vista global para ejecutivos) */}
+              {esVistaGlobalEjecutivo && prospecto.asesor_nombre && (
                 <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-700 border border-purple-200">
                   <User className="h-3 w-3 mr-1" />
-                  {prospecto.asesor_nombre || prospecto.nombre} {prospecto.asesor_apellido || prospecto.apellido || ''}
+                  {prospecto.asesor_nombre} {prospecto.asesor_apellido || ''}
                 </span>
               )}
             </div>
@@ -887,17 +912,27 @@ const KanbanBoard = ({
           )}
         </div>
 
-        {/* Asesor asignado */}
-        <div className="flex items-center justify-between text-xs text-gray-500 mb-2">
-          <div className="flex items-center min-w-0 flex-1 mr-2">
-            <User className="h-3 w-3 mr-1 flex-shrink-0" />
-            <span className="truncate">{prospecto.asesor_nombre || 'Sin asesor'}</span>
+        {/* Asesor asignado (solo en vista global para ejecutivos) */}
+        {esVistaGlobalEjecutivo && (
+          <div className="flex items-center justify-between text-xs text-gray-500 mb-2">
+            <div className="flex items-center min-w-0 flex-1 mr-2">
+              <User className="h-3 w-3 mr-1 flex-shrink-0" />
+              <span className="truncate">{prospecto.asesor_nombre || 'Sin asesor'}</span>
+            </div>
+            <div className="flex items-center flex-shrink-0">
+              <Calendar className="h-3 w-3 mr-1" />
+              <span>{formatearFecha(prospecto.fecha_contacto)}</span>
+            </div>
           </div>
-          <div className="flex items-center flex-shrink-0">
+        )}
+
+        {/* Fecha de contacto (cuando no se muestra asesor) */}
+        {!esVistaGlobalEjecutivo && (
+          <div className="flex items-center text-xs text-gray-500 mb-2">
             <Calendar className="h-3 w-3 mr-1" />
             <span>{formatearFecha(prospecto.fecha_contacto)}</span>
           </div>
-        </div>
+        )}
 
         {/* Alertas de seguimiento */}
         {tieneUrgencia && (

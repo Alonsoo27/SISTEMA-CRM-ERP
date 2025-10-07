@@ -133,7 +133,9 @@ class ProspectosController {
             // 🔒 OBTENER ROL Y ID DEL USUARIO ACTUAL
             const usuarioActual = req.user;
             const rolUsuario = usuarioActual?.rol;
-            const idUsuario = usuarioActual?.userId;
+            const idUsuario = usuarioActual?.id || usuarioActual?.userId; // ← FIX: probar ambas propiedades
+
+            console.log('🔍 [DEBUG LISTA] Usuario:', { id: idUsuario, rol: rolUsuario, asesor_id_param: asesor_id });
 
             // Construir query base con JOIN
             let sqlQuery = `
@@ -306,9 +308,11 @@ class ProspectosController {
             const { incluir_modo_libre = false } = req.query;
 
             // 🔒 OBTENER ROL Y ID DEL USUARIO ACTUAL
-            const usuarioActual = req.user;
+            const usuarioActual = req.user || {};
             const rolUsuario = usuarioActual?.rol;
-            const idUsuario = usuarioActual?.userId;
+            const idUsuario = usuarioActual?.id || usuarioActual?.userId; // ← FIX: probar ambas propiedades
+
+            console.log('🔍 [DEBUG KANBAN] Usuario:', { id: idUsuario, rol: rolUsuario, asesorId_param: asesorId });
 
             // 🔒 DETERMINAR QUÉ ASESOR FILTRAR SEGÚN EL ROL
             let asesorIdFinal = asesorId;
@@ -316,7 +320,7 @@ class ProspectosController {
             // Si es VENDEDOR, SIEMPRE filtra por su propio ID (ignora asesorId de parámetros)
             if (rolUsuario === 'VENDEDOR') {
                 asesorIdFinal = idUsuario;
-                console.log(`🔒 VENDEDOR ${idUsuario} - Kanban personal forzado`);
+                console.log(`🔒 VENDEDOR ID ${idUsuario} - Kanban personal forzado. Ignorando parámetro: ${asesorId}`);
             }
             // Si es JEFE/ADMIN y no especifica asesor, ve todos
             else if (!asesorId || asesorId === 'todos') {
@@ -1993,22 +1997,24 @@ static async obtenerPorId(req, res) {
                     distritosProcesados[distrito].conversiones += item.convertido;
                     distritosProcesados[distrito].valor_estimado_total += (item.pipeline || 0) + (item.cerrado || 0);
 
-                    // 🏛️ PROCESAR POR DEPARTAMENTO (para el mapa)
+                    // 🏛️ PROCESAR POR DEPARTAMENTO (para el mapa de PROSPECTOS - INTENCIÓN DE COMPRA)
                     const departamento = distritoADepartamento[distrito.toUpperCase()] || 'OTROS';
                     if (!departamentosProcesados[departamento]) {
                         departamentosProcesados[departamento] = {
                             departamento: departamento,
-                            total_ventas: 0,
+                            total_prospectos: 0, // ✅ Cambiado de total_ventas a total_prospectos
                             conversiones: 0,
-                            ingresos_totales: 0,
+                            valor_estimado_total: 0, // ✅ Cambiado de ingresos_totales a valor_estimado_total
                             ciudades: new Set(),
                             asesores_activos: 1
                         };
                     }
 
-                    departamentosProcesados[departamento].total_ventas += item.convertido;
+                    // ✅ CONTAR TODOS LOS PROSPECTOS (no solo conversiones)
+                    departamentosProcesados[departamento].total_prospectos += item.total;
                     departamentosProcesados[departamento].conversiones += item.convertido;
-                    departamentosProcesados[departamento].ingresos_totales += (item.cerrado || 0); // Solo ventas cerradas
+                    // ✅ SUMAR TODO EL VALOR (pipeline + cerrado) = INTENCIÓN DE COMPRA
+                    departamentosProcesados[departamento].valor_estimado_total += (item.pipeline || 0) + (item.cerrado || 0);
                     departamentosProcesados[departamento].ciudades.add(distrito);
 
                     // 📈 DATOS TEMPORALES
@@ -2059,14 +2065,18 @@ static async obtenerPorId(req, res) {
                 }))
                 .sort((a, b) => b.total_prospectos - a.total_prospectos);
 
-            // 🏛️ PROCESAR DATOS POR DEPARTAMENTOS (para el mapa)
+            // 🏛️ PROCESAR DATOS POR DEPARTAMENTOS (para el mapa de PROSPECTOS)
             const departamentos = Object.values(departamentosProcesados)
                 .map(dept => ({
                     ...dept,
                     ciudades: dept.ciudades.size,
-                    ticket_promedio: dept.total_ventas > 0 ? dept.ingresos_totales / dept.total_ventas : 0
+                    // ✅ Ticket promedio basado en PROSPECTOS (no solo ventas)
+                    ticket_promedio: dept.total_prospectos > 0 ? dept.valor_estimado_total / dept.total_prospectos : 0,
+                    // ✅ Mantener compatibilidad con componente mapa (que espera total_ventas)
+                    total_ventas: dept.total_prospectos,
+                    ingresos_totales: dept.valor_estimado_total
                 }))
-                .sort((a, b) => b.ingresos_totales - a.ingresos_totales);
+                .sort((a, b) => b.valor_estimado_total - a.valor_estimado_total);
 
             // 📈 PROCESAR DATOS TEMPORALES
             const temporales = datosTemporales.reduce((acc, item) => {
