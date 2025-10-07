@@ -54,18 +54,30 @@ const BalanzaSeguimientos = ({ asesorId: asesorIdProp = null, refreshTrigger = 0
 
   // 🎯 CALCULAR VISTA INICIAL SEGÚN ROL (síncrono)
   const getVistaInicial = useCallback(() => {
-    if (!usuarioActual) return null;
+    if (!usuarioActual) {
+      console.log('⚠️ [BalanzaSeguimientos] getVistaInicial: usuarioActual es null');
+      return null;
+    }
 
     const rolUsuario = usuarioActual.rol?.toUpperCase();
+    console.log('🔍 [BalanzaSeguimientos] getVistaInicial:', { rol: rolUsuario, id: usuarioActual.id });
+
     if (rolUsuario === 'VENDEDOR') {
+      console.log('✅ [BalanzaSeguimientos] VENDEDOR detectado, vista inicial:', usuarioActual.id);
       return usuarioActual.id; // VENDEDOR: vista personal
     } else {
-      return asesorIdProp !== undefined ? asesorIdProp : null; // EJECUTIVOS: prop o global
+      const vista = asesorIdProp !== undefined ? asesorIdProp : null;
+      console.log('✅ [BalanzaSeguimientos] EJECUTIVO detectado, vista inicial:', vista);
+      return vista; // EJECUTIVOS: prop o global
     }
   }, [usuarioActual, asesorIdProp]);
 
   // 🎯 Estado interno de vista (inicializado correctamente)
-  const [vistaSeleccionada, setVistaSeleccionada] = useState(getVistaInicial());
+  const [vistaSeleccionada, setVistaSeleccionada] = useState(() => {
+    const inicial = getVistaInicial();
+    console.log('🎬 [BalanzaSeguimientos] useState inicial con vista:', inicial);
+    return inicial;
+  });
 
   // 🔄 Actualizar vista si cambian las dependencias
   useEffect(() => {
@@ -99,10 +111,18 @@ const BalanzaSeguimientos = ({ asesorId: asesorIdProp = null, refreshTrigger = 0
   };
 
   useEffect(() => {
-    // Solo cargar si vistaSeleccionada ya fue inicializada (no es el valor inicial null)
-    // El useEffect de inicialización seteará el valor correcto primero
+    console.log('🔄 [BalanzaSeguimientos] useEffect cargarDatos disparado:', {
+      vistaSeleccionada,
+      refreshTrigger,
+      usuarioActual: usuarioActual?.id,
+      rol: usuarioActual?.rol
+    });
+
+    // Solo cargar si usuarioActual existe
     if (usuarioActual) {
       cargarDatos();
+    } else {
+      console.log('⚠️ [BalanzaSeguimientos] No se carga porque usuarioActual es null');
     }
   }, [vistaSeleccionada, refreshTrigger, usuarioActual]);
 

@@ -2,6 +2,7 @@ const express = require('express');
 const rateLimit = require('express-rate-limit');
 const router = express.Router();
 const ProspectosController = require('../controllers/prospectosController');
+const SeguimientosController = require('../controllers/seguimientosController');
 
 // IMPORTAR MIDDLEWARES JWT
 const { authenticateToken, requireRole, requireOwnership } = require('../../../middleware/auth');
@@ -214,10 +215,24 @@ async function procesarSeguimientos(asesorId = null) {
             p.valor_estimado DESC NULLS LAST
         `;
 
+        console.log('📊 [DEBUG procesarSeguimientos] Query SQL:', sqlQuery);
+        console.log('📊 [DEBUG procesarSeguimientos] Parámetros:', params);
+
         const result = await query(sqlQuery, params);
         const prospectos = result.rows;
 
+        console.log(`📊 [DEBUG procesarSeguimientos] Prospectos encontrados: ${prospectos.length}`);
+        if (prospectos.length > 0) {
+            console.log('📋 [DEBUG] Primeros prospectos:', prospectos.slice(0, 2).map(p => ({
+                id: p.id,
+                codigo: p.codigo,
+                seguimiento_obligatorio: p.seguimiento_obligatorio,
+                asesor_id: p.asesor_id
+            })));
+        }
+
         if (!prospectos || prospectos.length === 0) {
+            console.log('⚠️ [DEBUG] No se encontraron prospectos con seguimiento_obligatorio para asesor:', asesorId);
             return {
                 seguimientos: { proximos: [], vencidos: [], hoy: [] },
                 conteos: { total: 0, pendientes: 0, vencidos: 0, completados_hoy: 0 },
@@ -276,20 +291,40 @@ async function procesarSeguimientos(asesorId = null) {
         let totalVencidos = 0;
         let valorEnRiesgo = 0;
 
-        seguimientosProcesados.forEach(seg => {
+        console.log(`🔄 [DEBUG] Procesando ${seguimientosProcesados.length} seguimientos...`);
+
+        seguimientosProcesados.forEach((seg, index) => {
             const fechaSeg = new Date(seg.fecha_completado || seg.fecha_programada);
+
+            console.log(`📋 [DEBUG] Seguimiento ${index + 1}:`, {
+                prospecto: seg.prospecto_codigo,
+                completado: seg.completado,
+                vencido: seg.vencido,
+                fecha_programada: seg.fecha_programada
+            });
 
             // ✅ CAMBIO IMPORTANTE: Realizados en los últimos 7 días
             if (seg.completado && fechaSeg >= inicioSemana && fechaSeg < finSemana) {
+                console.log(`  ✅ Agregado a realizados_semana`);
                 clasificacion.realizados_semana.push(seg);
                 totalCompletados++;
             } else if (seg.vencido) {
+                console.log(`  ⏰ Agregado a vencidos`);
                 clasificacion.vencidos.push(seg);
                 totalVencidos++;
                 valorEnRiesgo += seg.valor_estimado || 0;
             } else if (!seg.completado) {
+                console.log(`  📅 Agregado a proximos`);
                 clasificacion.proximos.push(seg);
+            } else {
+                console.log(`  ⚠️ NO clasificado`);
             }
+        });
+
+        console.log(`📊 [DEBUG] Clasificación final:`, {
+            proximos: clasificacion.proximos.length,
+            vencidos: clasificacion.vencidos.length,
+            realizados_semana: clasificacion.realizados_semana.length
         });
 
         // 🎯 ORDENAMIENTO INTELIGENTE: Por prioridad y valor
@@ -596,97 +631,18 @@ router.delete('/:id',
 
 // Dashboard principal de seguimientos (sin filtro de asesor)
 // 🔒 FILTRADO AUTOMÁTICO POR ROL (incluso sin parámetro)
+// Usa el nuevo sistema de seguimientos con tabla seguimientos
 router.get('/dashboard/seguimientos',
     requireRole(GRUPOS_ROLES.VENTAS_COMPLETO),
-    async (req, res) => {
-        try {
-            // 🔒 FILTRADO AUTOMÁTICO POR ROL
-            const usuarioActual = req.user;
-            const rolUsuario = usuarioActual?.rol;
-            const idUsuario = usuarioActual?.id || usuarioActual?.userId; // ← FIX: probar ambas propiedades
-
-            console.log('🔍 [DEBUG ROUTE] Usuario:', { id: idUsuario, rol: rolUsuario, user_obj: usuarioActual });
-
-            let asesorIdFinal = null; // Por defecto vista global
-
-            // Si es VENDEDOR, SIEMPRE forzar su propio ID (seguridad)
-            if (rolUsuario === 'VENDEDOR') {
-                asesorIdFinal = idUsuario;
-                console.log(`🔒 VENDEDOR ID ${idUsuario} - Seguimientos personales forzados (sin parámetro)`);
-            }
-            // Si es JEFE/ADMIN/SUPER_ADMIN, vista global
-            else {
-                console.log(`👑 ${rolUsuario} - Vista global de seguimientos (sin parámetro)`);
-            }
-
-            const datosCompletos = await procesarSeguimientos(asesorIdFinal);
-
-            res.json({
-                success: true,
-                data: datosCompletos,
-                message: `Seguimientos procesados: ${datosCompletos.conteos.total} total`
-            });
-
-        } catch (error) {
-            console.error('Error en dashboard seguimientos:', error);
-            res.status(500).json({
-                success: false,
-                error: 'Error al obtener dashboard de seguimientos: ' + error.message
-            });
-        }
-    }
+    SeguimientosController.dashboardSeguimientos
 );
 
 // Dashboard de seguimientos filtrado por asesor
 // 🔒 FILTRADO AUTOMÁTICO POR ROL (sin requireOwnership)
+// Usa el nuevo sistema de seguimientos con tabla seguimientos
 router.get('/dashboard/seguimientos/:asesorId',
     requireRole(GRUPOS_ROLES.VENTAS_COMPLETO),
-    async (req, res) => {
-        try {
-            const { asesorId } = req.params;
-
-            if (!asesorId || isNaN(asesorId)) {
-                return res.status(400).json({
-                    success: false,
-                    error: 'ID de asesor inválido'
-                });
-            }
-
-            // 🔒 FILTRADO AUTOMÁTICO POR ROL
-            const usuarioActual = req.user;
-            const rolUsuario = usuarioActual?.rol;
-            const idUsuario = usuarioActual?.id || usuarioActual?.userId; // ← FIX: probar ambas propiedades
-
-            console.log('🔍 [DEBUG ROUTE CON PARAM] Usuario:', { id: idUsuario, rol: rolUsuario, asesorId_param: asesorId });
-
-            let asesorIdFinal = parseInt(asesorId);
-
-            // Si es VENDEDOR, SIEMPRE forzar su propio ID (seguridad)
-            if (rolUsuario === 'VENDEDOR') {
-                asesorIdFinal = idUsuario;
-                console.log(`🔒 VENDEDOR ID ${idUsuario} - Seguimientos personales forzados. Ignorando parámetro: ${asesorId}`);
-            }
-            // Si es JEFE/ADMIN/SUPER_ADMIN, permitir ver el asesor solicitado
-            else {
-                console.log(`👔 ${rolUsuario} (ID ${idUsuario}) - Viendo seguimientos del asesor ${asesorId}`);
-            }
-
-            const datosCompletos = await procesarSeguimientos(asesorIdFinal);
-
-            res.json({
-                success: true,
-                data: datosCompletos,
-                message: `Seguimientos para asesor ${asesorIdFinal}: ${datosCompletos.conteos.total} encontrados`
-            });
-
-        } catch (error) {
-            console.error('Error en dashboard seguimientos por asesor:', error);
-            res.status(500).json({
-                success: false,
-                error: 'Error al obtener seguimientos por asesor: ' + error.message
-            });
-        }
-    }
+    SeguimientosController.dashboardSeguimientos
 );
 
 // Todos los seguimientos en un solo array

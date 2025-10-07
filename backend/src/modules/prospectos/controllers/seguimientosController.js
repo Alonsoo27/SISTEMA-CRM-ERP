@@ -397,15 +397,17 @@ class SeguimientosController {
     static async obtenerProspectosListos(req, res) {
         try {
             const asesor_id = req.user?.id;
-            
+
             const result = await query(`
                 SELECT p.*, s.resultado, s.fecha_completado, s.completado
                 FROM prospectos p
                 INNER JOIN seguimientos s ON p.id = s.prospecto_id
-                WHERE p.asesor_id = $1 AND p.activo = $2 AND p.convertido = $3 
-                AND s.completado = $4 AND s.resultado = ANY($5::text[])
+                LEFT JOIN ventas v ON p.id = v.prospecto_id
+                WHERE p.asesor_id = $1 AND p.activo = $2
+                AND v.id IS NULL
+                AND s.completado = $3 AND s.resultado = ANY($4::text[])
                 ORDER BY s.fecha_completado DESC
-            `, [asesor_id, true, false, true, RESULTADOS_QUE_CONVIERTEN]);
+            `, [asesor_id, true, true, RESULTADOS_QUE_CONVIERTEN]);
             
             const prospectos = result.rows;
             
@@ -985,6 +987,37 @@ class SeguimientosController {
 
             const seguimientos = seguimientosResult.rows;
 
+            console.log(`📊 [DEBUG pendientes] Seguimientos pendientes encontrados: ${seguimientos.length}`);
+            if (seguimientos.length > 0) {
+                console.log('📋 [DEBUG] Primeros pendientes:', seguimientos.slice(0, 3).map(s => ({
+                    id: s.id,
+                    prospecto: s.codigo,
+                    tipo: s.tipo,
+                    fecha: s.fecha_programada,
+                    completado: s.completado,
+                    visible: s.visible_para_asesor,
+                    asesor_id: s.asesor_id
+                })));
+            } else {
+                console.log('⚠️ [DEBUG] No se encontraron seguimientos pendientes');
+                console.log('🔍 [DEBUG] Query ejecutada:', seguimientosQuery);
+                console.log('🔍 [DEBUG] Parámetros:', seguimientosParams);
+            }
+
+            // Verificar si PROS-041 existe en la BD (debug específico)
+            const pros041Check = await query(`
+                SELECT s.*, p.codigo, p.asesor_id as prospecto_asesor_id
+                FROM seguimientos s
+                INNER JOIN prospectos p ON s.prospecto_id = p.id
+                WHERE p.codigo = $1
+                ORDER BY s.created_at DESC
+                LIMIT 1
+            `, ['PROS-041']);
+
+            if (pros041Check.rows && pros041Check.rows.length > 0) {
+                console.log('🔍 [DEBUG PROS-041] Estado completo en BD:', pros041Check.rows[0]);
+            }
+
             // Obtener seguimientos realizados (último mes) - con filtrado por rol
             const unMesAtras = new Date();
             unMesAtras.setMonth(unMesAtras.getMonth() - 1);
@@ -994,15 +1027,15 @@ class SeguimientosController {
                        p.codigo, p.nombre_cliente, p.empresa, p.telefono, p.estado, p.valor_estimado
                 FROM seguimientos s
                 INNER JOIN prospectos p ON s.prospecto_id = p.id
-                WHERE s.completado_por = $1 AND s.completado = $2
-                AND s.fecha_completado >= $3
-                ORDER BY s.fecha_completado DESC`
+                WHERE s.asesor_id = $1 AND s.completado = $2
+                AND COALESCE(s.fecha_completado, s.updated_at, s.created_at) >= $3
+                ORDER BY COALESCE(s.fecha_completado, s.updated_at, s.created_at) DESC`
                 : `SELECT s.*,
                        p.codigo, p.nombre_cliente, p.empresa, p.telefono, p.estado, p.valor_estimado
                 FROM seguimientos s
                 INNER JOIN prospectos p ON s.prospecto_id = p.id
-                WHERE s.completado = $1 AND s.fecha_completado >= $2
-                ORDER BY s.fecha_completado DESC`;
+                WHERE s.completado = $1 AND COALESCE(s.fecha_completado, s.updated_at, s.created_at) >= $2
+                ORDER BY COALESCE(s.fecha_completado, s.updated_at, s.created_at) DESC`;
 
             const realizadosParams = asesor_id
                 ? [asesor_id, true, unMesAtras.toISOString()]
@@ -1011,12 +1044,44 @@ class SeguimientosController {
             const realizadosResult = await query(realizadosQuery, realizadosParams);
             const seguimientosRealizados = realizadosResult.rows;
 
+            console.log(`📊 [DEBUG realizados] Total seguimientos realizados encontrados: ${seguimientosRealizados.length}`);
+            if (seguimientosRealizados.length > 0) {
+                console.log('📋 [DEBUG] Primeros realizados:', seguimientosRealizados.slice(0, 3).map(s => ({
+                    id: s.id,
+                    prospecto: s.codigo,
+                    completado: s.completado,
+                    fecha_completado: s.fecha_completado,
+                    updated_at: s.updated_at,
+                    created_at: s.created_at,
+                    asesor_id: s.asesor_id
+                })));
+            }
+
             // Calcular realizados última semana (para la balanza)
             const unaSemanaAtras = new Date();
             unaSemanaAtras.setDate(unaSemanaAtras.getDate() - 7);
-            const seguimientosRealizadosSemana = seguimientosRealizados.filter(s =>
-                new Date(s.fecha_completado) >= unaSemanaAtras
-            );
+            const seguimientosRealizadosSemana = seguimientosRealizados.filter(s => {
+                const fechaCompletar = s.fecha_completado || s.updated_at || s.created_at;
+                const esReciente = fechaCompletar && new Date(fechaCompletar) >= unaSemanaAtras;
+
+                if (s.codigo === 'PROS-041') {
+                    console.log('🔍 [DEBUG PROS-041] Clasificación:', {
+                        prospecto: s.codigo,
+                        completado: s.completado,
+                        fecha_completado: s.fecha_completado,
+                        updated_at: s.updated_at,
+                        created_at: s.created_at,
+                        fechaUsada: fechaCompletar,
+                        unaSemanaAtras: unaSemanaAtras.toISOString(),
+                        esReciente,
+                        clasificado: esReciente ? 'realizados_semana' : 'fuera_de_rango'
+                    });
+                }
+
+                return esReciente;
+            });
+
+            console.log(`📊 [DEBUG] Clasificación final: { realizados_mes: ${seguimientosRealizados.length}, realizados_semana: ${seguimientosRealizadosSemana.length} }`);
 
             // Obtener prospectos en modo libre (no filtrar por asesor, es para todos)
             const modoLibreResult = await query(
@@ -1026,21 +1091,26 @@ class SeguimientosController {
             const modoLibre = modoLibreResult.rows;
 
             // Obtener prospectos listos para conversión - con filtrado por rol
+            // Verificar que no tengan venta asociada (LEFT JOIN con v.id IS NULL)
             const listosConversionQuery = asesor_id
                 ? `SELECT p.*, s.resultado, s.fecha_completado, s.completado
                 FROM prospectos p
                 INNER JOIN seguimientos s ON p.id = s.prospecto_id
-                WHERE p.asesor_id = $1 AND p.activo = $2 AND p.convertido = $3
-                AND s.completado = $4 AND s.resultado = ANY($5::text[])`
+                LEFT JOIN ventas v ON p.id = v.prospecto_id
+                WHERE p.asesor_id = $1 AND p.activo = $2
+                AND v.id IS NULL
+                AND s.completado = $3 AND s.resultado = ANY($4::text[])`
                 : `SELECT p.*, s.resultado, s.fecha_completado, s.completado
                 FROM prospectos p
                 INNER JOIN seguimientos s ON p.id = s.prospecto_id
-                WHERE p.activo = $1 AND p.convertido = $2
-                AND s.completado = $3 AND s.resultado = ANY($4::text[])`;
+                LEFT JOIN ventas v ON p.id = v.prospecto_id
+                WHERE p.activo = $1
+                AND v.id IS NULL
+                AND s.completado = $2 AND s.resultado = ANY($3::text[])`;
 
             const listosConversionParams = asesor_id
-                ? [asesor_id, true, false, true, RESULTADOS_QUE_CONVIERTEN]
-                : [true, false, true, RESULTADOS_QUE_CONVIERTEN];
+                ? [asesor_id, true, true, RESULTADOS_QUE_CONVIERTEN]
+                : [true, true, RESULTADOS_QUE_CONVIERTEN];
 
             const listosConversionResult = await query(listosConversionQuery, listosConversionParams);
 
