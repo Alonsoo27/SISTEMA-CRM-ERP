@@ -1386,9 +1386,10 @@ static async obtenerPorId(req, res) {
                 WHERE activo = true AND estado = 'Cerrado' AND fecha_cierre IS NOT NULL
             `;
 
+            let conversionParams = [];
             if (asesorId && asesorId !== 'todos') {
-                conversionQuery += ` AND asesor_id = $${params.length + 1}`;
-                params.push(asesorId);
+                conversionQuery += ` AND asesor_id = $1`;
+                conversionParams.push(asesorId);
             }
 
             // 🚨 CONSULTA ADICIONAL: Seguimientos pendientes
@@ -1399,15 +1400,17 @@ static async obtenerPorId(req, res) {
                 WHERE s.completado = false AND p.activo = true
             `;
 
+            let seguimientosParams = [];
             if (asesorId && asesorId !== 'todos') {
                 seguimientosQuery += ` AND p.asesor_id = $1`;
+                seguimientosParams.push(asesorId);
             }
 
             // 🚀 EJECUTAR TODAS LAS CONSULTAS EN PARALELO para máximo rendimiento
             const [metricsResult, conversionResult, seguimientosResult] = await Promise.all([
                 query(metricsQuery, params.slice(0, paramIndex - 1)),
-                query(conversionQuery, asesorId && asesorId !== 'todos' ? [asesorId] : []),
-                query(seguimientosQuery, asesorId && asesorId !== 'todos' ? [asesorId] : [])
+                query(conversionQuery, conversionParams),
+                query(seguimientosQuery, seguimientosParams)
             ]);
 
             const metricsData = metricsResult.rows || [];
@@ -1501,11 +1504,21 @@ static async obtenerPorId(req, res) {
         } catch (error) {
             logger.error('Error en obtenerMetricasFresh optimizada:', error);
 
-            // 🔄 FALLBACK: Si falla la consulta optimizada, usar método simple
+            // 🔄 FALLBACK: Si falla la consulta optimizada, usar método simple CON FILTRO
             logger.warn('Usando fallback para métricas básicas...');
 
-            const simpleQuery = 'SELECT estado, valor_estimado FROM prospectos WHERE activo = true';
-            const result = await query(simpleQuery);
+            let simpleQuery = 'SELECT estado, valor_estimado FROM prospectos WHERE activo = true';
+            let fallbackParams = [];
+
+            if (asesorId && asesorId !== 'todos') {
+                simpleQuery += ' AND asesor_id = $1';
+                fallbackParams.push(asesorId);
+                logger.info(`🔒 Fallback filtrando por asesor ${asesorId}`);
+            } else {
+                logger.info(`📊 Fallback sin filtro de asesor (vista global)`);
+            }
+
+            const result = await query(simpleQuery, fallbackParams);
             const data = result.rows || [];
 
             const total = data.length;
