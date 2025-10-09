@@ -10,7 +10,9 @@ const {
     getVistaEquipo,
     iniciarCampana,
     finalizarCampana,
-    getCampanaActiva
+    getCampanaActiva,
+    getMisCampanasActivas,  // ← Nuevo
+    agregarLineaCampana      // ← Nuevo
 } = require('../controllers/CampanasAsesorController');
 
 const { authenticateToken, requireRole } = require('../../../middleware/auth');
@@ -27,18 +29,32 @@ router.get('/mis-campanas',
     getMisCampanas
 );
 
-// Obtener campaña activa actual
+// Obtener campaña activa actual (una sola - legacy)
 router.get('/campana-activa',
     authenticateToken,
     requireRole(GRUPOS_ROLES.VENTAS_COMPLETO),
     getCampanaActiva
 );
 
-// Iniciar nueva campaña
+// ✅ Obtener TODAS mis campañas activas
+router.get('/activas',
+    authenticateToken,
+    requireRole(GRUPOS_ROLES.VENTAS_COMPLETO),
+    getMisCampanasActivas
+);
+
+// Iniciar nueva campaña (legacy - mantener por compatibilidad)
 router.post('/iniciar',
     authenticateToken,
     requireRole(GRUPOS_ROLES.VENTAS_COMPLETO),
     iniciarCampana
+);
+
+// ✅ Agregar nueva línea de campaña
+router.post('/agregar-linea',
+    authenticateToken,
+    requireRole(GRUPOS_ROLES.VENTAS_COMPLETO),
+    agregarLineaCampana
 );
 
 // Finalizar campaña

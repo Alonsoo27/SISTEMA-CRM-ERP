@@ -2,9 +2,10 @@
 import React, { useState, useEffect } from 'react';
 import {
   X, MessageSquare, Phone, Instagram, Mic,
-  Save, AlertCircle, CheckCircle, Target, ChevronDown
+  Save, AlertCircle, CheckCircle, Target, ChevronDown, Settings
 } from 'lucide-react';
 import { API_CONFIG } from '../../../config/apiConfig';
+import ModalGestionarCampanas from './ModalGestionarCampanas'; // ← Nuevo
 
 const ModalCheckIn = ({ 
   isOpen, 
@@ -19,7 +20,8 @@ const ModalCheckIn = ({
     mensajes_tiktok: 0,
     notas_check_in: '',
     en_campana: false,
-    producto_campana: ''
+    producto_campana: '', // ← Mantener para backward compatibility
+    lineas_campanas: [] // ← Nuevo: array de líneas
   });
 
   const [errors, setErrors] = useState({});
@@ -27,11 +29,15 @@ const ModalCheckIn = ({
   const [loadingLineas, setLoadingLineas] = useState(false);
   const [campanaActiva, setCampanaActiva] = useState(null);
 
-  // Cargar líneas de productos y campaña activa cuando se abre el modal
+  // ✅ NUEVOS ESTADOS para gestión de campañas
+  const [campanasActivas, setCampanasActivas] = useState([]);
+  const [modalGestionarOpen, setModalGestionarOpen] = useState(false);
+
+  // Cargar líneas de productos y campañas activas cuando se abre el modal
   useEffect(() => {
     if (isOpen) {
       cargarLineasProductos();
-      cargarCampanaActiva();
+      cargarCampanasActivas(); // ← Cambiado
     } else {
       // Reset del formulario cuando se cierra el modal
       setFormData({
@@ -41,9 +47,11 @@ const ModalCheckIn = ({
         mensajes_tiktok: 0,
         notas_check_in: '',
         en_campana: false,
-        producto_campana: ''
+        producto_campana: '',
+        lineas_campanas: []
       });
       setCampanaActiva(null);
+      setCampanasActivas([]);
       setErrors({});
     }
   }, [isOpen]);
@@ -71,10 +79,10 @@ const ModalCheckIn = ({
     }
   };
 
-  const cargarCampanaActiva = async () => {
+  // ✅ ACTUALIZADO: Cargar TODAS las campañas activas
+  const cargarCampanasActivas = async () => {
     try {
-      // Consultar campaña activa del asesor en el nuevo sistema
-      const response = await fetch(`${API_CONFIG.BASE_URL}/api/campanas-asesor/campana-activa`, {
+      const response = await fetch(`${API_CONFIG.BASE_URL}/api/campanas-asesor/activas`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`,
           'Content-Type': 'application/json'
@@ -84,27 +92,22 @@ const ModalCheckIn = ({
       if (response.ok) {
         const data = await response.json();
         if (data.success && data.data) {
-          const campana = data.data;
+          setCampanasActivas(data.data);
 
-          setCampanaActiva({
-            id: campana.id,
-            nombre_campana: campana.nombre_campana,
-            linea_producto: campana.linea_producto,
-            fecha_inicio: campana.fecha_inicio,
-            dias_trabajados: campana.dias_trabajados,
-            total_mensajes: campana.total_mensajes
-          });
+          // Si tiene campañas activas, marcar checkbox automáticamente
+          if (data.data.length > 0) {
+            const lineasActivas = data.data.map(c => c.linea_producto);
 
-          // Pre-cargar en el formulario
-          setFormData(prev => ({
-            ...prev,
-            en_campana: true,
-            producto_campana: campana.linea_producto || ''
-          }));
+            setFormData(prev => ({
+              ...prev,
+              en_campana: true,
+              lineas_campanas: lineasActivas
+            }));
+          }
         }
       }
     } catch (error) {
-      console.error('Error cargando campaña activa:', error);
+      console.error('Error cargando campañas activas:', error);
     }
   };
 
@@ -145,13 +148,11 @@ const ModalCheckIn = ({
       newErrors.notas_check_in = 'No puede exceder 500 caracteres';
     }
 
-    // Validar línea de producto si está en campaña
-    if (formData.en_campana && !formData.producto_campana.trim()) {
-      newErrors.producto_campana = 'Debes especificar la línea de producto';
-    }
-
-    if (formData.producto_campana && formData.producto_campana.length > 100) {
-      newErrors.producto_campana = 'No puede exceder 100 caracteres';
+    // ✅ ACTUALIZADO: Validar líneas de campaña (array)
+    if (formData.en_campana) {
+      if (!formData.lineas_campanas || formData.lineas_campanas.length === 0) {
+        newErrors.lineas_campanas = 'Debes seleccionar al menos una línea de producto';
+      }
     }
 
     setErrors(newErrors);
@@ -372,43 +373,99 @@ const ModalCheckIn = ({
                 </label>
               </div>
 
-              {/* Campo condicional de línea de producto */}
+              {/* ✅ NUEVO: Botón de gestión si tiene campañas activas, checkboxes si no */}
               {formData.en_campana && (
                 <div className="ml-6 bg-purple-50 border border-purple-200 rounded-lg p-3">
-                  <label className="block text-sm font-medium text-purple-800 mb-2">
-                    Línea de producto de la campaña
-                  </label>
-                  <div className="relative">
-                    <select
-                      value={formData.producto_campana}
-                      onChange={(e) => handleInputChange('producto_campana', e.target.value)}
-                      className={`w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-purple-500 focus:border-transparent appearance-none bg-white ${
-                        errors.producto_campana ? 'border-red-300' : 'border-purple-300'
-                      }`}
-                      disabled={loading || loadingLineas}
-                    >
-                      <option value="">Selecciona una línea de producto...</option>
-                      {lineasProductos.map((linea) => (
-                        <option key={linea.value} value={linea.value}>
-                          {linea.label} ({linea.productos_count} productos)
-                        </option>
-                      ))}
-                    </select>
-                    <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-purple-400 pointer-events-none" />
-                  </div>
-                  {loadingLineas && (
-                    <p className="text-purple-600 text-xs mt-1 flex items-center">
-                      <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-purple-600 mr-1"></div>
-                      Cargando líneas...
-                    </p>
-                  )}
-                  {errors.producto_campana && (
-                    <p className="text-red-600 text-xs mt-1">{errors.producto_campana}</p>
-                  )}
-                  {!loadingLineas && lineasProductos.length === 0 && (
-                    <p className="text-amber-600 text-xs mt-1">
-                      ⚠️ No se pudieron cargar las líneas de productos
-                    </p>
+                  {campanasActivas.length > 0 ? (
+                    // Tiene campañas activas → Mostrar botón de gestión
+                    <>
+                      <div className="mb-3">
+                        <p className="text-sm font-medium text-purple-800 mb-2">
+                          Campañas activas: <span className="font-bold">{campanasActivas.length}</span>
+                        </p>
+                        <div className="flex flex-wrap gap-2">
+                          {campanasActivas.map((campana) => (
+                            <span
+                              key={campana.id}
+                              className="inline-flex items-center px-2 py-1 bg-purple-100 text-purple-700 text-xs font-medium rounded"
+                            >
+                              {campana.linea_producto}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setModalGestionarOpen(true)}
+                        className="w-full bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white py-2 px-4 rounded-lg font-medium transition-all flex items-center justify-center space-x-2"
+                      >
+                        <Settings className="h-4 w-4" />
+                        <span>Gestionar mis campañas</span>
+                      </button>
+                    </>
+                  ) : (
+                    // No tiene campañas activas → Mostrar checkboxes para iniciar
+                    <>
+                      <label className="block text-sm font-medium text-purple-800 mb-3">
+                        ¿En qué líneas de producto estás trabajando? (puedes seleccionar varias)
+                      </label>
+
+                      {loadingLineas ? (
+                        <p className="text-purple-600 text-xs flex items-center">
+                          <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-purple-600 mr-2"></div>
+                          Cargando líneas...
+                        </p>
+                      ) : lineasProductos.length === 0 ? (
+                        <p className="text-amber-600 text-xs">
+                          ⚠️ No se pudieron cargar las líneas de productos
+                        </p>
+                      ) : (
+                        <div className="space-y-2 max-h-48 overflow-y-auto">
+                          {lineasProductos.map((linea) => (
+                            <label
+                              key={linea.value}
+                              className="flex items-center p-2 hover:bg-purple-100 rounded cursor-pointer transition-colors"
+                            >
+                              <input
+                                type="checkbox"
+                                checked={formData.lineas_campanas.includes(linea.value)}
+                                onChange={(e) => {
+                                  const nuevasLineas = e.target.checked
+                                    ? [...formData.lineas_campanas, linea.value]
+                                    : formData.lineas_campanas.filter(l => l !== linea.value);
+                                  handleInputChange('lineas_campanas', nuevasLineas);
+
+                                  // Actualizar producto_campana para backward compatibility
+                                  if (nuevasLineas.length === 1) {
+                                    handleInputChange('producto_campana', nuevasLineas[0]);
+                                  } else {
+                                    handleInputChange('producto_campana', '');
+                                  }
+                                }}
+                                className="w-4 h-4 text-purple-600 bg-white border-purple-300 rounded focus:ring-purple-500 focus:ring-2"
+                                disabled={loading}
+                              />
+                              <span className="ml-3 text-sm text-gray-800">
+                                <span className="font-medium">{linea.label}</span>
+                                <span className="text-gray-500 ml-2">({linea.productos_count} productos)</span>
+                              </span>
+                            </label>
+                          ))}
+                        </div>
+                      )}
+
+                      {formData.lineas_campanas.length > 0 && (
+                        <div className="mt-3 bg-white border border-purple-300 rounded p-2">
+                          <p className="text-xs text-purple-800 font-medium">
+                            Seleccionadas: {formData.lineas_campanas.join(', ')}
+                          </p>
+                        </div>
+                      )}
+
+                      {errors.lineas_campanas && (
+                        <p className="text-red-600 text-xs mt-2">{errors.lineas_campanas}</p>
+                      )}
+                    </>
                   )}
                 </div>
               )}
@@ -484,6 +541,16 @@ const ModalCheckIn = ({
           </div>
         </form>
       </div>
+
+      {/* ✅ NUEVO: Modal de gestión de campañas */}
+      <ModalGestionarCampanas
+        isOpen={modalGestionarOpen}
+        onClose={() => setModalGestionarOpen(false)}
+        onCampanasActualizadas={() => {
+          // Recargar campañas activas después de cambios
+          cargarCampanasActivas();
+        }}
+      />
     </div>
   );
 };

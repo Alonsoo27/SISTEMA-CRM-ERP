@@ -253,6 +253,19 @@ const cargarDatosProspectoCompletos = async (prospectoId) => {
       newErrors.probabilidad_cierre = 'Debe ser entre 0 y 100';
     }
 
+    // Validar cantidades de productos
+    const productosInvalidos = formData.productos_interes.filter(producto => {
+      if (typeof producto === 'object' && producto.tipo === 'catalogo' && producto.precio_sin_igv) {
+        const cantidad = parseFloat(producto.cantidad_estimada);
+        return isNaN(cantidad) || cantidad < 0.0001;
+      }
+      return false;
+    });
+
+    if (productosInvalidos.length > 0) {
+      newErrors.productos_interes = 'Todos los productos deben tener una cantidad válida (mínimo 0.0001)';
+    }
+
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -310,7 +323,7 @@ const cargarDatosProspectoCompletos = async (prospectoId) => {
     return formData.productos_interes.reduce((total, producto) => {
       if (typeof producto === 'object' && producto.precio_sin_igv) {
         const precio = parseFloat(producto.precio_sin_igv) || 0;
-        const cantidad = parseInt(producto.cantidad_estimada) || 1;
+        const cantidad = parseFloat(producto.cantidad_estimada) || 1;
         const valorLinea = precio * cantidad;
         return total + valorLinea;
       }
@@ -320,17 +333,17 @@ const cargarDatosProspectoCompletos = async (prospectoId) => {
 
   // FUNCIÓN CORREGIDA - Actualizar cantidad de producto
   const actualizarCantidadProducto = (productoId, nuevaCantidad) => {
-    const cantidad = Math.max(1, parseInt(nuevaCantidad) || 1);
-    
+    // Mantener como string para permitir edición fluida (incluyendo "0", "0.", etc)
     setFormData(prev => ({
       ...prev,
       productos_interes: prev.productos_interes.map(producto => {
         if (typeof producto === 'object' && producto.id === productoId) {
           const precio = parseFloat(producto.precio_sin_igv) || 0;
-          const valorLinea = precio * cantidad;
+          const cantidadCalculo = parseFloat(nuevaCantidad) || 0;
+          const valorLinea = precio * cantidadCalculo;
           return {
             ...producto,
-            cantidad_estimada: cantidad,
+            cantidad_estimada: nuevaCantidad, // Mantener como string
             valor_linea: valorLinea
           };
         }
@@ -864,8 +877,9 @@ const cargarDatosProspectoCompletos = async (prospectoId) => {
                                 <span className="text-xs text-gray-500">Cantidad:</span>
                                 <input
                                   type="number"
-                                  min="1"
-                                  value={producto.cantidad_estimada || 1}
+                                  min="0.0001"
+                                  step="0.0001"
+                                  value={producto.cantidad_estimada ?? ''}
                                   onChange={(e) => actualizarCantidadProducto(producto.id, e.target.value)}
                                   className="w-16 px-2 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
                                 />
@@ -917,6 +931,16 @@ const cargarDatosProspectoCompletos = async (prospectoId) => {
                 <Package className="h-8 w-8 mx-auto mb-2 text-gray-400" />
                 <p className="text-sm">No hay productos de interés agregados</p>
                 <p className="text-xs">Busca en el catálogo o agrega productos personalizados</p>
+              </div>
+            )}
+
+            {/* Mensaje de error de validación */}
+            {errors.productos_interes && (
+              <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg">
+                <p className="text-red-800 text-sm flex items-center">
+                  <AlertCircle className="h-4 w-4 mr-2" />
+                  {errors.productos_interes}
+                </p>
               </div>
             )}
           </div>

@@ -52,7 +52,10 @@
       "Bash(fc /N \"C:\\Users\\SUS\\Documents\\SISTEMA-CRM-ERP\\backend\\src\\modules\\ventas\\controllers\\ActividadDiariaController.js\" \"C:\\temp\\github_actividad.js\")",
       "Bash(fc /N \"C:\\Users\\SUS\\Documents\\SISTEMA-CRM-ERP\\backend\\src\\modules\\ventas\\controllers\\CampanasAsesorController.js\" \"C:\\temp\\github_campanas.js\")",
       "Bash(ConvertTo-Json -Depth 5)",
-      "Bash(powershell -Command \"(Get-Content prospectosRoutes.js) -replace ''requireRole\\(\\[ROLES\\.VENDEDOR, ROLES\\.ADMIN, ROLES\\.JEFE_VENTAS, ROLES\\.SUPER_ADMIN\\]\\)'', ''requireRole(GRUPOS_ROLES.VENTAS_COMPLETO)'' | Set-Content prospectosRoutes_temp.js\")"
+      "Bash(powershell -Command \"(Get-Content prospectosRoutes.js) -replace ''requireRole\\(\\[ROLES\\.VENDEDOR, ROLES\\.ADMIN, ROLES\\.JEFE_VENTAS, ROLES\\.SUPER_ADMIN\\]\\)'', ''requireRole(GRUPOS_ROLES.VENTAS_COMPLETO)'' | Set-Content prospectosRoutes_temp.js\")",
+      "Bash(Select-Object -ExpandProperty data)",
+      "Bash(Select-Object -ExpandProperty jornada)",
+      "Bash(Select-Object hora_check_in, hora_check_out)"
     ],
     "deny": [],
     "ask": []

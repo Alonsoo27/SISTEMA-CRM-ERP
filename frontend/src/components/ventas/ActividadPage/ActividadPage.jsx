@@ -9,6 +9,7 @@ import actividadService from '../../../services/actividadService';
 import ModalCheckIn from './ModalCheckIn';
 import ModalCheckOut from './ModalCheckOut';
 import ModalCheckOutPendiente from './ModalCheckOutPendiente';
+import ModalDistribucionCampanas from './ModalDistribucionCampanas'; // ← Nuevo
 
 const ActividadPage = () => {
   const [estado, setEstado] = useState(null);
@@ -18,6 +19,10 @@ const ActividadPage = () => {
   const [modalCheckOutOpen, setModalCheckOutOpen] = useState(false);
   const [showHistorial, setShowHistorial] = useState(false);
   const [notification, setNotification] = useState(null);
+
+  // ✅ NUEVOS ESTADOS para distribución de campañas
+  const [modalDistribucionOpen, setModalDistribucionOpen] = useState(false);
+  const [datosDistribucion, setDatosDistribucion] = useState(null);
 
   // 🕐 NUEVOS ESTADOS PARA CONTADOR EN TIEMPO REAL
   const [tiempoTranscurrido, setTiempoTranscurrido] = useState('00:00:00');
@@ -414,10 +419,11 @@ const ActividadPage = () => {
                   <div className={`text-2xl font-bold mb-1 ${
                     checkInRealizado ? 'text-green-700' : 'text-gray-400'
                   }`}>
-                    {estado.jornada?.hora_check_in ? 
+                    {estado.jornada?.hora_check_in ?
                       new Date(estado.jornada.hora_check_in).toLocaleTimeString('es-PE', {
                         hour: '2-digit',
-                        minute: '2-digit'
+                        minute: '2-digit',
+                        timeZone: 'America/Lima'
                       }) : '--:--'
                     }
                   </div>
@@ -449,10 +455,11 @@ const ActividadPage = () => {
                   <div className={`text-2xl font-bold mb-1 ${
                     checkOutRealizado ? 'text-blue-700' : 'text-gray-400'
                   }`}>
-                    {estado.jornada?.hora_check_out ? 
+                    {estado.jornada?.hora_check_out ?
                       new Date(estado.jornada.hora_check_out).toLocaleTimeString('es-PE', {
                         hour: '2-digit',
-                        minute: '2-digit'
+                        minute: '2-digit',
+                        timeZone: 'America/Lima'
                       }) : '--:--'
                     }
                   </div>
@@ -479,7 +486,26 @@ const ActividadPage = () => {
                 
                 {puedeCheckOut && (
                   <button
-                    onClick={() => setModalCheckOutOpen(true)}
+                    onClick={() => {
+                      // ✅ NUEVO: Verificar si tiene múltiples campañas
+                      const lineasCampanas = estado?.jornada?.lineas_campanas || [];
+                      const enCampana = estado?.jornada?.en_campana || false;
+
+                      if (enCampana && lineasCampanas.length > 1) {
+                        // Mostrar modal de distribución PRIMERO
+                        setModalDistribucionOpen(true);
+                      } else {
+                        // Check-out directo si tiene 0 o 1 campaña
+                        if (enCampana && lineasCampanas.length === 1) {
+                          // Auto-asignar 100% a la única campaña
+                          setDatosDistribucion({
+                            distribucion: { [lineasCampanas[0]]: 100 },
+                            mensajes_adicionales: { meta: 0, whatsapp: 0, instagram: 0, tiktok: 0 }
+                          });
+                        }
+                        setModalCheckOutOpen(true);
+                      }
+                    }}
                     className="flex-1 bg-gradient-to-r from-blue-500 to-blue-600 text-white py-3 px-4 rounded-lg font-medium hover:from-blue-600 hover:to-blue-700 transition-all shadow-md hover:shadow-lg flex items-center justify-center space-x-2"
                   >
                     <Square className="h-4 w-4" />
@@ -647,14 +673,46 @@ const ActividadPage = () => {
         }}
       />
 
+      {/* ✅ NUEVO: Modal de distribución de campañas */}
+      <ModalDistribucionCampanas
+        isOpen={modalDistribucionOpen}
+        lineasCampanas={estado?.jornada?.lineas_campanas || []}
+        mensajesCheckIn={
+          (estado?.actividad?.mensajes_meta || 0) +
+          (estado?.actividad?.mensajes_whatsapp || 0) +
+          (estado?.actividad?.mensajes_instagram || 0) +
+          (estado?.actividad?.mensajes_tiktok || 0)
+        }
+        onConfirm={(distribucion, mensajesAdicionales) => {
+          setDatosDistribucion({ distribucion, mensajes_adicionales: mensajesAdicionales });
+          setModalDistribucionOpen(false);
+          setModalCheckOutOpen(true); // Ahora sí abrir modal de check-out
+        }}
+        onCancel={() => {
+          setModalDistribucionOpen(false);
+          setDatosDistribucion(null);
+        }}
+      />
+
       <ModalCheckOut
         isOpen={modalCheckOutOpen}
-        onClose={() => setModalCheckOutOpen(false)}
+        onClose={() => {
+          setModalCheckOutOpen(false);
+          setDatosDistribucion(null); // Limpiar datos al cerrar
+        }}
         onSubmit={async (data) => {
           try {
-            const response = await actividadService.checkOut(data);
+            // ✅ INCLUIR datos de distribución si existen
+            const payload = {
+              ...data,
+              distribucion_campanas: datosDistribucion?.distribucion || null,
+              mensajes_adicionales: datosDistribucion?.mensajes_adicionales || null
+            };
+
+            const response = await actividadService.checkOut(payload);
             if (response.success) {
               handleCheckOutSuccess(response.data);
+              setDatosDistribucion(null); // Limpiar después de éxito
             } else {
               throw new Error(response.error);
             }

@@ -1294,9 +1294,9 @@ router.put('/clientes/:id', authenticateToken, requireVentasWrite, ClientesContr
 
 /**
  * DELETE /api/ventas/clientes/:id
- * Eliminar cliente (soft delete)
+ * Eliminar cliente (soft delete) - Solo jefes y ejecutivos
  */
-router.delete('/clientes/:id', authenticateToken, requireVentasWrite, ClientesController.eliminar);
+router.delete('/clientes/:id', authenticateToken, requireRole(PERMISOS_OPERACION.ELIMINACION.VENTAS), ClientesController.eliminar);
 
 
 // ============================================
@@ -1318,7 +1318,8 @@ router.get('/', authenticateToken, requireVentasAccess, VentasController.listarV
 router.post('/', authenticateToken, requireVentasWrite, VentasController.crearVenta);
 router.get('/:id', authenticateToken, requireVentasAccess, VentasController.obtenerVenta);
 router.put('/:id', authenticateToken, requireVentasWrite, VentasController.actualizarVenta);
-router.delete('/:id', authenticateToken, requireVentasWrite, VentasController.eliminarVenta);
+// Solo jefes y ejecutivos pueden eliminar ventas
+router.delete('/:id', authenticateToken, requireRole(PERMISOS_OPERACION.ELIMINACION.VENTAS), VentasController.eliminarVenta);
 
 // ============================================
 // GESTIÓN DE ESTADOS (CON PARÁMETROS)

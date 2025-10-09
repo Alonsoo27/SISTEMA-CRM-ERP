@@ -33,7 +33,8 @@ const ModalCheckOutPendiente = ({ jornadaPendiente, onComplete, onCancel }) => {
     const formatearHora = (fechaHora) => {
         return new Date(fechaHora).toLocaleTimeString('es-PE', {
             hour: '2-digit',
-            minute: '2-digit'
+            minute: '2-digit',
+            timeZone: 'America/Lima'
         });
     };
 

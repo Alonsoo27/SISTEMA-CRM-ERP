@@ -648,7 +648,9 @@ const ActividadPageEnhanced = () => {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-gray-600">Puntualidad</p>
-                <p className="text-2xl font-bold text-purple-600">95%</p>
+                <p className="text-2xl font-bold text-purple-600">
+                  {estado?.estadisticas?.tasa_puntualidad || '--'}%
+                </p>
               </div>
               <Award className="h-8 w-8 text-purple-600" />
             </div>
@@ -678,7 +680,8 @@ const ActividadPageEnhanced = () => {
                 {estado?.jornada?.hora_check_in ?
                   new Date(estado.jornada.hora_check_in).toLocaleTimeString('es-PE', {
                     hour: '2-digit',
-                    minute: '2-digit'
+                    minute: '2-digit',
+                    timeZone: 'America/Lima'
                   }) : '--:--'
                 }
               </p>
@@ -690,7 +693,8 @@ const ActividadPageEnhanced = () => {
                 {estado?.jornada?.hora_check_out ?
                   new Date(estado.jornada.hora_check_out).toLocaleTimeString('es-PE', {
                     hour: '2-digit',
-                    minute: '2-digit'
+                    minute: '2-digit',
+                    timeZone: 'America/Lima'
                   }) : '--:--'
                 }
               </p>

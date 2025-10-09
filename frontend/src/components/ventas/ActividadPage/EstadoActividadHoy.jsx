@@ -68,7 +68,8 @@ const EstadoActividadHoy = ({ onCheckIn, onCheckOut, onViewDetails }) => {
         if (!fechaHora) return '--:--';
         return new Date(fechaHora).toLocaleTimeString('es-PE', {
             hour: '2-digit',
-            minute: '2-digit'
+            minute: '2-digit',
+            timeZone: 'America/Lima'
         });
     };
 
@@ -106,7 +107,8 @@ const EstadoActividadHoy = ({ onCheckIn, onCheckOut, onViewDetails }) => {
                 <div className="text-sm text-gray-500">
                     {estadoActividad?.horarios?.hora_actual || horaActual.toLocaleTimeString('es-PE', {
                         hour: '2-digit',
-                        minute: '2-digit'
+                        minute: '2-digit',
+                        timeZone: 'America/Lima'
                     })}
                 </div>
             </div>

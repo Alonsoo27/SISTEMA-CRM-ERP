@@ -260,12 +260,12 @@ exports.getEstadoHoy = async (req, res) => {
         console.log('- fechaHoy calculada (Lima):', fechaHoy);
         console.log('- Hora actual Lima:', horaActualLima);
         
-        // ✅ CORRECCIÓN 2: Consulta con fecha Lima y timestamps convertidos
+        // ✅ CORRECCIÓN 2: Consulta con fecha Lima (timestamps ya están en hora Lima)
         const actividadResult = await query(`
             SELECT
                 id, fecha,
-                check_in_time AT TIME ZONE 'UTC' AT TIME ZONE 'America/Lima' as check_in_time,
-                check_out_time AT TIME ZONE 'UTC' AT TIME ZONE 'America/Lima' as check_out_time,
+                check_in_time,
+                check_out_time,
                 estado_jornada,
                 created_at, updated_at,
                 mensajes_meta + mensajes_whatsapp + mensajes_instagram + mensajes_tiktok as total_mensajes_recibidos,
@@ -290,7 +290,7 @@ exports.getEstadoHoy = async (req, res) => {
         const jornadaPendienteResult = await query(`
             SELECT
                 id, fecha,
-                check_in_time AT TIME ZONE 'UTC' AT TIME ZONE 'America/Lima' as check_in_time,
+                check_in_time,
                 estado_jornada,
                 mensajes_meta + mensajes_whatsapp + mensajes_instagram + mensajes_tiktok as total_mensajes_recibidos,
                 llamadas_realizadas + llamadas_recibidas as total_llamadas
@@ -315,6 +315,28 @@ exports.getEstadoHoy = async (req, res) => {
         }
 
         const actividad = actividadResult.rows[0];
+
+        // ✅ NUEVA FUNCIONALIDAD: Calcular estadísticas generales (últimos 30 días)
+        const estadisticasResult = await query(`
+            SELECT
+                COUNT(*) as dias_trabajados,
+                SUM(CASE WHEN estado_entrada = 'puntual' THEN 1 ELSE 0 END) as dias_puntuales,
+                AVG(CASE
+                    WHEN check_in_time IS NOT NULL AND check_out_time IS NOT NULL THEN
+                        EXTRACT(EPOCH FROM (check_out_time - check_in_time)) / 3600.0
+                    ELSE 0
+                END) as promedio_horas
+            FROM actividad_diaria
+            WHERE usuario_id = $1
+                AND fecha >= $2
+                AND fecha <= $3
+                AND check_in_time IS NOT NULL
+        `, [userId, new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], fechaHoy]);
+
+        const estadisticas = estadisticasResult.rows[0] || {};
+        const tasa_puntualidad = estadisticas.dias_trabajados > 0
+            ? Math.round((estadisticas.dias_puntuales / estadisticas.dias_trabajados) * 100)
+            : 0;
 
         // ✅ CORRECCIÓN 3: Lógica de reset diario mejorada
         const checkInRealizado = !!(actividad?.check_in_time);
@@ -393,6 +415,11 @@ exports.getEstadoHoy = async (req, res) => {
                     total_mensajes: estado.total_mensajes,
                     total_llamadas: estado.total_llamadas
                 },
+                estadisticas: {
+                    tasa_puntualidad: tasa_puntualidad,
+                    promedio_horas: parseFloat(estadisticas.promedio_horas || 0).toFixed(1),
+                    dias_trabajados: parseInt(estadisticas.dias_trabajados || 0)
+                },
                 horarios: {
                     hora_actual: new Date().toLocaleTimeString('es-PE'),
                     ventana_check_in: obtenerHorariosPermitidos().check_in,
@@ -432,7 +459,7 @@ exports.getEstadoHoy = async (req, res) => {
 // ============================================
 exports.checkIn = async (req, res) => {
     const startTime = Date.now();
-    
+
     try {
         logRequest('checkIn', req);
 
@@ -443,7 +470,8 @@ exports.checkIn = async (req, res) => {
             mensajes_tiktok = 0,
             notas_check_in = '',
             en_campana = false,
-            producto_campana = ''
+            producto_campana = '', // ← Mantener para backward compatibility
+            lineas_campanas = [] // ← Nuevo: array de líneas
         } = req.body;
 
         const userId = req.user.id;
@@ -471,6 +499,17 @@ exports.checkIn = async (req, res) => {
             mensajes_meta, mensajes_whatsapp, mensajes_instagram, mensajes_tiktok
         });
         validaciones.push(...validacionesMensajes);
+
+        // ✅ NUEVA VALIDACIÓN: lineas_campanas
+        if (en_campana) {
+            // Determinar qué usar: nuevo formato (array) o legacy (string)
+            const lineasFinales = lineas_campanas.length > 0 ? lineas_campanas :
+                                  producto_campana ? [producto_campana] : [];
+
+            if (lineasFinales.length === 0) {
+                validaciones.push('Debes seleccionar al menos una línea de campaña');
+            }
+        }
 
         if (validaciones.length > 0) {
             return res.status(400).json({
@@ -519,27 +558,33 @@ exports.checkIn = async (req, res) => {
 
         console.log(`📝 Check-in: ${hora}:${minutos.toString().padStart(2, '0')} → ${estado_entrada} (${minutos_tardanza} min tardanza)`);
 
-        // Obtener campaña activa si está marcando en_campana
+        // ✅ NUEVO: Determinar líneas finales (soporte para múltiples campañas)
+        const lineasFinales = lineas_campanas.length > 0 ? lineas_campanas :
+                              producto_campana ? [producto_campana] : [];
+
+        // ✅ BACKWARD COMPATIBILITY: Mantener campana_asesor_id para campaña única
         let campanaAsesorId = null;
-        if (en_campana && producto_campana) {
+        if (en_campana && lineasFinales.length === 1) {
             const campanaActiva = await query(`
                 SELECT id FROM campanas_asesor
                 WHERE usuario_id = $1
                   AND linea_producto = $2
                   AND estado = 'activa'
                 LIMIT 1
-            `, [userId, producto_campana]);
+            `, [userId, lineasFinales[0]]);
 
             if (campanaActiva.rows.length > 0) {
                 campanaAsesorId = campanaActiva.rows[0].id;
             }
         }
 
-        // Realizar check-in
+        console.log(`📊 Campañas seleccionadas:`, lineasFinales);
+
+        // ✅ ACTUALIZADO: Guardar lineas_campanas (array)
         const checkInQuery = registroExistente.rows.length > 0 ?
             // Actualizar registro existente
             `UPDATE actividad_diaria SET
-                check_in_time = NOW(),
+                check_in_time = (NOW() AT TIME ZONE 'America/Lima')::timestamp,
                 mensajes_meta = $3,
                 mensajes_whatsapp = $4,
                 mensajes_instagram = $5,
@@ -550,6 +595,7 @@ exports.checkIn = async (req, res) => {
                 campana_asesor_id = $10,
                 estado_entrada = $11,
                 minutos_tardanza = $12,
+                lineas_campanas = $13,
                 estado_jornada = 'en_progreso',
                 updated_at = NOW()
              WHERE usuario_id = $1 AND fecha = $2
@@ -559,24 +605,56 @@ exports.checkIn = async (req, res) => {
                 usuario_id, fecha, check_in_time,
                 mensajes_meta, mensajes_whatsapp, mensajes_instagram, mensajes_tiktok,
                 notas_check_in, en_campana, producto_campana, campana_asesor_id,
-                estado_entrada, minutos_tardanza, estado_jornada,
+                estado_entrada, minutos_tardanza, lineas_campanas, estado_jornada,
                 created_at, updated_at
-             ) VALUES ($1, $2, NOW(), $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 'en_progreso', NOW(), NOW())
+             ) VALUES ($1, $2, (NOW() AT TIME ZONE 'America/Lima')::timestamp, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, 'en_progreso', NOW(), NOW())
              RETURNING *`;
 
         const result = await query(checkInQuery, [
             userId, fechaHoy, mensajes_meta, mensajes_whatsapp,
             mensajes_instagram, mensajes_tiktok, notas_check_in,
-            en_campana, producto_campana, campanaAsesorId, estado_entrada, minutos_tardanza
+            en_campana, producto_campana, campanaAsesorId, estado_entrada, minutos_tardanza,
+            lineasFinales.length > 0 ? lineasFinales : null // ✅ Guardar array
         ]);
 
         const actividad = result.rows[0];
 
+        // ✅ AUTO-CREAR CAMPAÑAS: Si marcó líneas y no existen campañas, crearlas
+        if (en_campana && lineasFinales.length > 0) {
+            for (const linea of lineasFinales) {
+                // Verificar si ya existe campaña activa de esta línea
+                const existente = await query(`
+                    SELECT id FROM campanas_asesor
+                    WHERE usuario_id = $1
+                      AND linea_producto = $2
+                      AND estado = 'activa'
+                `, [userId, linea]);
+
+                // Si NO existe, crear campaña automáticamente
+                if (existente.rows.length === 0) {
+                    await query(`
+                        INSERT INTO campanas_asesor (
+                            usuario_id,
+                            linea_producto,
+                            nombre_campana,
+                            fecha_inicio,
+                            estado,
+                            created_at,
+                            updated_at
+                        ) VALUES ($1, $2, $3, $4, 'activa', NOW(), NOW())
+                    `, [userId, linea, `Campaña ${linea}`, fechaHoy]);
+
+                    console.log(`✅ Campaña auto-creada: ${linea} para usuario ${userId}`);
+                }
+            }
+        }
+
         const duration = Date.now() - startTime;
-        logSuccess('checkIn', { 
+        logSuccess('checkIn', {
             action: 'check-in',
             estado: actividad.estado_jornada,
-            total_mensajes: (mensajes_meta + mensajes_whatsapp + mensajes_instagram + mensajes_tiktok)
+            total_mensajes: (mensajes_meta + mensajes_whatsapp + mensajes_instagram + mensajes_tiktok),
+            campanas_creadas: en_campana ? lineasFinales.length : 0
         }, duration);
 
         res.status(201).json({
@@ -593,7 +671,8 @@ exports.checkIn = async (req, res) => {
                     instagram: actividad.mensajes_instagram,
                     tiktok: actividad.mensajes_tiktok
                 },
-                notas_check_in: actividad.notas_check_in
+                notas_check_in: actividad.notas_check_in,
+                campanas_activas: lineasFinales
             }
         });
 
@@ -612,14 +691,16 @@ exports.checkIn = async (req, res) => {
 // ============================================
 exports.checkOut = async (req, res) => {
     const startTime = Date.now();
-    
+
     try {
         logRequest('checkOut', req);
 
         const {
             llamadas_realizadas = 0,
             llamadas_recibidas = 0,
-            notas_check_out = ''
+            notas_check_out = '',
+            distribucion_campanas = null, // ← Nuevo: distribución porcentual
+            mensajes_adicionales = null   // ← Nuevo: mensajes extra
         } = req.body;
 
         const userId = req.user.id;
@@ -660,8 +741,10 @@ exports.checkOut = async (req, res) => {
 
         // Verificar que existe registro y check-in del día
         const registroExistente = await query(`
-            SELECT id, estado_jornada, check_in_time, check_out_time 
-            FROM actividad_diaria 
+            SELECT id, estado_jornada, check_in_time, check_out_time,
+                   mensajes_meta, mensajes_whatsapp, mensajes_instagram, mensajes_tiktok,
+                   en_campana, lineas_campanas
+            FROM actividad_diaria
             WHERE usuario_id = $1 AND fecha = $2
         `, [userId, fechaHoy]);
 
@@ -713,15 +796,85 @@ exports.checkOut = async (req, res) => {
 
         console.log(`📝 Check-out: ${hora}:${minutos.toString().padStart(2, '0')} → ${estado_salida} (${total_horas_efectivas}h efectivas)`);
 
+        // ✅ NUEVA LÓGICA: Calcular distribución de campañas
+        const mensajesCheckIn = registro.mensajes_meta + registro.mensajes_whatsapp +
+                                registro.mensajes_instagram + registro.mensajes_tiktok;
+
+        const mensajesAdicionalesTotal = mensajes_adicionales
+            ? (mensajes_adicionales.meta || 0) +
+              (mensajes_adicionales.whatsapp || 0) +
+              (mensajes_adicionales.instagram || 0) +
+              (mensajes_adicionales.tiktok || 0)
+            : 0;
+
+        const totalMensajesDia = mensajesCheckIn + mensajesAdicionalesTotal;
+
+        console.log(`📊 Mensajes del día: ${mensajesCheckIn} (check-in) + ${mensajesAdicionalesTotal} (adicionales) = ${totalMensajesDia}`);
+
+        // ✅ PROCESAR MÚLTIPLES CAMPAÑAS
+        let distribucionConMensajes = null;
+
+        if (registro.en_campana && registro.lineas_campanas && registro.lineas_campanas.length > 1) {
+            // Múltiples campañas: validar distribución
+            if (!distribucion_campanas) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Debes especificar la distribución de campañas para múltiples líneas',
+                    campanas_activas: registro.lineas_campanas
+                });
+            }
+
+            // Validar que la suma sea 100% (con tolerancia de ±2%)
+            const totalPorcentaje = Object.values(distribucion_campanas).reduce((a, b) => a + b, 0);
+            if (Math.abs(totalPorcentaje - 100) > 2) {
+                return res.status(400).json({
+                    success: false,
+                    message: `La distribución debe sumar 100% (actual: ${totalPorcentaje}%)`,
+                    tolerancia: '±2%'
+                });
+            }
+
+            // Normalizar si está dentro de tolerancia
+            const factor = 100 / totalPorcentaje;
+            const distribucionNormalizada = {};
+            for (const [linea, porcentaje] of Object.entries(distribucion_campanas)) {
+                distribucionNormalizada[linea] = Math.round(porcentaje * factor);
+            }
+
+            // Calcular mensajes por campaña
+            distribucionConMensajes = {};
+            for (const [linea, porcentaje] of Object.entries(distribucionNormalizada)) {
+                distribucionConMensajes[linea] = {
+                    porcentaje,
+                    mensajes: Math.round(totalMensajesDia * porcentaje / 100)
+                };
+            }
+
+            console.log(`📊 Distribución calculada:`, distribucionConMensajes);
+
+        } else if (registro.en_campana && registro.lineas_campanas && registro.lineas_campanas.length === 1) {
+            // Una sola campaña: 100% automático
+            distribucionConMensajes = {
+                [registro.lineas_campanas[0]]: {
+                    porcentaje: 100,
+                    mensajes: totalMensajesDia
+                }
+            };
+
+            console.log(`📊 Campaña única, 100% de ${totalMensajesDia} mensajes a ${registro.lineas_campanas[0]}`);
+        }
+
         // Realizar check-out
         const checkOutQuery = `
             UPDATE actividad_diaria SET
-                check_out_time = NOW(),
+                check_out_time = (NOW() AT TIME ZONE 'America/Lima')::timestamp,
                 llamadas_realizadas = $3,
                 llamadas_recibidas = $4,
                 notas_check_out = $5,
                 estado_salida = $6,
                 total_horas_efectivas = $7,
+                distribucion_campanas = $8,
+                mensajes_adicionales = $9,
                 estado_jornada = 'finalizada',
                 updated_at = NOW()
             WHERE usuario_id = $1 AND fecha = $2
@@ -730,8 +883,45 @@ exports.checkOut = async (req, res) => {
 
         const result = await query(checkOutQuery, [
             userId, fechaHoy, llamadas_realizadas, llamadas_recibidas, notas_check_out,
-            estado_salida, total_horas_efectivas
+            estado_salida, total_horas_efectivas,
+            distribucionConMensajes ? JSON.stringify(distribucionConMensajes) : null,
+            mensajes_adicionales ? JSON.stringify(mensajes_adicionales) : null
         ]);
+
+        // ✅ ACTUALIZAR CAMPAÑAS_ASESOR (múltiples campañas)
+        if (distribucionConMensajes) {
+            for (const [linea, datos] of Object.entries(distribucionConMensajes)) {
+                // Verificar si ya se actualizó hoy para evitar duplicados
+                const campanaResult = await query(`
+                    SELECT id, ultima_fecha_registro
+                    FROM campanas_asesor
+                    WHERE usuario_id = $1
+                      AND linea_producto = $2
+                      AND estado = 'activa'
+                    LIMIT 1
+                `, [userId, linea]);
+
+                if (campanaResult.rows.length > 0) {
+                    const campana = campanaResult.rows[0];
+                    const esNuevoDia = !campana.ultima_fecha_registro ||
+                                       campana.ultima_fecha_registro !== fechaHoy;
+
+                    await query(`
+                        UPDATE campanas_asesor SET
+                            total_mensajes = total_mensajes + $1,
+                            dias_trabajados = CASE
+                                WHEN $2 THEN dias_trabajados + 1
+                                ELSE dias_trabajados
+                            END,
+                            ultima_fecha_registro = $3,
+                            updated_at = NOW()
+                        WHERE id = $4
+                    `, [datos.mensajes, esNuevoDia, fechaHoy, campana.id]);
+
+                    console.log(`✅ Campaña ${linea}: +${datos.mensajes} mensajes${esNuevoDia ? ' (día nuevo)' : ''}`);
+                }
+            }
+        }
 
         const actividad = result.rows[0];
 

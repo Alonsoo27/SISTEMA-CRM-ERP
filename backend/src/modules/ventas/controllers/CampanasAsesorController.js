@@ -248,7 +248,7 @@ const finalizarCampana = async (req, res) => {
 };
 
 // ============================================
-// OBTENER CAMPAÑA ACTIVA
+// OBTENER CAMPAÑA ACTIVA (UNA SOLA - LEGACY)
 // ============================================
 const getCampanaActiva = async (req, res) => {
     try {
@@ -279,6 +279,109 @@ const getCampanaActiva = async (req, res) => {
         res.status(500).json({
             success: false,
             message: 'Error al obtener campaña activa',
+            error: process.env.NODE_ENV === 'development' ? error.message : undefined
+        });
+    }
+};
+
+// ============================================
+// OBTENER TODAS MIS CAMPAÑAS ACTIVAS
+// ============================================
+const getMisCampanasActivas = async (req, res) => {
+    try {
+        const userId = req.user.id;
+
+        const result = await query(`
+            SELECT
+                id,
+                linea_producto,
+                nombre_campana,
+                fecha_inicio,
+                total_mensajes,
+                total_ventas,
+                dias_trabajados,
+                created_at
+            FROM campanas_asesor
+            WHERE usuario_id = $1 AND estado = 'activa'
+            ORDER BY fecha_inicio DESC
+        `, [userId]);
+
+        res.json({
+            success: true,
+            data: result.rows,
+            total: result.rowCount
+        });
+
+    } catch (error) {
+        console.error('Error obteniendo campañas activas:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error al obtener campañas activas',
+            error: process.env.NODE_ENV === 'development' ? error.message : undefined
+        });
+    }
+};
+
+// ============================================
+// AGREGAR NUEVA LÍNEA DE CAMPAÑA
+// ============================================
+const agregarLineaCampana = async (req, res) => {
+    try {
+        const userId = req.user.id;
+        const { linea_producto } = req.body;
+
+        // Validar campo requerido
+        if (!linea_producto || !linea_producto.trim()) {
+            return res.status(400).json({
+                success: false,
+                message: 'La línea de producto es requerida'
+            });
+        }
+
+        // Verificar que no tenga una campaña activa de esa línea
+        const existente = await query(`
+            SELECT id, nombre_campana
+            FROM campanas_asesor
+            WHERE usuario_id = $1
+              AND linea_producto = $2
+              AND estado = 'activa'
+        `, [userId, linea_producto]);
+
+        if (existente.rows.length > 0) {
+            return res.status(400).json({
+                success: false,
+                message: `Ya tienes una campaña activa de ${linea_producto}`,
+                campana_existente: existente.rows[0]
+            });
+        }
+
+        // Crear nueva campaña
+        const result = await query(`
+            INSERT INTO campanas_asesor (
+                usuario_id,
+                linea_producto,
+                nombre_campana,
+                fecha_inicio,
+                estado,
+                created_at,
+                updated_at
+            ) VALUES ($1, $2, $3, CURRENT_DATE, 'activa', NOW(), NOW())
+            RETURNING *
+        `, [userId, linea_producto, `Campaña ${linea_producto}`]);
+
+        console.log(`✅ Nueva campaña creada: ${linea_producto} para usuario ${userId}`);
+
+        res.status(201).json({
+            success: true,
+            message: 'Campaña iniciada exitosamente',
+            data: result.rows[0]
+        });
+
+    } catch (error) {
+        console.error('Error agregando línea de campaña:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error al agregar línea de campaña',
             error: process.env.NODE_ENV === 'development' ? error.message : undefined
         });
     }
@@ -346,5 +449,7 @@ module.exports = {
     getVistaEquipo,
     iniciarCampana,
     finalizarCampana,
-    getCampanaActiva
+    getCampanaActiva,
+    getMisCampanasActivas,  // ← Nuevo
+    agregarLineaCampana      // ← Nuevo
 };

@@ -739,7 +739,7 @@ const VentasList = ({
   }
 
   return (
-    <div className="bg-white rounded-lg shadow">
+    <div className="bg-white rounded-lg shadow relative z-50">
       {/* Header con búsqueda y selector de vistas */}
       <div className="p-6 border-b border-gray-200">
         <div className="flex items-center justify-between mb-4">
@@ -1033,7 +1033,7 @@ const VentasList = ({
 
                 {/* ACCIONES */}
                 <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                  <div className="relative flex items-center justify-end space-x-2">
+                  <div className="flex items-center justify-end space-x-2">
                     {/* BOTÓN PROMINENTE: Confirmar Recepción */}
                     {debeConfirmarRecepcion(venta) && (
                       <button
@@ -1048,101 +1048,59 @@ const VentasList = ({
                         Confirmar Recepción
                       </button>
                     )}
-                    
-                    <button
-                      onClick={() => setMenuAbierto(menuAbierto === venta.id ? null : venta.id)}
-                      className="p-2 rounded-full hover:bg-gray-100 transition-colors"
-                    >
-                      <MoreVertical className="h-4 w-4 text-gray-400" />
-                    </button>
 
-                    {menuAbierto === venta.id && (
-                      <div className="absolute right-0 mt-2 w-64 bg-white rounded-md shadow-lg ring-1 ring-black ring-opacity-5 z-10">
-                        <div className="py-1">
-                          <button
-                            onClick={() => {
-                              onView && onView(venta);
-                              setMenuAbierto(null);
-                            }}
-                            className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 w-full text-left"
-                          >
-                            <Eye className="h-4 w-4 mr-2" />
-                            Ver detalles
-                          </button>
-                          <button
-                            onClick={() => handleVerProductos(venta)}
-                            className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 w-full text-left"
-                          >
-                            <FileText className="h-4 w-4 mr-2" />
-                            Ver productos
-                          </button>
-                          <button
-                            onClick={() => {
-                              onEdit && onEdit(venta);
-                              setMenuAbierto(null);
-                            }}
-                            className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 w-full text-left"
-                          >
-                            <Edit className="h-4 w-4 mr-2" />
-                            Editar venta
-                          </button>
-                          {venta.cliente_id && onEditCliente && (
+                    <div className="relative">
+                      <button
+                        onClick={() => setMenuAbierto(menuAbierto === venta.id ? null : venta.id)}
+                        className="p-2 rounded-full hover:bg-gray-100 transition-colors"
+                      >
+                        <MoreVertical className="h-4 w-4 text-gray-400" />
+                      </button>
+
+                      {menuAbierto === venta.id && (
+                        <div className="absolute right-0 mt-2 w-56 bg-white rounded-md shadow-xl ring-1 ring-black ring-opacity-5 z-[9999] pointer-events-auto">
+                          <div className="py-1">
                             <button
-                              onClick={() => {
-                                onEditCliente({ 
-                                  id: venta.cliente_id, 
-                                  nombre: obtenerNombreCompleto(venta)
-                                });
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onView && onView(venta);
                                 setMenuAbierto(null);
                               }}
-                              className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 w-full text-left"
+                              className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 w-full text-left cursor-pointer transition-colors"
                             >
-                              <Users className="h-4 w-4 mr-2" />
-                              Editar cliente
+                              <Eye className="h-4 w-4 mr-2" />
+                              Ver detalles
                             </button>
-                          )}
-                          
-                          <div className="border-t border-gray-100 my-1"></div>
-                          
-                          {/* ✅ CORREGIDO: Cambiar estado detallado */}
-                          <div className="px-4 py-2">
-                            <p className="text-xs font-medium text-gray-500 mb-2">Cambiar estado:</p>
-                            {obtenerEstadosSiguientes(venta.estado_detallado || 'vendido')
-                              .map(nuevoEstado => {
-                                const estadoInfo = obtenerEstadoDetallado(nuevoEstado);
-                                return (
-                                  <button
-                                    key={nuevoEstado}
-                                    onClick={() => handleCambiarEstadoDetallado(venta, nuevoEstado)}
-                                    className="flex items-center w-full text-left px-2 py-1 text-xs text-gray-700 hover:bg-gray-100 rounded mb-1"
-                                  >
-                                    <span className="mr-2">{estadoInfo.icon}</span>
-                                    <span className="mr-2">{estadoInfo.label}</span>
-                                    <ArrowRight className="h-3 w-3 text-gray-400" />
-                                  </button>
-                                );
-                              })}
-                            {obtenerEstadosSiguientes(venta.estado_detallado || 'vendido').length === 0 && (
-                              <p className="text-xs text-gray-500 italic px-2">Estado final alcanzado</p>
-                            )}
-                          </div>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onEdit && onEdit(venta);
+                                setMenuAbierto(null);
+                              }}
+                              className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 w-full text-left cursor-pointer transition-colors"
+                            >
+                              <Edit className="h-4 w-4 mr-2" />
+                              Editar venta
+                            </button>
 
-                          <div className="border-t border-gray-100 my-1"></div>
-                          
-                          <button
-                            onClick={() => {
-                              setVentaAEliminar(venta);
-                              setShowConfirmDelete(true);
-                              setMenuAbierto(null);
-                            }}
-                            className="flex items-center px-4 py-2 text-sm text-red-600 hover:bg-red-50 w-full text-left"
-                          >
-                            <Trash2 className="h-4 w-4 mr-2" />
-                            Eliminar
-                          </button>
+                            <div className="border-t border-gray-100 my-1"></div>
+
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setVentaAEliminar(venta);
+                                setShowConfirmDelete(true);
+                                setMenuAbierto(null);
+                              }}
+                              className="flex items-center px-4 py-2 text-sm text-red-600 hover:bg-red-50 w-full text-left cursor-pointer transition-colors"
+                            >
+                              <Trash2 className="h-4 w-4 mr-2" />
+                              Eliminar
+                            </button>
+                          </div>
                         </div>
-                      </div>
-                    )}
+                      )}
+                    </div>
                   </div>
                 </td>
               </tr>
@@ -1225,10 +1183,10 @@ const VentasList = ({
       {/* Notificaciones */}
       <NotificationComponent notification={notification} />
 
-      {/* ✅ CORREGIDO: Click outside para cerrar menús */}
+      {/* ✅ CORREGIDO: Click outside para cerrar menús - sin bloquear clicks en el menú */}
       {menuAbierto && (
         <div
-          className="fixed inset-0 z-10"
+          className="fixed inset-0 z-40 pointer-events-auto"
           onClick={() => setMenuAbierto(null)}
         />
       )}
