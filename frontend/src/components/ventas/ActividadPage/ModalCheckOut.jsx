@@ -1,14 +1,16 @@
 // src/components/ventas/ActividadWidget/ModalCheckOut.jsx
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
-  X, Phone, PhoneCall, Save, AlertCircle, CheckCircle
+  X, Phone, PhoneCall, Save, AlertCircle, CheckCircle, TrendingUp, Percent
 } from 'lucide-react';
 
-const ModalCheckOut = ({ 
-  isOpen, 
-  onClose, 
-  onSubmit, 
-  loading = false 
+const ModalCheckOut = ({
+  isOpen,
+  onClose,
+  onSubmit,
+  loading = false,
+  campanasActivas = [], // ← NUEVA PROP: array de líneas de campaña activas
+  totalMensajes = 0 // ← NUEVA PROP: total de mensajes del día
 }) => {
   const [formData, setFormData] = useState({
     llamadas_realizadas: 0,
@@ -17,6 +19,30 @@ const ModalCheckOut = ({
   });
 
   const [errors, setErrors] = useState({});
+
+  // ✅ NUEVO: Estado para distribución de campañas
+  const [distribucionCampanas, setDistribucionCampanas] = useState({});
+  const [errorDistribucion, setErrorDistribucion] = useState('');
+
+  // ✅ NUEVO: Inicializar distribución cuando hay múltiples campañas
+  useEffect(() => {
+    if (campanasActivas.length > 1) {
+      // Distribución equitativa inicial
+      const porcentajeInicial = Math.floor(100 / campanasActivas.length);
+      const distribucionInicial = {};
+
+      campanasActivas.forEach((campana, index) => {
+        // El último lleva el resto para sumar exactamente 100%
+        if (index === campanasActivas.length - 1) {
+          distribucionInicial[campana] = 100 - (porcentajeInicial * (campanasActivas.length - 1));
+        } else {
+          distribucionInicial[campana] = porcentajeInicial;
+        }
+      });
+
+      setDistribucionCampanas(distribucionInicial);
+    }
+  }, [campanasActivas]);
 
   // Manejar cambios en inputs
   const handleInputChange = (field, value) => {
@@ -32,6 +58,34 @@ const ModalCheckOut = ({
         [field]: null
       }));
     }
+  };
+
+  // ✅ NUEVO: Manejar cambios en distribución de campañas
+  const handleDistribucionChange = (campana, porcentaje) => {
+    const valor = parseInt(porcentaje) || 0;
+
+    setDistribucionCampanas(prev => ({
+      ...prev,
+      [campana]: Math.min(100, Math.max(0, valor)) // Entre 0 y 100
+    }));
+
+    setErrorDistribucion(''); // Limpiar error
+  };
+
+  // ✅ NUEVO: Validar distribución de campañas
+  const validarDistribucion = () => {
+    if (campanasActivas.length <= 1) {
+      return true; // No requiere validación
+    }
+
+    const total = Object.values(distribucionCampanas).reduce((sum, val) => sum + val, 0);
+
+    if (Math.abs(total - 100) > 2) {
+      setErrorDistribucion(`La distribución debe sumar 100% (actual: ${total}%)`);
+      return false;
+    }
+
+    return true;
   };
 
   // Validar formulario
@@ -63,8 +117,13 @@ const ModalCheckOut = ({
   // Manejar envío del formulario
   const handleSubmit = (e) => {
     e.preventDefault();
-    
+
     if (!validateForm()) {
+      return;
+    }
+
+    // ✅ NUEVO: Validar distribución si hay múltiples campañas
+    if (campanasActivas.length > 1 && !validarDistribucion()) {
       return;
     }
 
@@ -74,6 +133,11 @@ const ModalCheckOut = ({
       llamadas_realizadas: parseInt(formData.llamadas_realizadas) || 0,
       llamadas_recibidas: parseInt(formData.llamadas_recibidas) || 0,
     };
+
+    // ✅ NUEVO: Incluir distribución de campañas si hay múltiples
+    if (campanasActivas.length > 1) {
+      sanitizedData.distribucion_campanas = distribucionCampanas;
+    }
 
     onSubmit(sanitizedData);
   };
@@ -117,6 +181,76 @@ const ModalCheckOut = ({
               </div>
             </div>
           </div>
+
+          {/* ✅ NUEVO: Sección de Redistribución de Campañas (solo si hay múltiples) */}
+          {campanasActivas.length > 1 && (
+            <div className="mb-6 bg-purple-50 border border-purple-200 rounded-lg p-4">
+              <div className="flex items-start space-x-2 mb-4">
+                <TrendingUp className="h-5 w-5 text-purple-600 mt-0.5" />
+                <div>
+                  <h4 className="font-medium text-purple-900">Distribución de Mensajes por Campaña</h4>
+                  <p className="text-sm text-purple-700">
+                    Tienes <span className="font-semibold">{totalMensajes} mensajes</span> del día.
+                    Distribuye el porcentaje de mensajes trabajados en cada campaña (debe sumar 100%).
+                  </p>
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                {campanasActivas.map((campana) => {
+                  const porcentaje = distribucionCampanas[campana] || 0;
+                  const mensajesEstimados = Math.round((totalMensajes * porcentaje) / 100);
+
+                  return (
+                    <div key={campana} className="bg-white rounded-lg p-3 border border-purple-200">
+                      <div className="flex items-center justify-between mb-2">
+                        <label className="text-sm font-medium text-gray-700">
+                          {campana}
+                        </label>
+                        <div className="flex items-center space-x-2">
+                          <input
+                            type="number"
+                            min="0"
+                            max="100"
+                            value={porcentaje}
+                            onChange={(e) => handleDistribucionChange(campana, e.target.value)}
+                            className="w-20 px-2 py-1 border border-gray-300 rounded-md text-center focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                            disabled={loading}
+                          />
+                          <Percent className="h-4 w-4 text-gray-500" />
+                        </div>
+                      </div>
+                      <div className="flex justify-between items-center text-xs text-gray-600">
+                        <span>≈ {mensajesEstimados} mensajes</span>
+                        <div className="bg-purple-100 h-2 rounded-full w-24 overflow-hidden">
+                          <div
+                            className="bg-purple-600 h-full transition-all duration-300"
+                            style={{ width: `${porcentaje}%` }}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Indicador de total */}
+              <div className="mt-3 pt-3 border-t border-purple-200 flex justify-between items-center">
+                <span className="text-sm font-medium text-purple-900">Total:</span>
+                <span className={`text-lg font-bold ${
+                  Math.abs(Object.values(distribucionCampanas).reduce((sum, val) => sum + val, 0) - 100) <= 2
+                    ? 'text-green-600'
+                    : 'text-red-600'
+                }`}>
+                  {Object.values(distribucionCampanas).reduce((sum, val) => sum + val, 0)}%
+                </span>
+              </div>
+
+              {errorDistribucion && (
+                <p className="mt-2 text-red-600 text-sm">{errorDistribucion}</p>
+              )}
+            </div>
+          )}
 
           {/* Campos de llamadas */}
           <div className="space-y-4">

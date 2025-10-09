@@ -1311,8 +1311,11 @@ const ActividadPageEnhanced = () => {
         <ModalCheckOut
           isOpen={modalCheckOutOpen}
           onClose={() => setModalCheckOutOpen(false)}
+          campanasActivas={estado?.jornada?.lineas_campanas || []} // ✅ NUEVA PROP: campañas del día
+          totalMensajes={estado?.actividad?.total_mensajes || 0} // ✅ NUEVA PROP: total mensajes
           onSubmit={async (data) => {
             try {
+              console.log('📤 Datos de check-out a enviar:', data);
               const response = await actividadService.checkOut(data);
               if (response.success) {
                 handleCheckOutSuccess(response.data);
@@ -1320,7 +1323,7 @@ const ActividadPageEnhanced = () => {
                 throw new Error(response.error);
               }
             } catch (error) {
-              console.error('Error en check-out:', error);
+              console.error('❌ Error en checkOut:', error);
               showNotification('Error al finalizar jornada: ' + error.message, 'error');
             }
           }}

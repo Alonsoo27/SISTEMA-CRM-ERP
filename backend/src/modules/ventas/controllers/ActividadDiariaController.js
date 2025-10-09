@@ -268,6 +268,7 @@ exports.getEstadoHoy = async (req, res) => {
                 check_out_time,
                 estado_jornada,
                 created_at, updated_at,
+                lineas_campanas,
                 mensajes_meta + mensajes_whatsapp + mensajes_instagram + mensajes_tiktok as total_mensajes_recibidos,
                 llamadas_realizadas + llamadas_recibidas as total_llamadas,
                 CASE
@@ -377,6 +378,7 @@ exports.getEstadoHoy = async (req, res) => {
             total_llamadas: parseInt(actividad?.total_llamadas || 0),
             hora_check_in: actividad?.check_in_time || null,
             hora_check_out: actividad?.check_out_time || null,
+            lineas_campanas: actividad?.lineas_campanas || [], // ✅ NUEVO: incluir líneas de campaña
             mensaje_estado: mensaje_estado
         };
 
@@ -409,7 +411,8 @@ exports.getEstadoHoy = async (req, res) => {
                     puede_check_out: estado.puede_check_out,
                     horas_jornada: estado.horas_jornada,
                     hora_check_in: estado.hora_check_in,
-                    hora_check_out: estado.hora_check_out
+                    hora_check_out: estado.hora_check_out,
+                    lineas_campanas: estado.lineas_campanas // ✅ NUEVO: incluir en response
                 },
                 actividad: {
                     total_mensajes: estado.total_mensajes,
@@ -584,7 +587,7 @@ exports.checkIn = async (req, res) => {
         const checkInQuery = registroExistente.rows.length > 0 ?
             // Actualizar registro existente
             `UPDATE actividad_diaria SET
-                check_in_time = (NOW() AT TIME ZONE 'America/Lima')::timestamp,
+                check_in_time = NOW(),
                 mensajes_meta = $3,
                 mensajes_whatsapp = $4,
                 mensajes_instagram = $5,
@@ -607,7 +610,7 @@ exports.checkIn = async (req, res) => {
                 notas_check_in, en_campana, producto_campana, campana_asesor_id,
                 estado_entrada, minutos_tardanza, lineas_campanas, estado_jornada,
                 created_at, updated_at
-             ) VALUES ($1, $2, (NOW() AT TIME ZONE 'America/Lima')::timestamp, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, 'en_progreso', NOW(), NOW())
+             ) VALUES ($1, $2, NOW(), $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, 'en_progreso', NOW(), NOW())
              RETURNING *`;
 
         const result = await query(checkInQuery, [
@@ -867,7 +870,7 @@ exports.checkOut = async (req, res) => {
         // Realizar check-out
         const checkOutQuery = `
             UPDATE actividad_diaria SET
-                check_out_time = (NOW() AT TIME ZONE 'America/Lima')::timestamp,
+                check_out_time = NOW(),
                 llamadas_realizadas = $3,
                 llamadas_recibidas = $4,
                 notas_check_out = $5,
