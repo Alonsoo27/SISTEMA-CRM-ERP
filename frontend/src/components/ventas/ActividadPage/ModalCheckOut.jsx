@@ -1,7 +1,7 @@
 // src/components/ventas/ActividadWidget/ModalCheckOut.jsx
 import React, { useState, useEffect } from 'react';
 import {
-  X, Phone, PhoneCall, Save, AlertCircle, CheckCircle, TrendingUp, Percent
+  X, Phone, PhoneCall, Save, AlertCircle, CheckCircle, TrendingUp, Percent, MessageSquare
 } from 'lucide-react';
 
 const ModalCheckOut = ({
@@ -23,6 +23,14 @@ const ModalCheckOut = ({
   // ✅ NUEVO: Estado para distribución de campañas
   const [distribucionCampanas, setDistribucionCampanas] = useState({});
   const [errorDistribucion, setErrorDistribucion] = useState('');
+
+  // ✅ NUEVO: Estado para mensajes adicionales del día
+  const [mensajesAdicionales, setMensajesAdicionales] = useState({
+    meta: 0,
+    whatsapp: 0,
+    instagram: 0,
+    tiktok: 0
+  });
 
   // ✅ NUEVO: Inicializar distribución cuando hay múltiples campañas
   useEffect(() => {
@@ -70,6 +78,16 @@ const ModalCheckOut = ({
     }));
 
     setErrorDistribucion(''); // Limpiar error
+  };
+
+  // ✅ NUEVO: Manejar cambios en mensajes adicionales
+  const handleMensajeAdicionalChange = (canal, valor) => {
+    const cantidad = parseInt(valor) || 0;
+
+    setMensajesAdicionales(prev => ({
+      ...prev,
+      [canal]: Math.min(1000, Math.max(0, cantidad)) // Entre 0 y 1000
+    }));
   };
 
   // ✅ NUEVO: Validar distribución de campañas
@@ -137,6 +155,12 @@ const ModalCheckOut = ({
     // ✅ NUEVO: Incluir distribución de campañas si hay múltiples
     if (campanasActivas.length > 1) {
       sanitizedData.distribucion_campanas = distribucionCampanas;
+    }
+
+    // ✅ NUEVO: Incluir mensajes adicionales si hay alguno
+    const totalMensajesAdicionales = Object.values(mensajesAdicionales).reduce((sum, val) => sum + val, 0);
+    if (totalMensajesAdicionales > 0) {
+      sanitizedData.mensajes_adicionales = mensajesAdicionales;
     }
 
     onSubmit(sanitizedData);
@@ -251,6 +275,108 @@ const ModalCheckOut = ({
               )}
             </div>
           )}
+
+          {/* ✅ NUEVO: Sección de Mensajes Adicionales */}
+          <div className="mb-6 bg-green-50 border border-green-200 rounded-lg p-4">
+            <div className="flex items-start space-x-2 mb-4">
+              <MessageSquare className="h-5 w-5 text-green-600 mt-0.5" />
+              <div>
+                <h4 className="font-medium text-green-900">Mensajes Adicionales del Día (Opcional)</h4>
+                <p className="text-sm text-green-700">
+                  Ya tienes <span className="font-semibold">{totalMensajes} mensajes</span> del check-in.
+                  Si recibiste más mensajes durante el día, agrégalos aquí.
+                </p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              {/* Meta */}
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">
+                  Meta/Facebook
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  max="1000"
+                  value={mensajesAdicionales.meta}
+                  onChange={(e) => handleMensajeAdicionalChange('meta', e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                  placeholder="0"
+                  disabled={loading}
+                />
+              </div>
+
+              {/* WhatsApp */}
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">
+                  WhatsApp
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  max="1000"
+                  value={mensajesAdicionales.whatsapp}
+                  onChange={(e) => handleMensajeAdicionalChange('whatsapp', e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                  placeholder="0"
+                  disabled={loading}
+                />
+              </div>
+
+              {/* Instagram */}
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">
+                  Instagram
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  max="1000"
+                  value={mensajesAdicionales.instagram}
+                  onChange={(e) => handleMensajeAdicionalChange('instagram', e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                  placeholder="0"
+                  disabled={loading}
+                />
+              </div>
+
+              {/* TikTok */}
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">
+                  TikTok
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  max="1000"
+                  value={mensajesAdicionales.tiktok}
+                  onChange={(e) => handleMensajeAdicionalChange('tiktok', e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                  placeholder="0"
+                  disabled={loading}
+                />
+              </div>
+            </div>
+
+            {/* Total de mensajes adicionales */}
+            {Object.values(mensajesAdicionales).reduce((sum, val) => sum + val, 0) > 0 && (
+              <div className="mt-3 pt-3 border-t border-green-200">
+                <div className="flex justify-between items-center text-sm">
+                  <span className="text-green-900 font-medium">Mensajes adicionales:</span>
+                  <span className="text-green-700 font-bold">
+                    +{Object.values(mensajesAdicionales).reduce((sum, val) => sum + val, 0)}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center text-sm mt-1">
+                  <span className="text-green-900 font-medium">Total del día:</span>
+                  <span className="text-green-700 font-bold">
+                    {totalMensajes + Object.values(mensajesAdicionales).reduce((sum, val) => sum + val, 0)}
+                  </span>
+                </div>
+              </div>
+            )}
+          </div>
 
           {/* Campos de llamadas */}
           <div className="space-y-4">
