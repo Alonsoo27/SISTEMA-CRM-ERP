@@ -179,31 +179,84 @@ const dashboardPersonal = async (req, res) => {
         AND activo = true
     `;
 
-    // PIPELINE HÍBRIDO: Combina prospectos activos + ventas en proceso
-    // Versión simplificada para debug
+    // PIPELINE: Prospectos y ventas del período seleccionado
     const queryPipeline = `
       SELECT
+        -- OPORTUNIDADES TOTALES DEL MES (Arrastrados + Nuevos)
+        -- Incluye: prospectos activos al inicio + nuevos del mes + convertidos en el mes
+        -- Excluye: solo los perdidos ANTES del mes
         (
           SELECT COUNT(*)
           FROM prospectos
-          WHERE asesor_id = $1 AND estado = 'Cotizado' AND activo = true
+          WHERE asesor_id = $1
+            AND activo = true
+            AND (
+              -- Prospectos creados DURANTE el período
+              (created_at >= $2 AND created_at <= $3)
+              OR
+              -- Prospectos creados ANTES del período que seguían vivos
+              (
+                created_at < $2
+                AND (
+                  -- Siguen activos
+                  estado IN ('Prospecto', 'Cotizado', 'Negociacion')
+                  OR
+                  -- Se cerraron o perdieron EN el período (contaban como oportunidad hasta ese momento)
+                  (
+                    estado IN ('Cerrado', 'Perdido')
+                    AND fecha_ultima_actualizacion >= $2
+                    AND fecha_ultima_actualizacion <= $3
+                  )
+                )
+              )
+            )
         ) as total_oportunidades,
+        -- Ventas cerradas que PROVIENEN de prospectos (conversión real del pipeline)
         (
           SELECT COUNT(*)
           FROM ventas
-          WHERE asesor_id = $1 AND estado_detallado = 'vendido' AND fecha_creacion >= $2 AND fecha_creacion <= $3 AND activo = true
+          WHERE asesor_id = $1
+          AND estado_detallado = 'vendido'
+          AND prospecto_id IS NOT NULL
+          AND fecha_venta >= $2
+          AND fecha_venta <= $3
+          AND activo = true
         ) as cerradas_ganadas,
+        -- Pipeline activo (prospectos activos sin importar fecha)
         (
           SELECT COUNT(*)
           FROM prospectos
-          WHERE asesor_id = $1 AND estado = 'Cotizado' AND activo = true
+          WHERE asesor_id = $1
+          AND estado IN ('Cotizado', 'Negociacion', 'Prospecto')
+          AND activo = true
         ) as activas_pipeline,
-        0 as cerradas_perdidas,
-        0 as valor_cerradas_ganadas,
+        -- Oportunidades perdidas en el período
+        (
+          SELECT COUNT(*)
+          FROM prospectos
+          WHERE asesor_id = $1
+          AND estado = 'Perdido'
+          AND fecha_ultima_actualizacion >= $2
+          AND fecha_ultima_actualizacion <= $3
+          AND activo = true
+        ) as cerradas_perdidas,
+        -- Valor de ventas cerradas
+        (
+          SELECT COALESCE(SUM(valor_final), 0)
+          FROM ventas
+          WHERE asesor_id = $1
+          AND estado_detallado = 'vendido'
+          AND fecha_venta >= $2
+          AND fecha_venta <= $3
+          AND activo = true
+        ) as valor_cerradas_ganadas,
+        -- Valor del pipeline activo
         (
           SELECT COALESCE(SUM(valor_estimado), 0)
           FROM prospectos
-          WHERE asesor_id = $1 AND estado = 'Cotizado' AND activo = true
+          WHERE asesor_id = $1
+          AND estado IN ('Cotizado', 'Negociacion', 'Prospecto')
+          AND activo = true
         ) as valor_pipeline_activo
     `;
 
@@ -299,7 +352,10 @@ const dashboardPersonal = async (req, res) => {
       return (((parseFloat(actual) - parseFloat(anterior)) / parseFloat(anterior)) * 100).toFixed(1);
     };
 
-    // Calcular tasa de conversión (ventas vs oportunidades totales)
+    // Calcular tasa de conversión del pipeline (modelo acumulativo)
+    // Oportunidades = Arrastrados del mes anterior + Nuevos del mes (incluyendo los que se convirtieron)
+    // Ventas = Solo las que tienen prospecto_id (conversión real del pipeline)
+    // Fórmula: (Ventas del período / Oportunidades totales disponibles) × 100
     const tasaConversion = pipeline.total_oportunidades > 0 ?
       ((pipeline.cerradas_ganadas / pipeline.total_oportunidades) * 100).toFixed(2) : 0;
 
