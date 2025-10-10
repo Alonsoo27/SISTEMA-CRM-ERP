@@ -34,6 +34,10 @@ const ModalCheckOut = ({
 
   // ✅ NUEVO: Inicializar distribución cuando hay múltiples campañas
   useEffect(() => {
+    console.log('🔍 DEBUG ModalCheckOut - Campañas recibidas:', campanasActivas);
+    console.log('🔍 DEBUG ModalCheckOut - Total mensajes:', totalMensajes);
+    console.log('🔍 DEBUG ModalCheckOut - Cantidad campañas:', campanasActivas.length);
+
     if (campanasActivas.length > 1) {
       // Distribución equitativa inicial
       const porcentajeInicial = Math.floor(100 / campanasActivas.length);
@@ -48,9 +52,12 @@ const ModalCheckOut = ({
         }
       });
 
+      console.log('✅ Distribución inicial calculada:', distribucionInicial);
       setDistribucionCampanas(distribucionInicial);
+    } else {
+      console.log('ℹ️  No hay múltiples campañas, redistribución no necesaria');
     }
-  }, [campanasActivas]);
+  }, [campanasActivas, totalMensajes]);
 
   // Manejar cambios en inputs
   const handleInputChange = (field, value) => {
