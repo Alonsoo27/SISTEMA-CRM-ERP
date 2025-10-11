@@ -140,3 +140,6 @@ vite.config.ts.timestamp-*
 nul
 Ctempgithub_campanas.js
 Ctempgithub_actividad.js
+
+# Claude Code local settings
+.claude/*.local.json
