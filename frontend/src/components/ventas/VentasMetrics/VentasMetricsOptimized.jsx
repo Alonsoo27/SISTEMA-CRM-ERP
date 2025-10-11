@@ -14,6 +14,7 @@ import {
 // Importar configuraciones optimizadas
 import { API_CONFIG, DASHBOARD_CONFIG, ROLES_CONFIG, ENDPOINTS } from '../../../config/dashboardConfig';
 import PeriodSelectorAdvanced from '../PeriodSelector/PeriodSelectorAdvanced';
+import BonoProyectado from '../BonoProyectado';
 import {
   fetchWithErrorHandling,
   cargarDatosDashboard,
@@ -40,7 +41,6 @@ const DashboardAsesoresOptimized = ({
   const [datosGeografia, setDatosGeografia] = useState([]);
   const [datosSectores, setDatosSectores] = useState([]);
   const [datosRanking, setDatosRanking] = useState(null);
-  const [datosBono, setDatosBono] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [periodoSeleccionado, setPeriodoSeleccionado] = useState('mes_actual');
@@ -139,7 +139,6 @@ const DashboardAsesoresOptimized = ({
       setDatosGeografia([]);
       setDatosSectores([]);
       setDatosRanking(null);
-      setDatosBono(null);
     }
   }, [asesorSeleccionado]);
 
@@ -161,7 +160,6 @@ const DashboardAsesoresOptimized = ({
     setDatosGeografia([]);
     setDatosSectores([]);
     setDatosRanking(null);
-    setDatosBono(null);
   }, [modoVista, usuarioActual, puedeToggleModos]);
 
   // Cargar métricas del asesor (OPTIMIZADO)
@@ -197,7 +195,6 @@ const DashboardAsesoresOptimized = ({
         setDatosGeografia(datosCache.geografia?.geografiaData || []);
         setDatosSectores(datosCache.sectores?.sectoresData || []);
         setDatosRanking(datosCache.ranking?.rankingData);
-        setDatosBono(datosCache.bono);
         setLoading(false);
         showNotification('Datos cargados desde cache', 'info');
         return;
@@ -205,9 +202,8 @@ const DashboardAsesoresOptimized = ({
 
       console.log(`🔄 Cargando dashboard para asesor ${asesorSeleccionado} en modo ${modoVista}`);
 
-      // Determinar si debe cargar bono (solo para VENDEDORES y SUPER_ADMIN, no JEFE_VENTAS)
-      const esJefeVentas = usuarioActual?.rol_id === 3;
-      const cargarBono = modoVista === 'propio' ? !esJefeVentas : asesorSeleccionado !== usuarioActual?.id;
+      // No cargar bono - BonoProyectado se encarga de su propia carga
+      const cargarBono = false;
 
       // Usar la función optimizada de carga
       const datos = await cargarDatosDashboard(asesorSeleccionado, periodoSeleccionado, headers, cargarBono);
@@ -218,7 +214,6 @@ const DashboardAsesoresOptimized = ({
       if (datos.geografia) setDatosGeografia(datos.geografia.geografiaData || []);
       if (datos.sectores) setDatosSectores(datos.sectores.sectoresData || []);
       if (datos.ranking) setDatosRanking(datos.ranking.rankingData);
-      if (datos.bono) setDatosBono(datos.bono);
 
       // Guardar en cache si está habilitado
       if (API_CONFIG.ENABLE_CACHE) {
@@ -691,33 +686,8 @@ const DashboardAsesoresOptimized = ({
           </div>
         </div>
 
-        {/* Bono Actual */}
-        <div className={`bg-white rounded-lg shadow p-4 ${modoFullscreen ? 'p-6' : ''} cursor-pointer hover:shadow-lg transition-shadow`}
-             title="Click para ver detalles del bono">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className={`font-medium text-gray-600 ${modoFullscreen ? 'text-base' : 'text-xs'}`}>
-                Mi Bono Actual
-              </p>
-              <p className={`font-bold text-gray-900 ${modoFullscreen ? 'text-4xl' : 'text-2xl'}`}>
-                ${datosBono?.bono_actual?.bono_usd || '0.00'}
-              </p>
-              <div className="flex items-center mt-1">
-                <Trophy className={`h-3 w-3 ${
-                  (datosBono?.bono_actual?.porcentaje || 0) >= 100 ? 'text-yellow-500' : 'text-orange-500'
-                }`} />
-                <span className={`ml-1 ${
-                  (datosBono?.bono_actual?.porcentaje || 0) >= 100 ? 'text-yellow-600' : 'text-orange-600'
-                } ${modoFullscreen ? 'text-sm' : 'text-xs'}`}>
-                  {Math.round(datosBono?.bono_actual?.porcentaje || 0)}% de meta
-                </span>
-              </div>
-            </div>
-            <div className={`bg-yellow-100 rounded-full ${modoFullscreen ? 'p-3' : 'p-2'}`}>
-              <Award className={`text-yellow-600 ${modoFullscreen ? 'h-8 w-8' : 'h-6 w-6'}`} />
-            </div>
-          </div>
-        </div>
+        {/* Bono Actual - Componente Dinámico */}
+        <BonoProyectado asesorId={asesorSeleccionado} />
       </div>
 
       {/* Análisis de Canales de Venta */}

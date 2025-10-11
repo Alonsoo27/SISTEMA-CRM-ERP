@@ -300,6 +300,27 @@ class ComisionesController {
 
             const meta = metaResult.rows[0];
 
+            // ============================================
+            // FIX: Calcular ventas REALES del mes directamente desde tabla ventas
+            // ============================================
+            const ventasRealesResult = await query(`
+                SELECT
+                    COALESCE(SUM(valor_final), 0) as total_vendido,
+                    COUNT(*) as cantidad_ventas
+                FROM ventas
+                WHERE asesor_id = $1
+                    AND estado_detallado = 'vendido'
+                    AND EXTRACT(YEAR FROM fecha_venta) = $2
+                    AND EXTRACT(MONTH FROM fecha_venta) = $3
+                    AND activo = true
+            `, [targetAsesorId, meta.año, meta.mes]);
+
+            const ventasReales = ventasRealesResult.rows[0];
+            const valorLogradoReal = parseFloat(ventasReales.total_vendido) || 0;
+            const ventasLogradasReal = parseInt(ventasReales.cantidad_ventas) || 0;
+
+            console.log(`✅ Ventas reales del asesor ${targetAsesorId}: $${valorLogradoReal} (${ventasLogradasReal} ventas)`);
+
             // Obtener configuración de modalidad del asesor
             const modalidadResult = await query(`
                 SELECT 
@@ -327,20 +348,20 @@ class ComisionesController {
             let calculoFinal;
             let siguienteNivel;
 
-            // Calcular bono según modalidad
+            // Calcular bono según modalidad (usando ventas REALES, no de metas_ventas)
             if (modalidad === 'ventas_actividad') {
                 console.log('Calculando bono con actividad para asesor:', targetAsesorId);
                 calculoFinal = await ComisionesController.calcularBonoConActividad(
-                    targetAsesorId, 
-                    meta.meta_valor, 
-                    meta.valor_logrado,
+                    targetAsesorId,
+                    meta.meta_valor,
+                    valorLogradoReal,  // ✅ Usar ventas reales
                     meta.año,
                     meta.mes
                 );
-                siguienteNivel = ComisionesController.calcularSiguienteNivel(meta.meta_valor, meta.valor_logrado);
+                siguienteNivel = ComisionesController.calcularSiguienteNivel(meta.meta_valor, valorLogradoReal);
             } else {
                 console.log('Calculando bono solo por ventas para asesor:', targetAsesorId);
-                const bonoSimple = ComisionesController.calcularBono(meta.meta_valor, meta.valor_logrado);
+                const bonoSimple = ComisionesController.calcularBono(meta.meta_valor, valorLogradoReal);  // ✅ Usar ventas reales
                 calculoFinal = {
                     porcentaje_ventas: bonoSimple.porcentaje,
                     bono_final: bonoSimple.bono,
@@ -348,10 +369,14 @@ class ComisionesController {
                     mensaje: bonoSimple.mensaje,
                     modalidad: 'solo_ventas'
                 };
-                siguienteNivel = ComisionesController.calcularSiguienteNivel(meta.meta_valor, meta.valor_logrado);
+                siguienteNivel = ComisionesController.calcularSiguienteNivel(meta.meta_valor, valorLogradoReal);
             }
 
             console.log(`Bono calculado para asesor ${targetAsesorId}: ${calculoFinal.porcentaje_ventas}% = ${calculoFinal.bono_final}`);
+
+            // Calcular porcentaje de meta (siempre disponible, usando ventas reales)
+            const porcentajeMeta = meta.meta_valor > 0 ?
+                Math.round((valorLogradoReal / parseFloat(meta.meta_valor)) * 100) : 0;
 
             res.json({
                 success: true,
@@ -360,13 +385,13 @@ class ComisionesController {
                         id: targetAsesorId,
                         nombre: asesorNombre,
                         meta_usd: parseFloat(meta.meta_valor),
-                        vendido_usd: parseFloat(meta.valor_logrado),
-                        ventas_cantidad: meta.ventas_logradas,
+                        vendido_usd: valorLogradoReal,  // ✅ Usar ventas reales
+                        ventas_cantidad: ventasLogradasReal,  // ✅ Usar cantidad real
                         modalidad: modalidad
                     },
                     bono_actual: {
-                        porcentaje: calculoFinal.porcentaje_ventas || calculoFinal.porcentaje,
-                        bono_usd: calculoFinal.bono_final,
+                        porcentaje: calculoFinal.porcentaje_ventas || calculoFinal.porcentaje || porcentajeMeta,
+                        bono_usd: calculoFinal.bono_final || 0,
                         nivel: calculoFinal.nivel,
                         mensaje: calculoFinal.mensaje,
                         modalidad_aplicada: modalidad

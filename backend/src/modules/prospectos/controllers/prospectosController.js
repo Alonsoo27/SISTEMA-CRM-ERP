@@ -14,6 +14,9 @@ const cacheService = require('../../../services/CacheService');
 const ConversionService = require('../../ventas/services/ConversionService');
 const ProspectoProductoInteres = require('../../../models/ProspectoProductoInteres');
 
+// 🔔 INTEGRACIÓN CON SISTEMA DE NOTIFICACIONES AUTOMÁTICAS
+const NotificacionesController = require('../../notificaciones/controllers/notificacionesController');
+
 //helper
 function parseHistorialSeguro(historial) {
     if (!historial) return [];
@@ -579,6 +582,35 @@ class ProspectosController {
 
             const data = result.rows[0];
 
+            // ✅ CREAR SEGUIMIENTO AUTOMÁTICO EN TABLA SEGUIMIENTOS
+            if (fechaSeguimiento) {
+                try {
+                    const fechaLimite = new Date(fechaSeguimiento);
+                    fechaLimite.setHours(fechaLimite.getHours() + 18);
+
+                    await query(`
+                        INSERT INTO seguimientos (
+                            prospecto_id, asesor_id, fecha_programada, fecha_limite,
+                            tipo, descripcion, completado, visible_para_asesor
+                        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                    `, [
+                        data.id,
+                        asesorId,
+                        fechaSeguimiento,
+                        fechaLimite.toISOString(),
+                        'Llamada',
+                        'Seguimiento inicial del prospecto',
+                        false,
+                        true
+                    ]);
+
+                    logger.info(`✅ Seguimiento inicial creado para prospecto ${data.codigo} - Fecha: ${fechaSeguimiento}`);
+                } catch (errorSeguimiento) {
+                    logger.error(`⚠️ Error al crear seguimiento inicial para prospecto ${data.codigo}:`, errorSeguimiento);
+                    // No fallar la creación del prospecto si falla el seguimiento
+                }
+            }
+
             // Crear productos de interés en tabla separada
             if (productosInteres.length > 0) {
                 for (const producto of productosInteres) {
@@ -602,6 +634,27 @@ class ProspectosController {
 
             // Invalidar cache después de crear
             await cacheService.invalidarPorAsesor(asesorId);
+
+            // 🔔 CREAR NOTIFICACIÓN: prospecto_creado
+            try {
+                await NotificacionesController.crearNotificaciones({
+                    tipo: 'prospecto_creado',
+                    modo: 'basico',
+                    data: {
+                        usuario_id: asesorId,
+                        prospecto_id: data.id,
+                        prospecto_codigo: data.codigo,
+                        prospecto_nombre: data.nombre_cliente,
+                        valor_estimado: data.valor_estimado || 0,
+                        canal_contacto: data.canal_contacto
+                    },
+                    auto_prioridad: true
+                });
+                logger.info(`✅ Notificación prospecto_creado enviada para ${data.codigo}`);
+            } catch (errorNotif) {
+                logger.error('⚠️ Error creando notificación prospecto_creado:', errorNotif);
+                // No fallar la creación del prospecto si falla la notificación
+            }
 
             res.status(201).json({
                 success: true,
@@ -764,6 +817,52 @@ class ProspectosController {
 
             // Invalidar cache después de actualizar
             await cacheService.invalidarPorAsesor(updateResult.asesor_id || prospectoExistente.asesor_id);
+
+            // 🔔 DETECTAR REASIGNACIÓN: Si cambió el asesor_id, crear notificaciones
+            if (datosLimpios.asesor_id && datosLimpios.asesor_id !== prospectoExistente.asesor_id) {
+                try {
+                    const asesorAnterior = prospectoExistente.asesor_id;
+                    const asesorNuevo = datosLimpios.asesor_id;
+
+                    logger.info(`🔄 Reasignación detectada: ${prospectoExistente.codigo} de asesor ${asesorAnterior} → ${asesorNuevo}`);
+
+                    // Notificación para asesor anterior (perdió prospecto)
+                    await NotificacionesController.crearNotificaciones({
+                        tipo: 'prospecto_reasignado',
+                        modo: 'basico',
+                        data: {
+                            usuario_id: asesorAnterior,
+                            prospecto_id: parseInt(id),
+                            prospecto_codigo: updateResult.codigo,
+                            prospecto_nombre: updateResult.nombre_cliente,
+                            valor_estimado: updateResult.valor_estimado || 0,
+                            motivo_reasignacion: 'Reasignación manual',
+                            tipo_cambio: 'perdida'
+                        },
+                        auto_prioridad: true
+                    });
+
+                    // Notificación para asesor nuevo (ganó prospecto)
+                    await NotificacionesController.crearNotificaciones({
+                        tipo: 'prospecto_reasignado',
+                        modo: 'basico',
+                        data: {
+                            usuario_id: asesorNuevo,
+                            prospecto_id: parseInt(id),
+                            prospecto_codigo: updateResult.codigo,
+                            prospecto_nombre: updateResult.nombre_cliente,
+                            valor_estimado: updateResult.valor_estimado || 0,
+                            motivo_reasignacion: 'Nuevo prospecto asignado',
+                            tipo_cambio: 'ganancia'
+                        },
+                        auto_prioridad: true
+                    });
+
+                    logger.info(`✅ Notificaciones prospecto_reasignado enviadas para ${updateResult.codigo}`);
+                } catch (errorNotif) {
+                    logger.error('⚠️ Error creando notificaciones de reasignación:', errorNotif);
+                }
+            }
 
             res.json({
                 success: true,
@@ -993,6 +1092,43 @@ static async obtenerPorId(req, res) {
             // Invalidar cache después de cambiar estado
             await cacheService.invalidarPorAsesor(prospectoActual.asesor_id);
 
+            // 🔔 CREAR NOTIFICACIONES SEGÚN EL CAMBIO DE ESTADO
+            try {
+                let tipoNotificacion = null;
+
+                // Mapear estado a tipo de notificación
+                if (estado === 'Cotizado') {
+                    tipoNotificacion = 'estado_cotizado';
+                } else if (estado === 'Negociacion') {
+                    tipoNotificacion = 'estado_negociacion';
+                } else if (estado === 'Cerrado') {
+                    tipoNotificacion = 'venta_cerrada'; // Se creará otra después si la conversión es exitosa
+                } else if (estado === 'Perdido') {
+                    tipoNotificacion = 'venta_perdida';
+                }
+
+                if (tipoNotificacion) {
+                    await NotificacionesController.crearNotificaciones({
+                        tipo: tipoNotificacion,
+                        modo: 'basico',
+                        data: {
+                            usuario_id: prospectoActual.asesor_id,
+                            prospecto_id: parseInt(id),
+                            prospecto_codigo: data.codigo,
+                            prospecto_nombre: data.nombre_cliente,
+                            valor_estimado: data.valor_estimado || 0,
+                            estado_anterior: prospectoActual.estado,
+                            estado_nuevo: estado,
+                            motivo: motivo || ''
+                        },
+                        auto_prioridad: true
+                    });
+                    logger.info(`✅ Notificación ${tipoNotificacion} enviada para ${data.codigo}`);
+                }
+            } catch (errorNotif) {
+                logger.error('⚠️ Error creando notificación de cambio de estado:', errorNotif);
+            }
+
             // 🎯 CONVERSIÓN AUTOMÁTICA CUANDO ESTADO = "Cerrado"
             let ventaCreada = null;
             let conversionInfo = null;
@@ -1010,7 +1146,7 @@ static async obtenerPorId(req, res) {
 
                     if (resultadoConversion && resultadoConversion.success) {
                         ventaCreada = resultadoConversion.venta_creada;
-                        
+
                         conversionInfo = {
                             exitosa: true,
                             venta_creada: {
@@ -1023,6 +1159,27 @@ static async obtenerPorId(req, res) {
                         };
 
                         logger.info(`✅ CONVERSIÓN EXITOSA: Prospecto ${id} → Venta ${ventaCreada.id} ($${ventaCreada.valor_total})`);
+
+                        // 🔔 NOTIFICACIÓN DE CONVERSIÓN EXITOSA
+                        try {
+                            await NotificacionesController.crearNotificaciones({
+                                tipo: 'conversion_exitosa',
+                                modo: 'basico',
+                                data: {
+                                    usuario_id: prospectoActual.asesor_id,
+                                    prospecto_id: parseInt(id),
+                                    prospecto_codigo: data.codigo,
+                                    prospecto_nombre: data.nombre_cliente,
+                                    valor_estimado: ventaCreada.valor_total,
+                                    venta_codigo: ventaCreada.codigo,
+                                    venta_id: ventaCreada.id
+                                },
+                                auto_prioridad: true
+                            });
+                            logger.info(`✅ Notificación conversion_exitosa enviada para venta ${ventaCreada.codigo}`);
+                        } catch (errorNotifConv) {
+                            logger.error('⚠️ Error creando notificación conversion_exitosa:', errorNotifConv);
+                        }
                     } else {
                         logger.error(`⚠️ Error en conversión automática:`, resultadoConversion);
                         conversionInfo = {
@@ -1255,8 +1412,28 @@ static async obtenerPorId(req, res) {
 
             logger.info(`Venta cerrada: ${data.codigo} - $${valorVenta}`);
 
+            // 🔔 NOTIFICACIÓN DE VENTA CERRADA
+            try {
+                await NotificacionesController.crearNotificaciones({
+                    tipo: 'venta_cerrada',
+                    modo: 'basico',
+                    data: {
+                        usuario_id: prospecto.asesor_id,
+                        prospecto_id: parseInt(id),
+                        prospecto_codigo: data.codigo,
+                        prospecto_nombre: data.nombre_cliente,
+                        valor_estimado: valorVenta,
+                        productos_vendidos: productosVendidos.length || 0
+                    },
+                    auto_prioridad: true
+                });
+                logger.info(`✅ Notificación venta_cerrada enviada para ${data.codigo}`);
+            } catch (errorNotif) {
+                logger.error('⚠️ Error creando notificación venta_cerrada:', errorNotif);
+            }
+
             // TODO: Integrar con módulo de ventas cuando esté implementado
-            
+
             res.json({
                 success: true,
                 data: {

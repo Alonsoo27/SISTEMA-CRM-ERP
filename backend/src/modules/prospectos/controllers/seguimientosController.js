@@ -2,6 +2,12 @@ const { query } = require('../../../config/database');
 const winston = require('winston');
 const cron = require('node-cron');
 
+// 🔔 INTEGRACIÓN CON SISTEMA DE NOTIFICACIONES AUTOMÁTICAS
+const NotificacionesController = require('../../notificaciones/controllers/notificacionesController');
+
+// 🔄 INTEGRACIÓN CON SISTEMA DE SINCRONIZACIÓN DE CACHE
+const { sincronizarCacheSeguimientos } = require('../utils/sincronizarSeguimientos');
+
 // CONFIGURACIÓN DE LOGGING
 const logger = winston.createLogger({
     level: 'info',
@@ -97,16 +103,50 @@ class SeguimientosController {
             }
 
             const seguimiento = result.rows[0];
-            
-            // Actualizar prospecto con seguimiento obligatorio
-            await query(`
-                UPDATE prospectos 
-                SET seguimiento_obligatorio = $1, seguimiento_completado = $2, fecha_seguimiento = $3
-                WHERE id = $4
-            `, [fecha_programada, false, fecha_programada, id]);
-            
+
+            // 🔄 SINCRONIZAR CACHE: Actualizar campos de cache en prospecto
+            try {
+                await sincronizarCacheSeguimientos(parseInt(id));
+                logger.info(`🔄 Cache de seguimientos sincronizado para prospecto ${id}`);
+            } catch (errorSync) {
+                logger.error('⚠️ Error sincronizando cache de seguimientos:', errorSync);
+                // No detener el flujo si falla la sincronización
+            }
+
             logger.info(`Seguimiento creado: Prospecto ${id}, fecha límite: ${fecha_limite.toISOString()}`);
-            
+
+            // 🔔 NOTIFICACIÓN: seguimiento_proximo si está dentro de las próximas 24 horas
+            try {
+                const horasHastaSeguimiento = (new Date(fecha_programada) - new Date()) / (1000 * 60 * 60);
+
+                if (horasHastaSeguimiento > 0 && horasHastaSeguimiento <= 24) {
+                    // Obtener datos del prospecto
+                    const prospectoData = await query('SELECT * FROM prospectos WHERE id = $1', [id]);
+                    const prospecto = prospectoData.rows[0];
+
+                    if (prospecto) {
+                        await NotificacionesController.crearNotificaciones({
+                            tipo: 'seguimiento_proximo',
+                            modo: 'basico',
+                            data: {
+                                usuario_id: asesor_id,
+                                prospecto_id: parseInt(id),
+                                prospecto_codigo: prospecto.codigo,
+                                prospecto_nombre: prospecto.nombre_cliente,
+                                seguimiento_id: seguimiento.id,
+                                fecha_programada: fecha_programada,
+                                horas_restantes: Math.round(horasHastaSeguimiento),
+                                valor_estimado: prospecto.valor_estimado || 0
+                            },
+                            auto_prioridad: true
+                        });
+                        logger.info(`✅ Notificación seguimiento_proximo enviada (${Math.round(horasHastaSeguimiento)}h)`);
+                    }
+                }
+            } catch (errorNotif) {
+                logger.error('⚠️ Error creando notificación seguimiento_proximo:', errorNotif);
+            }
+
             res.status(201).json({
                 success: true,
                 data: seguimiento,
@@ -129,16 +169,23 @@ class SeguimientosController {
     static async completarSeguimiento(req, res) {
         try {
             const { id } = req.params;
-            const { resultado = 'Seguimiento completado', notas = '', calificacion = null } = req.body;
-            
+            const {
+                resultado = 'Seguimiento completado',
+                notas = '',
+                calificacion = null,
+                reprogramar = false,        // ✅ NUEVO: Si se debe crear siguiente seguimiento
+                nueva_fecha = null,         // ✅ NUEVO: Fecha del siguiente seguimiento
+                tipo_seguimiento = 'Llamada' // ✅ NUEVO: Tipo del siguiente seguimiento
+            } = req.body;
+
             if (!id || isNaN(id)) {
                 return res.status(400).json({
                     success: false,
                     error: 'ID de seguimiento inválido'
                 });
             }
-            
-            // Actualizar seguimiento con nuevos campos
+
+            // Actualizar seguimiento actual como completado
             const updateResult = await query(`
                 UPDATE seguimientos
                 SET completado = $1, fecha_completado = $2, resultado = $3, notas = $4,
@@ -146,7 +193,7 @@ class SeguimientosController {
                 WHERE id = $8
                 RETURNING prospecto_id, asesor_id
             `, [true, new Date().toISOString(), resultado, notas, calificacion, req.user?.id, resultado, id]);
-            
+
             if (!updateResult.rows || updateResult.rows.length === 0) {
                 return res.status(404).json({
                     success: false,
@@ -155,16 +202,67 @@ class SeguimientosController {
             }
 
             const data = updateResult.rows[0];
-            
-            // Actualizar prospecto con nuevo estado
-            await query(`
-                UPDATE prospectos
-                SET seguimiento_completado = $1, estado_seguimiento = $2, fecha_ultimo_seguimiento = $3
-                WHERE id = $4
-            `, [true, 'realizado', new Date(), data.prospecto_id]);
+
+            // ✅ REPROGRAMACIÓN: Crear siguiente seguimiento si se solicita
+            if (reprogramar && nueva_fecha) {
+                try {
+                    const fechaLimite = new Date(nueva_fecha);
+                    fechaLimite.setHours(fechaLimite.getHours() + 18);
+
+                    await query(`
+                        INSERT INTO seguimientos (
+                            prospecto_id, asesor_id, fecha_programada, fecha_limite,
+                            tipo, descripcion, completado, visible_para_asesor
+                        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                    `, [
+                        data.prospecto_id,
+                        data.asesor_id,
+                        nueva_fecha,
+                        fechaLimite.toISOString(),
+                        tipo_seguimiento,
+                        `Seguimiento reprogramado: ${resultado}`,
+                        false,
+                        true
+                    ]);
+
+                    logger.info(`✅ Seguimiento reprogramado para prospecto ${data.prospecto_id} - Nueva fecha: ${nueva_fecha}`);
+
+                } catch (errorReprogramacion) {
+                    logger.error('❌ Error al reprogramar seguimiento:', errorReprogramacion);
+                    // Continuar aunque falle la reprogramación
+                }
+            }
+
+            // 🔄 SINCRONIZAR CACHE: Buscar el siguiente seguimiento pendiente y actualizar campos de cache
+            try {
+                await sincronizarCacheSeguimientos(data.prospecto_id);
+                logger.info(`🔄 Cache de seguimientos sincronizado para prospecto ${data.prospecto_id}`);
+            } catch (errorSync) {
+                logger.error('⚠️ Error sincronizando cache de seguimientos:', errorSync);
+                // No detener el flujo si falla la sincronización
+            }
             
             logger.info(`Seguimiento completado: ${id} con resultado: ${resultado}`);
-            
+
+            // 🔔 NOTIFICACIÓN: seguimiento_completado
+            try {
+                await NotificacionesController.crearNotificaciones({
+                    tipo: 'seguimiento_completado',
+                    modo: 'basico',
+                    data: {
+                        usuario_id: data.asesor_id,
+                        prospecto_id: data.prospecto_id,
+                        seguimiento_id: parseInt(id),
+                        resultado: resultado,
+                        calificacion: calificacion
+                    },
+                    auto_prioridad: true
+                });
+                logger.info(`✅ Notificación seguimiento_completado enviada para seguimiento ${id}`);
+            } catch (errorNotif) {
+                logger.error('⚠️ Error creando notificación seguimiento_completado:', errorNotif);
+            }
+
             // ============================================
             // 🚀 CONVERSIÓN AUTOMÁTICA
             // ============================================
@@ -252,27 +350,27 @@ class SeguimientosController {
     
     /**
      * PUT /api/prospectos/seguimientos/:id/posponer
-     * Posponer seguimiento (snooze)
+     * Posponer seguimiento (snooze) - MEJORADO: Crea nuevo seguimiento en lugar de actualizar
      */
     static async posponerSeguimiento(req, res) {
         try {
             const { id } = req.params;
             const { nueva_fecha, motivo } = req.body;
-            
+
             if (!id || isNaN(id)) {
                 return res.status(400).json({
                     success: false,
                     error: 'ID de seguimiento inválido'
                 });
             }
-            
+
             if (!nueva_fecha || !motivo) {
                 return res.status(400).json({
                     success: false,
                     error: 'Nueva fecha y motivo son obligatorios'
                 });
             }
-            
+
             // Validar que la nueva fecha sea futura
             const fechaNueva = new Date(nueva_fecha);
             if (fechaNueva <= new Date()) {
@@ -281,31 +379,65 @@ class SeguimientosController {
                     error: 'La nueva fecha debe ser futura'
                 });
             }
-            
-            // Calcular nueva fecha límite
-            const nuevaFechaLimite = new Date(fechaNueva.getTime() + (18 * 60 * 60 * 1000));
-            
-            // Actualizar seguimiento
-            const result = await query(`
-                UPDATE seguimientos 
-                SET pospuesto = $1, fecha_posposicion = $2, motivo_posposicion = $3, 
-                    nueva_fecha_programada = $4, fecha_programada = $5, fecha_limite = $6
-                WHERE id = $7
-                RETURNING *
-            `, [true, new Date().toISOString(), motivo, nueva_fecha, nueva_fecha, 
-                nuevaFechaLimite.toISOString(), id]);
-            
-            if (!result.rows || result.rows.length === 0) {
+
+            // Obtener datos del seguimiento actual
+            const seguimientoActual = await query(`
+                SELECT prospecto_id, asesor_id, tipo FROM seguimientos WHERE id = $1
+            `, [id]);
+
+            if (!seguimientoActual.rows || seguimientoActual.rows.length === 0) {
                 return res.status(404).json({
                     success: false,
                     error: 'Seguimiento no encontrado'
                 });
             }
 
-            const data = result.rows[0];
-            
-            logger.info(`Seguimiento pospuesto: ${id} hasta ${nueva_fecha}`);
-            
+            const { prospecto_id, asesor_id, tipo } = seguimientoActual.rows[0];
+
+            // ✅ NUEVO ENFOQUE: Marcar actual como pospuesto (completado con motivo especial)
+            await query(`
+                UPDATE seguimientos
+                SET completado = $1,
+                    fecha_completado = $2,
+                    resultado = $3,
+                    notas = $4,
+                    pospuesto = $5
+                WHERE id = $6
+            `, [true, new Date().toISOString(), 'pospuesto', motivo, true, id]);
+
+            // ✅ Crear NUEVO seguimiento con la fecha reprogramada
+            const nuevaFechaLimite = new Date(fechaNueva.getTime() + (18 * 60 * 60 * 1000));
+
+            const nuevoSeguimiento = await query(`
+                INSERT INTO seguimientos (
+                    prospecto_id, asesor_id, fecha_programada, fecha_limite,
+                    tipo, descripcion, completado, visible_para_asesor
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                RETURNING *
+            `, [
+                prospecto_id,
+                asesor_id,
+                nueva_fecha,
+                nuevaFechaLimite.toISOString(),
+                tipo,
+                `Seguimiento pospuesto: ${motivo}`,
+                false,
+                true
+            ]);
+
+            const data = nuevoSeguimiento.rows[0];
+
+            // 🔄 SINCRONIZAR CACHE: Actualizar campos de cache en prospecto
+            try {
+                await sincronizarCacheSeguimientos(prospecto_id);
+                logger.info(`🔄 Cache de seguimientos sincronizado para prospecto ${prospecto_id}`);
+            } catch (errorSync) {
+                logger.error('⚠️ Error sincronizando cache de seguimientos:', errorSync);
+                // No detener el flujo si falla la sincronización
+            }
+
+            logger.info(`✅ Seguimiento ${id} pospuesto y nuevo seguimiento ${data.id} creado para ${nueva_fecha}`);
+
             res.json({
                 success: true,
                 data: data,
@@ -593,6 +725,30 @@ class SeguimientosController {
                         WHERE id = $3
                     `, [true, false, seguimiento.id]);
 
+                    // 🔔 NOTIFICACIÓN: seguimiento_vencido
+                    try {
+                        const tipoNotificacion = horasVencidas < 6 ? 'seguimiento_urgente' :
+                                               horasVencidas >= 18 ? 'seguimiento_critico' : 'seguimiento_vencido';
+
+                        await NotificacionesController.crearNotificaciones({
+                            tipo: tipoNotificacion,
+                            modo: 'basico',
+                            data: {
+                                usuario_id: seguimiento.asesor_id,
+                                prospecto_id: seguimiento.prospecto_id,
+                                prospecto_codigo: seguimiento.codigo,
+                                prospecto_nombre: seguimiento.nombre_cliente,
+                                seguimiento_id: seguimiento.id,
+                                horas_vencidas: Math.round(horasVencidas),
+                                valor_estimado: seguimiento.valor_estimado || 0
+                            },
+                            auto_prioridad: true
+                        });
+                        logger.info(`✅ Notificación ${tipoNotificacion} enviada para seguimiento ${seguimiento.id}`);
+                    } catch (errorNotif) {
+                        logger.error('⚠️ Error creando notificación de seguimiento vencido:', errorNotif);
+                    }
+
                     // Si lleva más de 18 horas vencido, cambiar prospecto a "Perdido"
                     if (horasVencidas >= 18) {
                         await query(`
@@ -788,11 +944,39 @@ class SeguimientosController {
                 logger.warn('Tabla prospecto_modo_libre no existe, continuando...');
             }
             
-            // Notificar a todos los asesores
+            // Notificar a todos los asesores mediante el sistema unificado
             await this.crearNotificacionModoLibre(prospecto_id, asesor_ids);
-            
+
+            // 🔔 NOTIFICACIÓN VÍA SISTEMA UNIFICADO: prospecto_libre_activado
+            try {
+                // Obtener datos del prospecto
+                const prospectoData = await query('SELECT * FROM prospectos WHERE id = $1', [prospecto_id]);
+                const prospecto = prospectoData.rows[0];
+
+                if (prospecto) {
+                    // Crear notificación para cada asesor del área de ventas
+                    for (const asesorId of asesor_ids) {
+                        await NotificacionesController.crearNotificaciones({
+                            tipo: 'prospecto_libre_activado',
+                            modo: 'basico',
+                            data: {
+                                usuario_id: asesorId,
+                                prospecto_id: prospecto_id,
+                                prospecto_codigo: prospecto.codigo,
+                                prospecto_nombre: prospecto.nombre_cliente,
+                                valor_estimado: prospecto.valor_estimado || 0
+                            },
+                            auto_prioridad: true
+                        });
+                    }
+                    logger.info(`✅ Notificaciones prospecto_libre_activado enviadas a ${asesor_ids.length} asesores`);
+                }
+            } catch (errorNotif) {
+                logger.error('⚠️ Error creando notificaciones de modo libre:', errorNotif);
+            }
+
             logger.info(`🏁 Modo libre activado para prospecto ${prospecto_id}`);
-            
+
             return { modo_libre: true, asesores_con_acceso: asesor_ids.length };
             
         } catch (error) {
@@ -1319,6 +1503,34 @@ class SeguimientosController {
                 status: 'Error',
                 timestamp: new Date().toISOString(),
                 error: error.message
+            });
+        }
+    }
+
+    /**
+     * POST /api/prospectos/seguimientos/sincronizar-cache
+     * Sincronizar cache de seguimientos de todos los prospectos activos
+     * ⚠️ ADMIN ONLY - Operación de mantenimiento
+     */
+    static async sincronizarCacheMasivo(req, res) {
+        try {
+            logger.info('🔄 Iniciando sincronización masiva de cache de seguimientos');
+
+            const { sincronizarTodosLosProspectos } = require('../utils/sincronizarSeguimientos');
+
+            const resultado = await sincronizarTodosLosProspectos();
+
+            res.json({
+                success: true,
+                message: 'Sincronización masiva completada',
+                data: resultado
+            });
+
+        } catch (error) {
+            logger.error('Error en sincronizarCacheMasivo:', error);
+            res.status(500).json({
+                success: false,
+                error: 'Error en sincronización masiva: ' + error.message
             });
         }
     }

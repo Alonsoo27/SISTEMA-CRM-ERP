@@ -171,14 +171,15 @@ const BalanzaSeguimientos = ({ asesorId: asesorIdProp = null, refreshTrigger = 0
     if (!dashboardData) return { pendientes: 0, realizados: 0, balance: 0 };
 
     const seguimientos = dashboardData.seguimientos || {};
-    const conteos = dashboardData.conteos || {};
+    const conteos = seguimientos.conteos || {}; // ✅ FIX: conteos está dentro de seguimientos
 
     // ⚖️ LÓGICA REAL DE NEGOCIO:
     // - Sistema usa 18 horas laborales para vencimiento
     // - Vencidos tienen tiempo de recuperación antes de traspaso
     // - Solo seguimientos confirmados van a "realizados"
 
-    const pendientesProximos = conteos.pendientes || 0;
+    // ✅ CORRECCIÓN: Usar conteos.proximos (no pendientes) para evitar contar vencidos dos veces
+    const pendientesProximos = conteos.proximos || 0;  // Solo próximos (sin vencidos)
     const vencidosSinConfirmar = conteos.vencidos || 0;
 
     // Total de seguimientos que necesitan acción del asesor

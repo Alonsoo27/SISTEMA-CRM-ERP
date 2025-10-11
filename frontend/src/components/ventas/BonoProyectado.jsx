@@ -1,44 +1,50 @@
 // Archivo: src/components/ventas/BonoProyectado.jsx
 import React, { useState, useEffect } from 'react';
-import { DollarSign, Target, TrendingUp, X, Award, Zap } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
-import { AuthUtils } from '../../utils/auth';
-import { API_CONFIG } from '../../config/apiConfig';
+import { DollarSign, Target, X, Award, Zap } from 'lucide-react';
+import { API_CONFIG } from '../../config/dashboardConfig';
 
-const BonoProyectado = ({ asesorId = 1 }) => {
+const BonoProyectado = ({ asesorId }) => {
   const [datosBonus, setDatosBonus] = useState(null);
   const [mostrarModal, setMostrarModal] = useState(false);
   const [cargando, setCargando] = useState(true);
-  const navigate = useNavigate();
 
   useEffect(() => {
+    const cargarDatosBonus = async () => {
+      if (!asesorId) return;
+
+      try {
+        setCargando(true);
+
+        const token = localStorage.getItem('token');
+        if (!token) {
+          console.error('Token no encontrado');
+          return;
+        }
+
+        const response = await fetch(`${API_CONFIG.BASE_URL}/comisiones/bono-actual/${asesorId}`, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+          setDatosBonus(data.data);
+        } else {
+          console.error('Error en respuesta:', data.message);
+        }
+      } catch (error) {
+        console.error('❌ Error cargando bonos:', error);
+      } finally {
+        setCargando(false);
+      }
+    };
+
     cargarDatosBonus();
   }, [asesorId]);
 
-  const cargarDatosBonus = async () => {
-    try {
-      setCargando(true);
-      
-      // ✅ Usar AuthUtils para obtener token y hacer request seguro
-      const response = await AuthUtils.authenticatedFetch(`${API_CONFIG.BASE_URL}/api/comisiones/bono-actual/${asesorId}`);
-      
-      const data = await response.json();
-      console.log('🔍 Respuesta API bonos:', data); // DEBUG
-      
-      if (data.success) {
-        setDatosBonus(data.data);
-      }
-    } catch (error) {
-      console.error('❌ Error cargando bonos:', error);
-      
-      // Si es error de autenticación, AuthUtils ya manejó la redirección
-      if (error.message === 'No authenticated' || error.message === 'Authentication failed') {
-        return; // No hacer nada más, ya se redirigió al login
-      }
-    } finally {
-      setCargando(false);
-    }
-  };
   const formatearMoneda = (monto) => {
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
@@ -102,11 +108,11 @@ const BonoProyectado = ({ asesorId = 1 }) => {
 
   if (cargando) {
     return (
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+      <div className="bg-white rounded-lg shadow p-4">
         <div className="animate-pulse">
-          <div className="h-4 bg-gray-200 rounded w-1/2 mb-4"></div>
-          <div className="h-8 bg-gray-200 rounded w-1/3 mb-2"></div>
-          <div className="h-3 bg-gray-200 rounded w-3/4"></div>
+          <div className="h-3 bg-gray-200 rounded w-1/2 mb-2"></div>
+          <div className="h-6 bg-gray-200 rounded w-1/3 mb-1"></div>
+          <div className="h-2 bg-gray-200 rounded w-3/4"></div>
         </div>
       </div>
     );
@@ -114,10 +120,10 @@ const BonoProyectado = ({ asesorId = 1 }) => {
 
   if (!datosBonus) {
     return (
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-        <div className="flex items-center text-gray-500">
-          <DollarSign className="w-5 h-5 mr-2" />
-          <span>No hay datos de bonos disponibles</span>
+      <div className="bg-white rounded-lg shadow p-4">
+        <div className="flex items-center text-gray-500 text-xs">
+          <DollarSign className="w-4 h-4 mr-1" />
+          <span>Sin datos</span>
         </div>
       </div>
     );
@@ -128,41 +134,34 @@ const BonoProyectado = ({ asesorId = 1 }) => {
 
   return (
     <>
-      {/* Componente Principal */}
-      <div 
-        className="bg-gradient-to-br from-green-50 to-emerald-50 rounded-lg shadow-sm border border-green-200 p-6 cursor-pointer hover:shadow-md transition-shadow"
+      {/* Componente Principal - Estilo coherente con otras cards */}
+      <div
+        className="bg-white rounded-lg shadow p-4 cursor-pointer hover:shadow-lg transition-shadow"
         onClick={() => setMostrarModal(true)}
+        title="Click para ver detalles del bono"
       >
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center">
-            <div className="bg-green-100 p-2 rounded-lg mr-3">
-              <DollarSign className="w-5 h-5 text-green-600" />
-            </div>
-            <h3 className="text-lg font-semibold text-gray-800">💰 Bono Proyectado</h3>
-          </div>
-          <div className="text-xs text-gray-500">Click para detalles</div>
-        </div>
-
-        <div className="space-y-3">
-          <div className="text-3xl font-bold text-green-600">
-            {formatearMoneda(datosBonus.bono_actual.bono_usd)}
-          </div>
-          
-          <div className="flex items-center space-x-2">
-            <Target className="w-4 h-4 text-blue-500" />
-            <span className={`text-sm font-medium ${nivelActual.color}`}>
-              📊 {datosBonus.bono_actual.porcentaje}% de meta
-            </span>
-          </div>
-
-          {datosBonus.siguiente_nivel && datosBonus.siguiente_nivel.falta_usd > 0 && (
-            <div className="flex items-center space-x-2">
-              <Zap className="w-4 h-4 text-orange-500" />
-              <span className="text-sm text-gray-600">
-                ⚡ {formatearMoneda(datosBonus.siguiente_nivel.falta_usd)} para siguiente nivel
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="font-medium text-gray-600 text-xs">
+              Mi Bono Actual
+            </p>
+            <p className="font-bold text-gray-900 text-2xl">
+              {formatearMoneda(datosBonus.bono_actual.bono_usd)}
+            </p>
+            <div className="flex items-center mt-1">
+              <Award className={`h-3 w-3 ${
+                (datosBonus.bono_actual.porcentaje || 0) >= 100 ? 'text-yellow-500' : 'text-orange-500'
+              }`} />
+              <span className={`ml-1 text-xs ${
+                (datosBonus.bono_actual.porcentaje || 0) >= 100 ? 'text-yellow-600' : 'text-orange-600'
+              }`}>
+                {Math.round(datosBonus.bono_actual.porcentaje || 0)}% de meta
               </span>
             </div>
-          )}
+          </div>
+          <div className="bg-yellow-100 rounded-full p-2">
+            <Award className="text-yellow-600 h-6 w-6" />
+          </div>
         </div>
       </div>
 

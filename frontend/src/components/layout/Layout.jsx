@@ -2,6 +2,8 @@
 import React, { useState, useEffect } from 'react';
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
 import NotificationBell from '../NotificationBell';
+import { ToastContainer } from '../common/NotificationToast';
+import { useNotificaciones } from '../../hooks/useNotificaciones';
 import authService from '../../services/authService';
 import { canAccessModule } from '../../utils/userUtils';
 import CambioPasswordObligatorio from '../auth/CambioPasswordObligatorio';
@@ -11,6 +13,9 @@ const Layout = () => {
   const navigate = useNavigate();
   const [usuarioActual, setUsuarioActual] = useState(null);
   const [mostrarCambioPassword, setMostrarCambioPassword] = useState(false);
+
+  // 🍞 Hook de notificaciones para toasts
+  const { toasts, removerToast } = useNotificaciones();
 
   // Cargar usuario al montar componente
   useEffect(() => {
@@ -223,6 +228,9 @@ const Layout = () => {
 
   return (
     <div className="h-screen flex bg-gray-100">
+      {/* 🍞 Toast Container para notificaciones críticas */}
+      <ToastContainer toasts={toasts} onRemoveToast={removerToast} />
+
       {/* Modal de cambio de contraseña obligatorio */}
       {mostrarCambioPassword && (
         <CambioPasswordObligatorio onSuccess={handlePasswordChangeSuccess} />

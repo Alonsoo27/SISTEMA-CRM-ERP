@@ -1,6 +1,9 @@
 const { query } = require('../../../config/database');
 const winston = require('winston');
 
+// ✅ IMPORTAR SISTEMA DE ROLES
+const { ROLES, GRUPOS_ROLES, esEjecutivo, esJefe, esJefeOEjecutivo, tienePermiso } = require('../../../config/roles');
+
 // Función para obtener fecha Peru
 const obtenerFechaPeruISO = () => {
     const ahora = new Date();
@@ -31,7 +34,50 @@ const logger = winston.createLogger({
 });
 
 class NotificacionesController {
-    
+
+    /**
+     * 🔐 VALIDAR SI UN USUARIO PERTENECE AL EQUIPO DE UN JEFE
+     * @param {number} jefeId - ID del jefe
+     * @param {number} usuarioId - ID del usuario a validar
+     * @returns {Promise<boolean>} - true si pertenece al equipo
+     */
+    static async validarUsuarioEnEquipo(jefeId, usuarioId) {
+        try {
+            // Si es el mismo usuario, siempre es válido
+            if (parseInt(jefeId) === parseInt(usuarioId)) {
+                return true;
+            }
+
+            // Buscar si el usuario reporta directamente al jefe
+            const result = await query(`
+                SELECT u.id, u.jefe_id, u.rol_id, r.nombre as rol_nombre
+                FROM usuarios u
+                LEFT JOIN roles r ON u.rol_id = r.id
+                WHERE u.id = $1 AND u.activo = true
+            `, [usuarioId]);
+
+            if (!result.rows || result.rows.length === 0) {
+                return false;
+            }
+
+            const usuario = result.rows[0];
+
+            // Validar si el usuario reporta al jefe directamente
+            if (usuario.jefe_id && parseInt(usuario.jefe_id) === parseInt(jefeId)) {
+                return true;
+            }
+
+            // TODO: Validar jerarquías indirectas si es necesario
+            // Por ahora solo validamos reporte directo
+
+            return false;
+
+        } catch (error) {
+            logger.error(`Error validando equipo: jefeId=${jefeId}, usuarioId=${usuarioId}`, error);
+            return false;
+        }
+    }
+
     /**
      * 🚀 MÉTODO SUPERIOR UNIFICADO para crear notificaciones
      * Reemplaza múltiples métodos por uno flexible con opciones
@@ -233,12 +279,33 @@ class NotificacionesController {
 
         // Puntos por tipo
         const puntosPorTipo = {
+            // Seguimientos
             'seguimiento_vencido': 30,
             'seguimiento_urgente': 50,
             'seguimiento_critico': 80,
+            'seguimiento_completado': 15,
+            'seguimiento_proximo': 25,
+
+            // Prospectos
+            'prospecto_creado': 20,
+            'prospecto_reasignado': 35,
+            'prospecto_eliminado': 30,
+            'prospecto_libre_activado': 40,
+
+            // Estados y ventas
+            'estado_cotizado': 30,
+            'estado_negociacion': 45,
+            'venta_cerrada': 70,
             'venta_perdida': 60,
-            'cliente_insatisfecho': 70,
+            'conversion_exitosa': 65,
+
+            // Alertas
             'oportunidad_alta': 40,
+            'alerta_reasignaciones': 75,
+            'meta_alcanzada': 30,
+
+            // Sistema
+            'cliente_insatisfecho': 70,
             'sistema': 20,
             'marketing': 10,
             'manual': 25
@@ -276,22 +343,36 @@ class NotificacionesController {
         if (data.titulo) return data.titulo;
 
         const plantillas = {
-            'seguimiento_vencido': data.horas_vencidas > 48 ? 
+            // Seguimientos
+            'seguimiento_vencido': data.horas_vencidas > 48 ?
                 `🚨 Seguimiento CRÍTICO - ${data.nombre_cliente || 'Cliente'}` :
                 `⏰ Seguimiento vencido - ${data.nombre_cliente || 'Cliente'}`,
-            
             'seguimiento_urgente': `🔥 URGENTE: ${data.nombre_cliente || 'Cliente'} requiere atención`,
-            
             'seguimiento_critico': `🚨 CRÍTICO: ${data.nombre_cliente || 'Cliente'} - ${data.horas_vencidas}h sin contacto`,
-            
+            'seguimiento_completado': `✅ Seguimiento completado: ${data.nombre_cliente || 'Cliente'}`,
+            'seguimiento_proximo': `📅 Seguimiento próximo: ${data.nombre_cliente || 'Cliente'} en 24h`,
+
+            // Prospectos
+            'prospecto_creado': `🎯 Nuevo prospecto asignado: ${data.nombre_cliente || 'Cliente'}`,
+            'prospecto_reasignado': `🔄 Prospecto reasignado: ${data.nombre_cliente || 'Cliente'}`,
+            'prospecto_eliminado': `🗑️ Prospecto eliminado: ${data.nombre_cliente || data.codigo || 'Prospecto'}`,
+            'prospecto_libre_activado': `🆓 Modo libre activado: ${data.nombre_cliente || 'Cliente'}`,
+
+            // Estados y ventas
+            'estado_cotizado': `📋 Cotización enviada: ${data.nombre_cliente || 'Cliente'}`,
+            'estado_negociacion': `💼 En negociación: ${data.nombre_cliente || 'Cliente'}`,
+            'venta_cerrada': `🎉 ¡Venta cerrada! ${data.nombre_cliente || 'Cliente'} - $${data.valor_estimado?.toLocaleString()}`,
             'venta_perdida': `💔 Venta perdida: ${data.nombre_cliente || 'Cliente'} ($${data.valor_estimado?.toLocaleString()})`,
-            
+            'conversion_exitosa': `🚀 Conversión exitosa: ${data.nombre_cliente || 'Cliente'} → Venta`,
+
+            // Alertas
             'oportunidad_alta': `💰 Oportunidad de alto valor: $${data.valor_estimado?.toLocaleString()}`,
-            
+            'alerta_reasignaciones': `⚠️ ALERTA: ${data.nombre_cliente || 'Prospecto'} - ${data.numero_reasignaciones}+ reasignaciones`,
+            'meta_alcanzada': `🏆 ¡Meta alcanzada! ${data.meta_nombre || 'Objetivo cumplido'}`,
+
+            // Sistema
             'sistema': `ℹ️ Actualización del sistema`,
-            
             'marketing': `📢 ${data.titulo || 'Nueva promoción disponible'}`,
-            
             'manual': data.titulo || `📝 Notificación importante`
         };
 
@@ -302,20 +383,34 @@ class NotificacionesController {
         if (data.mensaje) return data.mensaje;
 
         const mensajes = {
+            // Seguimientos
             'seguimiento_vencido': `${data.nombre_cliente || 'El cliente'} lleva ${data.horas_vencidas || 0}h sin seguimiento. Valor estimado: $${data.valor_estimado?.toLocaleString() || 0}`,
-            
             'seguimiento_urgente': `${data.nombre_cliente || 'El cliente'} requiere contacto inmediato. Han pasado ${data.horas_vencidas || 0}h desde el último seguimiento.`,
-            
             'seguimiento_critico': `ATENCIÓN INMEDIATA: ${data.nombre_cliente || 'Cliente'} sin contacto por ${data.horas_vencidas || 0}h. Riesgo de pérdida alto.`,
-            
-            'venta_perdida': `La venta con ${data.nombre_cliente || 'el cliente'} se ha perdido. Valor: $${data.valor_estimado?.toLocaleString() || 0}. Revisar para mejoras futuras.`,
-            
-            'oportunidad_alta': `Nueva oportunidad de alto valor detectada. Cliente: ${data.nombre_cliente || 'No especificado'}. Valor estimado: $${data.valor_estimado?.toLocaleString() || 0}`,
-            
+            'seguimiento_completado': `Seguimiento completado exitosamente con ${data.nombre_cliente || 'el cliente'}. Resultado: ${data.resultado || 'Positivo'}.`,
+            'seguimiento_proximo': `Tienes un seguimiento programado con ${data.nombre_cliente || 'cliente'} en las próximas 24 horas. ¡Prepárate!`,
+
+            // Prospectos
+            'prospecto_creado': `Se te ha asignado un nuevo prospecto: ${data.codigo || 'N/A'}. Cliente: ${data.nombre_cliente || 'No especificado'}. Canal: ${data.canal_contacto || 'N/A'}. Valor estimado: $${data.valor_estimado?.toLocaleString() || 0}`,
+            'prospecto_reasignado': `El prospecto ${data.codigo || 'N/A'} ha sido reasignado a ti. ${data.motivo_reasignacion ? 'Motivo: ' + data.motivo_reasignacion : ''} Asesor anterior: ${data.asesor_anterior || 'No especificado'}.`,
+            'prospecto_eliminado': `El prospecto ${data.codigo || 'N/A'} (${data.nombre_cliente || 'Cliente'}) ha sido eliminado del sistema. ${data.motivo_eliminacion ? 'Motivo: ' + data.motivo_eliminacion : ''}`,
+            'prospecto_libre_activado': `El prospecto ${data.nombre_cliente || 'Cliente'} ahora está en modo libre. Cualquier asesor puede trabajarlo. Actúa rápido para no perder la oportunidad.`,
+
+            // Estados y ventas
+            'estado_cotizado': `Se ha enviado cotización a ${data.nombre_cliente || 'el cliente'} por $${data.valor_estimado?.toLocaleString() || 0}. Realiza seguimiento en las próximas 48h.`,
+            'estado_negociacion': `${data.nombre_cliente || 'El cliente'} está en negociación. Valor: $${data.valor_estimado?.toLocaleString() || 0}. Probabilidad de cierre: ${data.probabilidad_cierre || 50}%. ¡Es momento de cerrar!`,
+            'venta_cerrada': `¡Felicitaciones! Venta cerrada con ${data.nombre_cliente || 'cliente'} por $${data.valor_estimado?.toLocaleString() || 0}. ${data.comision ? 'Comisión estimada: $' + data.comision.toLocaleString() : ''}`,
+            'venta_perdida': `La venta con ${data.nombre_cliente || 'el cliente'} se ha perdido. Valor: $${data.valor_estimado?.toLocaleString() || 0}. ${data.motivo_perdida ? 'Motivo: ' + data.motivo_perdida : 'Revisar para mejoras futuras.'}`,
+            'conversion_exitosa': `El prospecto ${data.nombre_cliente || 'cliente'} se convirtió automáticamente en venta. Código de venta: ${data.venta_codigo || 'N/A'}. Valor: $${data.valor_estimado?.toLocaleString() || 0}`,
+
+            // Alertas
+            'oportunidad_alta': `Nueva oportunidad de alto valor detectada. Cliente: ${data.nombre_cliente || 'No especificado'}. Valor estimado: $${data.valor_estimado?.toLocaleString() || 0}. Canal: ${data.canal_contacto || 'N/A'}`,
+            'alerta_reasignaciones': `ATENCIÓN: El prospecto ${data.nombre_cliente || 'cliente'} ha sido reasignado ${data.numero_reasignaciones || 0} veces. Revisar estrategia de asignación y contacto.`,
+            'meta_alcanzada': `¡Felicitaciones! Has alcanzado tu meta de ${data.meta_nombre || 'ventas'}. ${data.meta_detalle || 'Sigue así para mantener el rendimiento.'}`,
+
+            // Sistema
             'sistema': data.mensaje || 'El sistema ha generado una actualización importante.',
-            
             'marketing': data.mensaje || 'Nueva campaña de marketing disponible para tus clientes.',
-            
             'manual': data.mensaje || 'Notificación creada manualmente.'
         };
 
@@ -326,11 +421,32 @@ class NotificacionesController {
         if (data.accion_url) return data.accion_url;
 
         const urls = {
+            // Seguimientos
             'seguimiento_vencido': data.prospecto_id ? `/prospectos/${data.prospecto_id}` : '/prospectos?tab=seguimientos',
             'seguimiento_urgente': data.prospecto_id ? `/prospectos/${data.prospecto_id}` : '/prospectos',
             'seguimiento_critico': data.prospecto_id ? `/prospectos/${data.prospecto_id}` : '/prospectos',
+            'seguimiento_completado': data.prospecto_id ? `/prospectos/${data.prospecto_id}` : '/prospectos?tab=historial',
+            'seguimiento_proximo': data.prospecto_id ? `/prospectos/${data.prospecto_id}` : '/prospectos?tab=seguimientos',
+
+            // Prospectos
+            'prospecto_creado': data.prospecto_id ? `/prospectos/${data.prospecto_id}` : '/prospectos',
+            'prospecto_reasignado': data.prospecto_id ? `/prospectos/${data.prospecto_id}` : '/prospectos',
+            'prospecto_eliminado': '/prospectos?tab=eliminados',
+            'prospecto_libre_activado': data.prospecto_id ? `/prospectos/${data.prospecto_id}` : '/prospectos?filtro=modo_libre',
+
+            // Estados y ventas
+            'estado_cotizado': data.prospecto_id ? `/prospectos/${data.prospecto_id}` : '/prospectos?estado=Cotizado',
+            'estado_negociacion': data.prospecto_id ? `/prospectos/${data.prospecto_id}` : '/prospectos?estado=Negociacion',
+            'venta_cerrada': data.venta_id ? `/ventas/${data.venta_id}` : '/ventas',
             'venta_perdida': data.prospecto_id ? `/prospectos/${data.prospecto_id}` : '/reportes/ventas-perdidas',
+            'conversion_exitosa': data.venta_id ? `/ventas/${data.venta_id}` : '/ventas',
+
+            // Alertas
             'oportunidad_alta': data.prospecto_id ? `/prospectos/${data.prospecto_id}` : '/prospectos?filtro=alto_valor',
+            'alerta_reasignaciones': data.prospecto_id ? `/prospectos/${data.prospecto_id}` : '/prospectos?filtro=multiples_reasignaciones',
+            'meta_alcanzada': '/dashboard/metas',
+
+            // Sistema
             'sistema': '/configuracion',
             'marketing': '/marketing/campanas',
             'manual': data.prospecto_id ? `/prospectos/${data.prospecto_id}` : '/dashboard'
@@ -341,11 +457,32 @@ class NotificacionesController {
 
     static generarTextoAccion(tipo, prioridad) {
         const acciones = {
+            // Seguimientos
             'seguimiento_vencido': prioridad === 'critica' ? 'CONTACTAR AHORA' : 'Ver prospecto',
             'seguimiento_urgente': 'ATENDER INMEDIATAMENTE',
             'seguimiento_critico': 'ACCIÓN URGENTE',
+            'seguimiento_completado': 'Ver detalles',
+            'seguimiento_proximo': 'Preparar seguimiento',
+
+            // Prospectos
+            'prospecto_creado': 'Ver nuevo prospecto',
+            'prospecto_reasignado': 'Revisar prospecto',
+            'prospecto_eliminado': 'Ver historial',
+            'prospecto_libre_activado': 'Tomar prospecto',
+
+            // Estados y ventas
+            'estado_cotizado': 'Ver cotización',
+            'estado_negociacion': 'Continuar negociación',
+            'venta_cerrada': 'Ver venta',
             'venta_perdida': 'Revisar caso',
+            'conversion_exitosa': 'Ver venta creada',
+
+            // Alertas
             'oportunidad_alta': 'Ver oportunidad',
+            'alerta_reasignaciones': 'REVISAR URGENTE',
+            'meta_alcanzada': 'Ver estadísticas',
+
+            // Sistema
             'sistema': 'Ver detalles',
             'marketing': 'Ver campaña',
             'manual': 'Ver más'
@@ -427,20 +564,60 @@ class NotificacionesController {
     /**
      * GET /api/notificaciones/:usuarioId
      * Obtener notificaciones con opciones avanzadas
+     * 🔐 CON VALIDACIÓN POR ROL
      */
     static async obtenerNotificaciones(req, res) {
         try {
             const { usuarioId } = req.params;
-            const { 
-                limit = 20, 
-                offset = 0, 
+            const {
+                limit = 20,
+                offset = 0,
                 solo_no_leidas = false,
                 tipo = null,
                 prioridad = null,
                 incluir_estadisticas = false
             } = req.query;
-            
-            logger.info(`🔔 Obteniendo notificaciones para usuario ${usuarioId}`);
+
+            const usuarioLogueado = req.user;
+
+            logger.info(`🔔 Obteniendo notificaciones para usuario ${usuarioId} - Solicitado por: ${usuarioLogueado?.user_id} (${usuarioLogueado?.rol})`);
+
+            // 🔐 VALIDACIÓN POR ROL
+            const rolUsuario = usuarioLogueado?.rol?.toUpperCase() || '';
+
+            // Si NO es ejecutivo ni jefe, solo puede ver sus propias notificaciones
+            if (!esEjecutivo(rolUsuario) && !esJefe(rolUsuario)) {
+                if (parseInt(usuarioLogueado.user_id) !== parseInt(usuarioId)) {
+                    logger.warn(`❌ Acceso denegado: Usuario ${usuarioLogueado.user_id} (${rolUsuario}) intentó ver notificaciones de usuario ${usuarioId}`);
+                    return res.status(403).json({
+                        success: false,
+                        error: 'No tienes permiso para ver notificaciones de otros usuarios',
+                        code: 'FORBIDDEN_ACCESS'
+                    });
+                }
+            }
+
+            // Si es JEFE (pero no ejecutivo), validar que el usuario pertenezca a su equipo
+            if (esJefe(rolUsuario) && !esEjecutivo(rolUsuario)) {
+                const perteneceEquipo = await this.validarUsuarioEnEquipo(
+                    usuarioLogueado.user_id,
+                    usuarioId
+                );
+
+                if (!perteneceEquipo) {
+                    logger.warn(`❌ Acceso denegado: Jefe ${usuarioLogueado.user_id} intentó ver notificaciones de usuario ${usuarioId} que no pertenece a su equipo`);
+                    return res.status(403).json({
+                        success: false,
+                        error: 'Solo puedes ver notificaciones de tu equipo',
+                        code: 'FORBIDDEN_TEAM_ACCESS'
+                    });
+                }
+            }
+
+            // EJECUTIVOS: Pueden ver todo (no se valida nada adicional)
+            if (esEjecutivo(rolUsuario)) {
+                logger.info(`✅ Acceso ejecutivo: Usuario ${usuarioLogueado.user_id} puede ver notificaciones de cualquier usuario`);
+            }
 
             // Construir query base
             let sqlQuery = `
@@ -547,11 +724,50 @@ class NotificacionesController {
     /**
      * GET /api/notificaciones/contador/:usuarioId
      * Contador inteligente con desglose
+     * 🔐 CON VALIDACIÓN POR ROL
      */
     static async obtenerContador(req, res) {
         try {
             const { usuarioId } = req.params;
             const { incluir_desglose = false } = req.query;
+
+            const usuarioLogueado = req.user;
+            const rolUsuario = usuarioLogueado?.rol?.toUpperCase() || '';
+
+            logger.info(`📊 Obteniendo contador para usuario ${usuarioId} - Solicitado por: ${usuarioLogueado?.user_id} (${rolUsuario})`);
+
+            // 🔐 VALIDACIÓN POR ROL (misma lógica que obtenerNotificaciones)
+
+            // Si NO es ejecutivo ni jefe, solo puede ver su propio contador
+            if (!esEjecutivo(rolUsuario) && !esJefe(rolUsuario)) {
+                if (parseInt(usuarioLogueado.user_id) !== parseInt(usuarioId)) {
+                    logger.warn(`❌ Acceso denegado: Usuario ${usuarioLogueado.user_id} (${rolUsuario}) intentó ver contador de usuario ${usuarioId}`);
+                    return res.status(403).json({
+                        success: false,
+                        error: 'No tienes permiso para ver el contador de otros usuarios',
+                        code: 'FORBIDDEN_ACCESS',
+                        contador: 0
+                    });
+                }
+            }
+
+            // Si es JEFE (pero no ejecutivo), validar que el usuario pertenezca a su equipo
+            if (esJefe(rolUsuario) && !esEjecutivo(rolUsuario)) {
+                const perteneceEquipo = await this.validarUsuarioEnEquipo(
+                    usuarioLogueado.user_id,
+                    usuarioId
+                );
+
+                if (!perteneceEquipo) {
+                    logger.warn(`❌ Acceso denegado: Jefe ${usuarioLogueado.user_id} intentó ver contador de usuario ${usuarioId} que no pertenece a su equipo`);
+                    return res.status(403).json({
+                        success: false,
+                        error: 'Solo puedes ver el contador de tu equipo',
+                        code: 'FORBIDDEN_TEAM_ACCESS',
+                        contador: 0
+                    });
+                }
+            }
             
             const result = await query(`
                 SELECT prioridad, tipo FROM notificaciones 
@@ -756,8 +972,19 @@ class NotificacionesController {
                     ],
                     modos_disponibles: ['basico', 'inteligente', 'masivo'],
                     tipos_soportados: [
+                        // Seguimientos
                         'seguimiento_vencido', 'seguimiento_urgente', 'seguimiento_critico',
-                        'venta_perdida', 'oportunidad_alta', 'sistema', 'marketing', 'manual'
+                        'seguimiento_completado', 'seguimiento_proximo',
+                        // Prospectos
+                        'prospecto_creado', 'prospecto_reasignado', 'prospecto_eliminado',
+                        'prospecto_libre_activado',
+                        // Estados y ventas
+                        'estado_cotizado', 'estado_negociacion', 'venta_cerrada',
+                        'venta_perdida', 'conversion_exitosa',
+                        // Alertas
+                        'oportunidad_alta', 'alerta_reasignaciones', 'meta_alcanzada',
+                        // Sistema
+                        'sistema', 'marketing', 'manual'
                     ]
                 }
             });
