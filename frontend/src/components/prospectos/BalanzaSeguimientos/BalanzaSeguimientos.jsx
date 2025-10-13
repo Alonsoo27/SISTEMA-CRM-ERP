@@ -724,7 +724,7 @@ const BalanzaSeguimientos = ({ asesorId: asesorIdProp = null, refreshTrigger = 0
                     <div className="flex-1">
                       <div className="flex items-center justify-between">
                         <h4 className="font-medium text-gray-900">
-                          {item.nombre_cliente || item.prospecto_nombre || 'Sin nombre'}
+                          {`${item.nombre_cliente || item.prospecto_nombre || ''} ${item.apellido_cliente || ''}`.trim() || 'Sin nombre'}
                         </h4>
                         <div className="text-xs text-gray-500 font-mono">
                           #{item.prospecto_codigo || item.codigo || 'N/A'}

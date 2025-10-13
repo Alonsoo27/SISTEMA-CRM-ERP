@@ -1072,14 +1072,14 @@ class SeguimientosController {
             // Construir query con filtrado condicional
             const seguimientosQuery = asesor_id
                 ? `SELECT s.*,
-                       p.codigo, p.nombre_cliente, p.empresa, p.telefono, p.estado, p.valor_estimado
+                       p.codigo, p.nombre_cliente, p.apellido_cliente, p.empresa, p.telefono, p.estado, p.valor_estimado
                 FROM seguimientos s
                 INNER JOIN prospectos p ON s.prospecto_id = p.id
                 WHERE s.asesor_id = $1 AND s.completado = $2 AND p.activo = $3
                 AND s.visible_para_asesor = $4
                 ORDER BY s.fecha_programada ASC`
                 : `SELECT s.*,
-                       p.codigo, p.nombre_cliente, p.empresa, p.telefono, p.estado, p.valor_estimado
+                       p.codigo, p.nombre_cliente, p.apellido_cliente, p.empresa, p.telefono, p.estado, p.valor_estimado
                 FROM seguimientos s
                 INNER JOIN prospectos p ON s.prospecto_id = p.id
                 WHERE s.completado = $1 AND p.activo = $2
