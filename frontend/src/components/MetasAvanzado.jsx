@@ -604,36 +604,63 @@ const MetasAvanzado = ({ usuarioActual }) => {
                     </div>
                   )}
 
-                  {/* Próximos Niveles */}
+                  {/* Meta Asignada (si tiene niveles pendientes) */}
+                  {asesor.simulador_bonos?.info_meta_asignada && asesor.simulador_bonos.info_meta_asignada.niveles_disponibles.length > 0 && (
+                    <div className="mb-3 space-y-1">
+                      <p className="text-xs font-medium text-indigo-700 uppercase tracking-wide">
+                        📌 Tu Meta: {formatMoney(asesor.simulador_bonos.info_meta_asignada.meta_usd)}
+                      </p>
+                      {asesor.simulador_bonos.info_meta_asignada.niveles_disponibles.map((nivel, index) => (
+                        <div key={index} className="flex justify-between items-center text-xs">
+                          <span className={`${
+                            nivel.porcentaje === 100 ? 'text-green-700 font-medium' :
+                            nivel.porcentaje === 90 ? 'text-blue-700' :
+                            'text-orange-700'
+                          }`}>
+                            {nivel.porcentaje}%:
+                          </span>
+                          <span className={`font-medium ${
+                            nivel.porcentaje === 100 ? 'text-green-700' :
+                            nivel.porcentaje === 90 ? 'text-blue-700' :
+                            'text-orange-700'
+                          }`}>
+                            +{formatMoney(nivel.faltante)} → {formatMoney(nivel.bono)}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Próximos Niveles Alcanzables */}
                   {asesor.simulador_bonos?.proximos_niveles && asesor.simulador_bonos.proximos_niveles.length > 0 && (
                     <div className="space-y-2">
-                      <p className="text-xs font-medium text-gray-700 uppercase tracking-wide">Próximos Objetivos:</p>
-                      {asesor.simulador_bonos.proximos_niveles
-                        .filter(nivel => nivel.para_80 || nivel.para_90 || nivel.para_100)
-                        .slice(0, 2)
-                        .map((nivel, index) => (
-                          <div key={index} className="text-xs space-y-1">
-                            {nivel.para_80 && (
-                              <div className="flex justify-between items-center text-orange-700">
-                                <span>Meta {formatMoney(nivel.meta_usd)} (80%):</span>
-                                <span className="font-medium">+{formatMoney(nivel.para_80.faltante)} → {formatMoney(nivel.para_80.bono)}</span>
-                              </div>
-                            )}
-                            {nivel.para_90 && (
-                              <div className="flex justify-between items-center text-blue-700">
-                                <span>Meta {formatMoney(nivel.meta_usd)} (90%):</span>
-                                <span className="font-medium">+{formatMoney(nivel.para_90.faltante)} → {formatMoney(nivel.para_90.bono)}</span>
-                              </div>
-                            )}
-                            {nivel.para_100 && (
-                              <div className="flex justify-between items-center text-green-700">
-                                <span>Meta {formatMoney(nivel.meta_usd)} (100%):</span>
-                                <span className="font-medium">+{formatMoney(nivel.para_100.faltante)} → {formatMoney(nivel.para_100.bono)}</span>
-                              </div>
-                            )}
-                          </div>
-                        ))
-                      }
+                      <p className="text-xs font-medium text-gray-700 uppercase tracking-wide">🎯 Próximos Objetivos:</p>
+                      {asesor.simulador_bonos.proximos_niveles.map((nivel, index) => (
+                        <div key={index} className="flex justify-between items-center text-xs">
+                          <span className={`${
+                            nivel.porcentaje === 100 ? 'text-green-700' :
+                            nivel.porcentaje === 90 ? 'text-blue-700' :
+                            'text-orange-700'
+                          }`}>
+                            Meta {formatMoney(nivel.meta_usd)} ({nivel.porcentaje}%):
+                          </span>
+                          <span className={`font-medium ${
+                            nivel.porcentaje === 100 ? 'text-green-700' :
+                            nivel.porcentaje === 90 ? 'text-blue-700' :
+                            'text-orange-700'
+                          }`}>
+                            +{formatMoney(nivel.faltante)} → {formatMoney(nivel.bono)}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Mensaje si no hay objetivos */}
+                  {(!asesor.simulador_bonos?.info_meta_asignada?.niveles_disponibles || asesor.simulador_bonos.info_meta_asignada.niveles_disponibles.length === 0) &&
+                   (!asesor.simulador_bonos?.proximos_niveles || asesor.simulador_bonos.proximos_niveles.length === 0) && (
+                    <div className="text-xs text-gray-500 italic text-center py-2">
+                      🏆 Meta completada - ¡Excelente trabajo!
                     </div>
                   )}
                 </div>

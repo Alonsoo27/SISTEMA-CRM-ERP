@@ -58,40 +58,106 @@ const BonoProyectado = ({ asesorId }) => {
 
   const calcularBonosDisponibles = () => {
     if (!datosBonus) return [];
-    
+
     const meta = datosBonus.asesor.meta_usd;
-    const porcentaje = datosBonus.bono_actual.porcentaje;
-    
-    // Basado en la tabla de bonos del controller
-    const configuracionBonos = {
-      2500: { bono_100: 92.00, bono_90: 46.00, bono_80: null },
-      4000: { bono_100: 144.80, bono_90: 72.40, bono_80: null },
-      5000: { bono_100: 197.25, bono_90: 98.63, bono_80: null },
-      8000: { bono_100: 276.00, bono_90: 138.00, bono_80: 69.00 }
-    };
-    
-    const config = configuracionBonos[meta] || configuracionBonos[8000];
-    
-    return [
-      {
-        nivel: '80%',
-        bono: config.bono_80,
-        alcanzado: porcentaje >= 80,
-        falta: porcentaje < 80 ? Math.ceil((meta * 0.8) - datosBonus.asesor.vendido_usd) : 0
-      },
-      {
-        nivel: '90%', 
-        bono: config.bono_90,
-        alcanzado: porcentaje >= 90,
-        falta: porcentaje < 90 ? Math.ceil((meta * 0.9) - datosBonus.asesor.vendido_usd) : 0
-      },
-      {
-        nivel: '100%',
-        bono: config.bono_100,
-        alcanzado: porcentaje >= 100,
-        falta: porcentaje < 100 ? Math.ceil(meta - datosBonus.asesor.vendido_usd) : 0
+    const vendido = datosBonus.asesor.vendido_usd;
+    const bonoActual = datosBonus.bono_actual.bono_usd;
+
+    // Tabla COMPLETA de bonos (sincronizada con backend)
+    const todasLasMetas = [
+      { meta_usd: 2500, bono_100: 92.00, bono_90: 46.00, bono_80: null },
+      { meta_usd: 4000, bono_100: 144.80, bono_90: 72.40, bono_80: null },
+      { meta_usd: 5000, bono_100: 197.25, bono_90: 98.63, bono_80: null },
+      { meta_usd: 8000, bono_100: 276.00, bono_90: 138.00, bono_80: 69.00 },
+      { meta_usd: 9500, bono_100: 343.90, bono_90: null, bono_80: null },
+      { meta_usd: 10500, bono_100: 416.85, bono_90: null, bono_80: null },
+      { meta_usd: 11500, bono_100: 448.50, bono_90: null, bono_80: null },
+      { meta_usd: 12500, bono_100: 487.50, bono_90: null, bono_80: null },
+      { meta_usd: 14000, bono_100: 658.00, bono_90: null, bono_80: null },
+      { meta_usd: 16000, bono_100: 739.20, bono_90: null, bono_80: null },
+      { meta_usd: 20000, bono_100: 980.00, bono_90: null, bono_80: null },
+      { meta_usd: 24000, bono_100: 1320.00, bono_90: null, bono_80: null }
+    ];
+
+    // Crear lista plana de TODOS los niveles posibles
+    const todosLosNiveles = todasLasMetas.flatMap(metaConfig => {
+      const niveles = [];
+
+      // 100% siempre existe
+      niveles.push({
+        meta_usd: metaConfig.meta_usd,
+        nivel: `Meta ${formatearMoneda(metaConfig.meta_usd)} (100%)`,
+        bono: metaConfig.bono_100,
+        porcentaje_requerido: 100,
+        ventas_necesarias: metaConfig.meta_usd
+      });
+
+      // 90% si existe
+      if (metaConfig.bono_90) {
+        niveles.push({
+          meta_usd: metaConfig.meta_usd,
+          nivel: `Meta ${formatearMoneda(metaConfig.meta_usd)} (90%)`,
+          bono: metaConfig.bono_90,
+          porcentaje_requerido: 90,
+          ventas_necesarias: metaConfig.meta_usd * 0.9
+        });
       }
-    ].filter(item => item.bono !== null);
+
+      // 80% si existe
+      if (metaConfig.bono_80) {
+        niveles.push({
+          meta_usd: metaConfig.meta_usd,
+          nivel: `Meta ${formatearMoneda(metaConfig.meta_usd)} (80%)`,
+          bono: metaConfig.bono_80,
+          porcentaje_requerido: 80,
+          ventas_necesarias: metaConfig.meta_usd * 0.8
+        });
+      }
+
+      return niveles;
+    });
+
+    // Filtrar niveles:
+    // 1. Niveles de TU meta asignada
+    // 2. Niveles de metas SUPERIORES (no inferiores) que den MÁS bono que el actual
+    const nivelesRelevantes = todosLosNiveles.filter(nivel => {
+      // Si es de tu meta asignada, mostrar si aún no lo alcanzaste
+      if (nivel.meta_usd === meta && vendido < nivel.ventas_necesarias) {
+        return true;
+      }
+
+      // Si es de otra meta, mostrar solo si:
+      // - Es una meta SUPERIOR a la tuya (no inferior)
+      // - Da MÁS bono que el actual
+      // - Aún no lo alcanzaste
+      if (nivel.meta_usd > meta && nivel.bono > bonoActual && vendido < nivel.ventas_necesarias) {
+        return true;
+      }
+
+      return false;
+    });
+
+    // Ordenar por ventas necesarias (más cercanos primero)
+    const nivelesOrdenados = nivelesRelevantes
+      .sort((a, b) => a.ventas_necesarias - b.ventas_necesarias)
+      .slice(0, 4); // Mostrar hasta 4 niveles (3-4 como máximo)
+
+    // Mapear a formato del componente
+    return nivelesOrdenados.map(nivel => {
+      // Para metas opcionales (superiores a tu meta), simplificar el nombre
+      let nombreNivel = nivel.nivel;
+      if (nivel.meta_usd > meta && nivel.porcentaje_requerido === 100) {
+        nombreNivel = `Meta ${formatearMoneda(nivel.meta_usd)}`; // Quitar "(100%)"
+      }
+
+      return {
+        nivel: nombreNivel,
+        bono: nivel.bono,
+        alcanzado: vendido >= nivel.ventas_necesarias,
+        falta: vendido < nivel.ventas_necesarias ? Math.ceil(nivel.ventas_necesarias - vendido) : 0,
+        es_meta_opcional: nivel.meta_usd > meta // Flag para saber si es meta opcional
+      };
+    });
   };
 
   if (cargando) {
@@ -188,57 +254,120 @@ const BonoProyectado = ({ asesorId }) => {
                   </div>
                 </div>
 
-                {/* Barra de Progreso */}
+                {/* Barra de Progreso - Meta Principal */}
                 <div className="space-y-2">
                   <div className="flex justify-between text-xs text-gray-500">
                     <span>0%</span>
                     <span>50%</span>
                     <span>100%</span>
+                    {datosBonus.bono_actual.porcentaje > 100 && (
+                      <span className="text-purple-600 font-medium">{Math.round(datosBonus.bono_actual.porcentaje)}%</span>
+                    )}
                   </div>
                   <div className="w-full bg-gray-200 rounded-full h-4 relative">
-                    <div 
+                    <div
                       className="bg-gradient-to-r from-green-500 to-emerald-500 h-4 rounded-full transition-all duration-500 relative"
                       style={{ width: `${Math.min(calcularBarraProgreso(), 100)}%` }}
                     >
                       <div className="absolute right-2 top-1/2 transform -translate-y-1/2 text-white text-xs font-bold">
-                        {datosBonus.bono_actual.porcentaje}%
+                        {Math.min(datosBonus.bono_actual.porcentaje, 100)}%
                       </div>
                     </div>
                   </div>
+                  {datosBonus.bono_actual.porcentaje >= 100 && (
+                    <div className="text-center text-xs text-green-600 font-medium">
+                      ✅ Meta principal completada
+                    </div>
+                  )}
                 </div>
+
+                {/* Barra de Progreso - Metas Opcionales (si completó el 100% de su meta) */}
+                {datosBonus.bono_actual.porcentaje >= 100 && (() => {
+                  const metasOpcionales = bonosDisponibles.filter(b => b.es_meta_opcional && !b.alcanzado);
+                  if (metasOpcionales.length === 0) return null;
+
+                  const proximaMetaOpcional = metasOpcionales[0];
+                  const metaPrincipal = datosBonus.asesor.meta_usd;
+                  const vendido = datosBonus.asesor.vendido_usd;
+
+                  // Calcular progreso hacia la próxima meta opcional
+                  // La barra empieza desde meta principal (100%) hasta la próxima meta opcional
+                  const rangoInicio = metaPrincipal;
+                  // rangoFin debe ser la meta opcional completa, no la suma
+                  const rangoFin = vendido + proximaMetaOpcional.falta; // Meta opcional completa
+                  const progresoEnRango = vendido - rangoInicio;
+                  const porcentajeRango = (progresoEnRango / (rangoFin - rangoInicio)) * 100;
+
+                  return (
+                    <div className="space-y-2 pt-4 border-t border-purple-200">
+                      <div className="text-sm text-purple-700 font-medium">
+                        🎯 Próxima Meta Opcional: {proximaMetaOpcional.nivel}
+                      </div>
+                      <div className="flex justify-between text-xs text-gray-500">
+                        <span>{formatearMoneda(metaPrincipal)}</span>
+                        <span>{formatearMoneda(rangoFin)}</span>
+                      </div>
+                      <div className="w-full bg-purple-100 rounded-full h-4 relative">
+                        <div
+                          className="bg-gradient-to-r from-purple-500 to-indigo-500 h-4 rounded-full transition-all duration-500 relative"
+                          style={{ width: `${Math.min(Math.max(porcentajeRango, 0), 100)}%` }}
+                        >
+                          <div className="absolute right-2 top-1/2 transform -translate-y-1/2 text-white text-xs font-bold">
+                            {Math.round(porcentajeRango)}%
+                          </div>
+                        </div>
+                      </div>
+                      <div className="text-center text-xs text-purple-600">
+                        Faltan {formatearMoneda(proximaMetaOpcional.falta)} para {formatearMoneda(proximaMetaOpcional.bono)}
+                      </div>
+                    </div>
+                  );
+                })()}
               </div>
 
               {/* Bonos Disponibles */}
               <div className="space-y-3">
                 <h3 className="text-lg font-semibold text-gray-800 flex items-center">
                   <Award className="w-5 h-5 mr-2 text-yellow-500" />
-                  🏆 Bonos Disponibles
+                  🏆 Bonos y Objetivos
                 </h3>
-                
-                <div className="space-y-2">
-                  {bonosDisponibles.map((bono, index) => (
-                    <div 
-                      key={index}
-                      className={`flex items-center justify-between p-3 rounded-lg border ${
-                        bono.alcanzado 
-                          ? 'bg-green-50 border-green-200' 
-                          : 'bg-gray-50 border-gray-200'
-                      }`}
-                    >
-                      <div className="flex items-center space-x-3">
-                        <div className={`text-sm font-medium ${bono.alcanzado ? 'text-green-600' : 'text-gray-600'}`}>
-                          {bono.alcanzado ? '✅' : '⭕'} {bono.nivel}
+
+                {bonosDisponibles.length > 0 ? (
+                  <div className="space-y-2">
+                    {bonosDisponibles.map((bono, index) => (
+                      <div
+                        key={index}
+                        className={`flex items-center justify-between p-3 rounded-lg border ${
+                          bono.alcanzado
+                            ? 'bg-green-50 border-green-200'
+                            : 'bg-gray-50 border-gray-200'
+                        }`}
+                      >
+                        <div className="flex items-center space-x-3">
+                          <div className={`text-sm font-medium ${bono.alcanzado ? 'text-green-600' : 'text-gray-600'}`}>
+                            {bono.alcanzado ? '✅' : '⭕'} {bono.nivel}
+                          </div>
+                          <div className="text-sm font-bold">
+                            {formatearMoneda(bono.bono)}
+                          </div>
                         </div>
-                        <div className="text-sm font-bold">
-                          {formatearMoneda(bono.bono)}
+                        <div className="text-xs text-gray-500">
+                          {bono.alcanzado ? 'ALCANZADO' : `Faltan ${formatearMoneda(bono.falta)}`}
                         </div>
                       </div>
-                      <div className="text-xs text-gray-500">
-                        {bono.alcanzado ? 'ALCANZADO' : `Faltan ${formatearMoneda(bono.falta)}`}
-                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-6 bg-green-50 border border-green-200 rounded-lg">
+                    <div className="text-4xl mb-2">🏆</div>
+                    <div className="text-sm font-medium text-green-700">
+                      ¡Meta completada al 100%!
                     </div>
-                  ))}
-                </div>
+                    <div className="text-xs text-green-600 mt-1">
+                      Has alcanzado todos los objetivos disponibles
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Resumen Actual */}

@@ -39,14 +39,14 @@ class ComisionesController {
         // Convertir a números para comparación correcta
         const metaNumero = parseFloat(metaUsd);
         const ventasNumero = parseFloat(ventasUsd);
-        
+
         // Buscar configuración de bono para esta meta específica
         const bonoConfig = ComisionesController.BONOS_POR_META.find(b => b.meta_usd === metaNumero);
-        
+
         if (!bonoConfig) {
             console.warn(`No hay configuración de bono para meta ${metaNumero}`);
-            return { 
-                porcentaje: Math.round((ventasNumero / metaNumero) * 100), 
+            return {
+                porcentaje: Math.round((ventasNumero / metaNumero) * 100),
                 bono: 0,
                 nivel: 'sin_bono',
                 mensaje: `Meta ${metaNumero} no tiene bonos configurados`
@@ -57,34 +57,71 @@ class ComisionesController {
 
         // Lógica: Solo recibes bono si alcanzas al menos 80% de TU meta específica
         if (porcentaje >= 100) {
-            return { 
-                porcentaje, 
+            return {
+                porcentaje,
                 bono: bonoConfig.bono_100,
                 nivel: '100%',
                 mensaje: `Meta cumplida al 100%`
             };
         } else if (porcentaje >= 90 && bonoConfig.bono_90) {
-            return { 
-                porcentaje, 
+            return {
+                porcentaje,
                 bono: bonoConfig.bono_90,
                 nivel: '90%',
                 mensaje: `90% de tu meta`
             };
         } else if (porcentaje >= 80 && bonoConfig.bono_80) {
-            return { 
-                porcentaje, 
+            return {
+                porcentaje,
                 bono: bonoConfig.bono_80,
                 nivel: '80%',
                 mensaje: `80% de tu meta`
             };
         } else {
-            return { 
-                porcentaje, 
+            return {
+                porcentaje,
                 bono: 0,
                 nivel: 'sin_bono',
                 mensaje: `Necesitas llegar al 80% de tu meta (${metaNumero}) para recibir bono`
             };
         }
+    }
+
+    // ============================================
+    // CALCULAR MEJOR BONO DISPONIBLE (NUEVA LÓGICA)
+    // Busca el mejor bono alcanzable, incluyendo metas opcionales superiores
+    // ============================================
+    static calcularMejorBono(metaUsd, ventasUsd) {
+        const metaNumero = parseFloat(metaUsd);
+        const ventasNumero = parseFloat(ventasUsd);
+
+        // 1. Calcular bono de tu meta asignada
+        const bonoMetaAsignada = ComisionesController.calcularBono(metaUsd, ventasUsd);
+
+        // 2. Verificar si alcanzaste bonos de metas SUPERIORES (solo al 100%)
+        let mejorBono = {
+            ...bonoMetaAsignada,
+            meta_alcanzada: metaNumero
+        };
+
+        // Buscar metas superiores que haya alcanzado al 100%
+        for (const metaConfig of ComisionesController.BONOS_POR_META) {
+            // Solo verificar metas SUPERIORES a la asignada
+            if (metaConfig.meta_usd > metaNumero && ventasNumero >= metaConfig.meta_usd) {
+                // Si alcanzó el 100% de esta meta superior
+                if (metaConfig.bono_100 > mejorBono.bono) {
+                    mejorBono = {
+                        porcentaje: Math.round((ventasNumero / metaNumero) * 100), // Porcentaje respecto a tu meta original
+                        bono: metaConfig.bono_100,
+                        nivel: `Meta ${metaConfig.meta_usd} (100%)`,
+                        mensaje: `Meta opcional ${metaConfig.meta_usd} alcanzada`,
+                        meta_alcanzada: metaConfig.meta_usd
+                    };
+                }
+            }
+        }
+
+        return mejorBono;
     }
 
     // ============================================
@@ -95,8 +132,8 @@ class ComisionesController {
             const metaNumero = parseFloat(metaUsd);
             const ventasNumero = parseFloat(ventasUsd);
 
-            // 1. Calcular bono base por ventas
-            const bonoVentas = ComisionesController.calcularBono(metaUsd, ventasUsd);
+            // 1. Calcular bono base por ventas (incluyendo metas opcionales)
+            const bonoVentas = ComisionesController.calcularMejorBono(metaUsd, ventasUsd);
             
             // 2. Obtener métricas de actividad del mes
             const actividadResult = await query(`
@@ -353,13 +390,15 @@ class ComisionesController {
                 siguienteNivel = ComisionesController.calcularSiguienteNivel(meta.meta_valor, valorLogradoReal);
             } else {
                 console.log('Calculando bono solo por ventas para asesor:', targetAsesorId);
-                const bonoSimple = ComisionesController.calcularBono(meta.meta_valor, valorLogradoReal);  // ✅ Usar ventas reales
+                // ✅ Usar calcularMejorBono en lugar de calcularBono para incluir metas opcionales
+                const bonoSimple = ComisionesController.calcularMejorBono(meta.meta_valor, valorLogradoReal);
                 calculoFinal = {
                     porcentaje_ventas: bonoSimple.porcentaje,
                     bono_final: bonoSimple.bono,
                     nivel: bonoSimple.nivel,
                     mensaje: bonoSimple.mensaje,
-                    modalidad: 'solo_ventas'
+                    modalidad: 'solo_ventas',
+                    meta_alcanzada: bonoSimple.meta_alcanzada
                 };
                 siguienteNivel = ComisionesController.calcularSiguienteNivel(meta.meta_valor, valorLogradoReal);
             }
@@ -490,7 +529,7 @@ class ComisionesController {
             const equipoConBonos = await Promise.all(
                 metasResult.rows.map(async (meta) => {
                     let calculo;
-                    
+
                     if (meta.modalidad === 'ventas_actividad') {
                         calculo = await ComisionesController.calcularBonoConActividad(
                             meta.asesor_id,
@@ -500,7 +539,8 @@ class ComisionesController {
                             meta.mes
                         );
                     } else {
-                        const bonoSimple = ComisionesController.calcularBono(meta.meta_valor, meta.valor_logrado);
+                        // ✅ Usar calcularMejorBono para incluir metas opcionales
+                        const bonoSimple = ComisionesController.calcularMejorBono(meta.meta_valor, meta.valor_logrado);
                         calculo = {
                             porcentaje_ventas: bonoSimple.porcentaje,
                             bono_final: bonoSimple.bono,

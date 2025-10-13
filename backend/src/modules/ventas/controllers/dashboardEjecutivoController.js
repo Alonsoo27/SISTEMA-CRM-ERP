@@ -1324,55 +1324,125 @@ const generarAlertasInteligentes = (metaUsd, valorLogrado, porcentaje, modalidad
 };
 
 /**
- * Calcula simulador de bonos inteligente
+ * Calcula simulador de bonos inteligente - VERSIÓN CORREGIDA
+ * Lógica: Solo mostrar objetivos que den MÁS bono que el actual
  */
 const calcularSimuladorBonos = (metaUsd, valorLogrado) => {
   const ComisionesController = require('./ComisionesController');
   const metaNumero = parseFloat(metaUsd);
   const ventasActuales = parseFloat(valorLogrado);
 
-  // Encontrar el mejor bono disponible para estas ventas
-  const mejorBono = ComisionesController.BONOS_POR_META
-    .filter(b => ventasActuales >= (b.meta_usd * 0.8)) // Mínimo 80% para recibir bono
-    .sort((a, b) => {
-      // Calcular el bono que recibiría en cada meta
-      const bonoA = calcularBonoParaMeta(ventasActuales, b.meta_usd, b);
-      const bonoB = calcularBonoParaMeta(ventasActuales, a.meta_usd, a);
-      return bonoB.bono - bonoA.bono;
-    })[0];
+  // 1. Calcular el BONO ACTUAL del asesor (incluyendo metas opcionales)
+  const bonoActual = ComisionesController.calcularMejorBono(metaNumero, ventasActuales);
+  const bonoActualValor = bonoActual.bono || 0;
 
-  // Calcular próximos niveles
-  const proximosNiveles = ComisionesController.BONOS_POR_META
-    .filter(b => b.meta_usd >= metaNumero)
-    .slice(0, 3)
-    .map(meta => {
-      const ventasNecesarias80 = meta.meta_usd * 0.8;
-      const ventasNecesarias90 = meta.meta_usd * 0.9;
-      const ventasNecesarias100 = meta.meta_usd;
+  // 2. Información de la meta asignada (para mostrar siempre en frontend)
+  const metaAsignadaConfig = ComisionesController.BONOS_POR_META.find(b => b.meta_usd === metaNumero);
+  const infoMetaAsignada = metaAsignadaConfig ? {
+    meta_usd: metaNumero,
+    niveles_disponibles: []
+  } : null;
 
-      return {
+  // Agregar niveles de la meta asignada (si aún no los alcanzó)
+  if (infoMetaAsignada && metaAsignadaConfig) {
+    if (metaAsignadaConfig.bono_80 && ventasActuales < (metaNumero * 0.8)) {
+      infoMetaAsignada.niveles_disponibles.push({
+        porcentaje: 80,
+        ventas_necesarias: Math.round(metaNumero * 0.8),
+        faltante: Math.round((metaNumero * 0.8) - ventasActuales),
+        bono: metaAsignadaConfig.bono_80
+      });
+    }
+    if (metaAsignadaConfig.bono_90 && ventasActuales < (metaNumero * 0.9)) {
+      infoMetaAsignada.niveles_disponibles.push({
+        porcentaje: 90,
+        ventas_necesarias: Math.round(metaNumero * 0.9),
+        faltante: Math.round((metaNumero * 0.9) - ventasActuales),
+        bono: metaAsignadaConfig.bono_90
+      });
+    }
+    if (ventasActuales < metaNumero) {
+      infoMetaAsignada.niveles_disponibles.push({
+        porcentaje: 100,
+        ventas_necesarias: metaNumero,
+        faltante: Math.round(metaNumero - ventasActuales),
+        bono: metaAsignadaConfig.bono_100
+      });
+    }
+  }
+
+  // 3. Crear lista PLANA de TODOS los niveles posibles (80%, 90%, 100% de cada meta)
+  const todosLosNiveles = ComisionesController.BONOS_POR_META
+    .flatMap(meta => {
+      const niveles = [];
+
+      // 100% siempre existe
+      niveles.push({
         meta_usd: meta.meta_usd,
-        para_80: ventasNecesarias80 > ventasActuales ? {
-          faltante: Math.round(ventasNecesarias80 - ventasActuales),
-          bono: meta.bono_80
-        } : null,
-        para_90: ventasNecesarias90 > ventasActuales ? {
-          faltante: Math.round(ventasNecesarias90 - ventasActuales),
+        porcentaje: 100,
+        ventas_necesarias: meta.meta_usd,
+        bono: meta.bono_100
+      });
+
+      // 90% si existe
+      if (meta.bono_90) {
+        niveles.push({
+          meta_usd: meta.meta_usd,
+          porcentaje: 90,
+          ventas_necesarias: meta.meta_usd * 0.9,
           bono: meta.bono_90
-        } : null,
-        para_100: ventasNecesarias100 > ventasActuales ? {
-          faltante: Math.round(ventasNecesarias100 - ventasActuales),
-          bono: meta.bono_100
-        } : null
-      };
+        });
+      }
+
+      // 80% si existe
+      if (meta.bono_80) {
+        niveles.push({
+          meta_usd: meta.meta_usd,
+          porcentaje: 80,
+          ventas_necesarias: meta.meta_usd * 0.8,
+          bono: meta.bono_80
+        });
+      }
+
+      return niveles;
     });
+
+  // 4. Filtrar SOLO niveles que:
+  //    - Den MÁS bono que el actual
+  //    - Requieran ventas MAYORES a las actuales (aún no alcanzados)
+  //    - NO estén ya en la meta asignada (para evitar duplicados)
+  //    - Sean de metas IGUALES O SUPERIORES a tu meta asignada (no mostrar metas inferiores)
+  const nivelesMetaAsignada = infoMetaAsignada ?
+    infoMetaAsignada.niveles_disponibles.map(n => `${metaNumero}-${n.porcentaje}`) : [];
+
+  const proximosNiveles = todosLosNiveles
+    .filter(nivel => {
+      const claveNivel = `${nivel.meta_usd}-${nivel.porcentaje}`;
+      return (
+        nivel.bono > bonoActualValor &&
+        ventasActuales < nivel.ventas_necesarias &&
+        !nivelesMetaAsignada.includes(claveNivel) && // Excluir niveles de la meta asignada
+        nivel.meta_usd >= metaNumero // ✅ SOLO metas iguales o superiores (no inferiores)
+      );
+    })
+    .sort((a, b) => a.ventas_necesarias - b.ventas_necesarias) // Ordenar por cercanía
+    .slice(0, 3) // Los próximos 3 alcanzables
+    .map(nivel => ({
+      meta_usd: nivel.meta_usd,
+      porcentaje: nivel.porcentaje,
+      ventas_necesarias: Math.round(nivel.ventas_necesarias),
+      faltante: Math.round(nivel.ventas_necesarias - ventasActuales),
+      bono: nivel.bono
+    }));
 
   return {
     ventas_actuales: ventasActuales,
     meta_asignada: metaNumero,
-    mejor_bono_disponible: mejorBono,
-    proximos_niveles: proximosNiveles,
-    recomendacion: generarRecomendacionSimulador(ventasActuales, proximosNiveles)
+    bono_actual: bonoActualValor,
+    nivel_actual: bonoActual.nivel,
+    info_meta_asignada: infoMetaAsignada, // Info de TU meta (para mostrar arriba)
+    proximos_niveles: proximosNiveles, // Próximos 3 objetivos alcanzables
+    recomendacion: generarRecomendacionSimulador(ventasActuales, proximosNiveles, bonoActualValor)
   };
 };
 
@@ -1472,17 +1542,35 @@ const generarRecomendaciones = (metaUsd, porcentaje, modalidad, diasTranscurrido
 /**
  * Generar recomendación del simulador
  */
-const generarRecomendacionSimulador = (ventasActuales, proximosNiveles) => {
-  for (const nivel of proximosNiveles) {
-    if (nivel.para_80 && nivel.para_80.faltante <= ventasActuales * 0.15) {
-      return `💡 OPORTUNIDAD: Vende $${nivel.para_80.faltante} más y gana $${nivel.para_80.bono} de bono`;
+const generarRecomendacionSimulador = (ventasActuales, proximosNiveles, bonoActual) => {
+  if (!proximosNiveles || proximosNiveles.length === 0) {
+    if (bonoActual > 0) {
+      return '🏆 ¡Excelente! Mantén el ritmo para asegurar tu bono';
     }
-    if (nivel.para_90 && nivel.para_90.faltante <= ventasActuales * 0.10) {
-      return `🎯 CERCA: Solo $${nivel.para_90.faltante} para bono de $${nivel.para_90.bono}`;
-    }
+    return '📊 Continúa vendiendo para alcanzar tu primera meta';
   }
 
-  return '📊 Mantén el ritmo actual para asegurar tu bono';
+  // Buscar el nivel más cercano (primero en la lista)
+  const nivelCercano = proximosNiveles[0];
+
+  if (!nivelCercano) {
+    return '📊 Mantén el ritmo actual para asegurar tu bono';
+  }
+
+  const porcentajeFaltante = (nivelCercano.faltante / ventasActuales) * 100;
+
+  // Oportunidad muy cercana (menos del 15% de lo que ya vendiste)
+  if (porcentajeFaltante <= 15) {
+    return `💡 OPORTUNIDAD: Vende $${nivelCercano.faltante.toLocaleString()} más y alcanza $${nivelCercano.bono.toLocaleString()} de bono (Meta $${nivelCercano.meta_usd.toLocaleString()} al ${nivelCercano.porcentaje}%)`;
+  }
+
+  // Objetivo cercano (menos del 25% de lo que ya vendiste)
+  if (porcentajeFaltante <= 25) {
+    return `🎯 CERCA: Solo $${nivelCercano.faltante.toLocaleString()} para bono de $${nivelCercano.bono.toLocaleString()} (Meta $${nivelCercano.meta_usd.toLocaleString()} al ${nivelCercano.porcentaje}%)`;
+  }
+
+  // Objetivo más lejano
+  return `📊 Mantén el ritmo actual para asegurar tu bono`;
 };
 
 // ============================================
