@@ -8,6 +8,8 @@ import {
 import prospectosService from '../../../services/prospectosService';
 import HistorialCompleto from '../HistorialCompleto/HistorialCompleto';
 import VistaSelector from '../../common/VistaSelector';
+import ModalCompletarConReprogramacion from '../ModalCompletarConReprogramacion';
+import ProspectoDetailsView from '../ProspectoDetailsView';
 
 const BalanzaSeguimientos = ({ asesorId: asesorIdProp = null, refreshTrigger = 0 }) => {
   const [dashboardData, setDashboardData] = useState(null);
@@ -15,10 +17,9 @@ const BalanzaSeguimientos = ({ asesorId: asesorIdProp = null, refreshTrigger = 0
   const [error, setError] = useState(null);
   const [vistaDetalle, setVistaDetalle] = useState(null); // 'pendientes' | 'realizados' | null
   const [autoRefresh, setAutoRefresh] = useState(false);
-  const [modalConfirmar, setModalConfirmar] = useState(null); // Datos del seguimiento a confirmar
-  const [procesandoConfirmacion, setProcesandoConfirmacion] = useState(false);
-  const [modalReprogramar, setModalReprogramar] = useState(null); // Datos del seguimiento a reprogramar
-  const [procesandoReprogramacion, setProcesandoReprogramacion] = useState(false);
+  const [modalCompletarAbierto, setModalCompletarAbierto] = useState(false);
+  const [seguimientoSeleccionado, setSeguimientoSeleccionado] = useState(null);
+  const [procesandoCompletar, setProcesandoCompletar] = useState(false);
 
   // Sistema de notificaciones
   const [notificacion, setNotificacion] = useState(null); // { tipo: 'success'|'error', mensaje: string }
@@ -28,6 +29,10 @@ const BalanzaSeguimientos = ({ asesorId: asesorIdProp = null, refreshTrigger = 0
 
   // Modal explicativo del Score
   const [mostrarModalScore, setMostrarModalScore] = useState(false);
+
+  // Modal de detalles del prospecto
+  const [mostrarDetallesProspecto, setMostrarDetallesProspecto] = useState(false);
+  const [prospectoSeleccionadoDetalles, setProspectoSeleccionadoDetalles] = useState(null);
 
   // Estados para filtros y búsqueda
   const [filtros, setFiltros] = useState({
@@ -238,48 +243,79 @@ const BalanzaSeguimientos = ({ asesorId: asesorIdProp = null, refreshTrigger = 0
     return inclinacion;
   };
 
-  // Función para abrir modal de confirmación
-  const abrirModalConfirmar = (seguimiento) => {
-    setModalConfirmar(seguimiento);
+  // Función para abrir modal de completar con reprogramación
+  const abrirModalCompletar = (seguimiento) => {
+    setSeguimientoSeleccionado(seguimiento);
+    setModalCompletarAbierto(true);
   };
 
-  // Función para abrir modal de reprogramar
-  const abrirModalReprogramar = (seguimiento) => {
-    setModalReprogramar(seguimiento);
-  };
-
-  // Función para confirmar seguimiento
-  const confirmarSeguimiento = async (datos) => {
+  // Función para abrir modal de detalles del prospecto
+  const abrirDetallesProspecto = async (item) => {
     try {
-      setProcesandoConfirmacion(true);
+      // Obtener el ID del prospecto
+      const prospectoId = item.prospecto_id || item.id;
 
-      console.log('🔄 Confirmando seguimiento:', datos);
+      if (!prospectoId) {
+        mostrarNotificacion('error', 'No se pudo obtener el ID del prospecto');
+        return;
+      }
 
-      // Llamar a la API real para completar seguimiento
-      const response = await prospectosService.completarSeguimiento(datos.seguimiento_id, {
-        resultado: datos.resultado,
-        notas: datos.detalles,
-        calificacion: datos.resultado === 'interesado' ? 5 : datos.resultado === 'no_respondio' ? 3 : 1
+      // Cargar datos completos del prospecto
+      const response = await prospectosService.obtenerPorId(prospectoId);
+
+      if (response.success && response.data) {
+        setProspectoSeleccionadoDetalles(response.data);
+        setMostrarDetallesProspecto(true);
+      } else {
+        mostrarNotificacion('error', 'Error al cargar el prospecto');
+      }
+    } catch (error) {
+      console.error('Error cargando prospecto:', error);
+      mostrarNotificacion('error', 'Error al cargar el prospecto');
+    }
+  };
+
+  // Función para completar seguimiento con reprogramación múltiple
+  const completarSeguimientoConReprogramacion = async (payload) => {
+    try {
+      setProcesandoCompletar(true);
+
+      console.log('🔄 Completando seguimiento con reprogramación:', payload);
+
+      // Llamar a la API con la nueva estructura que soporta múltiples seguimientos futuros
+      const response = await prospectosService.completarSeguimiento(payload.seguimiento_id, {
+        resultado: payload.resultado,
+        notas: payload.notas,
+        calificacion: payload.calificacion,
+        seguimientos_futuros: payload.seguimientos_futuros // Array de seguimientos
       });
 
       if (response.success) {
-        console.log('✅ Seguimiento confirmado exitosamente');
+        console.log('✅ Seguimiento completado exitosamente');
+
+        // Mensaje dinámico según cantidad de reprogramaciones
+        const cantidadSeguimientos = payload.seguimientos_futuros.length;
+        let mensaje = '✅ Seguimiento completado';
+
+        if (cantidadSeguimientos > 0) {
+          mensaje += ` y ${cantidadSeguimientos} seguimiento${cantidadSeguimientos > 1 ? 's' : ''} programado${cantidadSeguimientos > 1 ? 's' : ''}`;
+        }
 
         // Verificar si hubo conversión automática
         if (response.data?.conversion?.success) {
-          mostrarNotificacion('success', `🎉 ${response.message} - Venta creada: ${response.data.conversion.venta_codigo}`);
+          mostrarNotificacion('success', `🎉 ${mensaje} - Venta creada: ${response.data.conversion.venta_codigo}`);
           console.log('🎯 Conversión automática exitosa:', response.data.conversion);
         } else if (response.data?.conversion?.success === false) {
-          mostrarNotificacion('warning', `✅ Seguimiento completado. ${response.data.conversion.error || 'Conversión pendiente'}`);
+          mostrarNotificacion('warning', `${mensaje}. ${response.data.conversion.error || 'Conversión pendiente'}`);
           console.log('⚠️ Error en conversión automática:', response.data.conversion);
         } else {
-          mostrarNotificacion('success', '✅ Seguimiento confirmado exitosamente');
+          mostrarNotificacion('success', mensaje);
         }
 
-        // Recargar datos después de confirmar
+        // Recargar datos
         await cargarDatos();
 
-        // Si hubo conversión exitosa, esperar un momento y recargar datos del pipeline
+        // Si hubo conversión exitosa, recargar después de un momento
         if (response.data?.conversion?.success) {
           console.log('🔄 Recargando pipeline después de conversión...');
           setTimeout(async () => {
@@ -288,51 +324,17 @@ const BalanzaSeguimientos = ({ asesorId: asesorIdProp = null, refreshTrigger = 0
         }
 
         // Cerrar modal
-        setModalConfirmar(null);
+        setModalCompletarAbierto(false);
+        setSeguimientoSeleccionado(null);
       } else {
-        throw new Error(response.error || 'Error al confirmar seguimiento');
+        throw new Error(response.error || 'Error al completar seguimiento');
       }
 
     } catch (error) {
-      console.error('❌ Error confirmando seguimiento:', error);
-      mostrarNotificacion('error', '❌ Error al confirmar seguimiento: ' + error.message);
+      console.error('❌ Error completando seguimiento:', error);
+      mostrarNotificacion('error', '❌ Error: ' + error.message);
     } finally {
-      setProcesandoConfirmacion(false);
-    }
-  };
-
-  // Función para reprogramar seguimiento
-  const reprogramarSeguimiento = async (datos) => {
-    try {
-      setProcesandoReprogramacion(true);
-
-      console.log('🔄 Reprogramando seguimiento:', datos);
-
-      // Llamar a la API para posponer seguimiento
-      const response = await prospectosService.posponerSeguimiento(
-        datos.seguimiento_id,
-        datos.nueva_fecha,
-        datos.motivo
-      );
-
-      if (response.success) {
-        console.log('✅ Seguimiento reprogramado exitosamente');
-        mostrarNotificacion('success', '📅 Seguimiento reprogramado exitosamente');
-
-        // Recargar datos después de reprogramar
-        await cargarDatos();
-
-        // Cerrar modal
-        setModalReprogramar(null);
-      } else {
-        throw new Error(response.error || 'Error al reprogramar seguimiento');
-      }
-
-    } catch (error) {
-      console.error('❌ Error reprogramando seguimiento:', error);
-      mostrarNotificacion('error', '❌ Error al reprogramar seguimiento: ' + error.message);
-    } finally {
-      setProcesandoReprogramacion(false);
+      setProcesandoCompletar(false);
     }
   };
 
@@ -828,29 +830,22 @@ const BalanzaSeguimientos = ({ asesorId: asesorIdProp = null, refreshTrigger = 0
                         </span>
                       )}
 
-                      {/* Botones de acción - solo para pendientes */}
+                      {/* Botón de acción - solo para pendientes */}
                       {vistaDetalle === 'pendientes' && !item.completado && (
-                        <div className="flex space-x-2">
-                          <button
-                            onClick={() => abrirModalConfirmar(item)}
-                            className="px-3 py-1 bg-green-600 text-white text-xs font-medium rounded hover:bg-green-700 transition-colors flex items-center space-x-1"
-                          >
-                            <CheckCircle className="h-3 w-3" />
-                            <span>CONFIRMAR</span>
-                          </button>
-
-                          <button
-                            onClick={() => abrirModalReprogramar(item)}
-                            className="px-3 py-1 bg-blue-600 text-white text-xs font-medium rounded hover:bg-blue-700 transition-colors flex items-center space-x-1"
-                          >
-                            <Calendar className="h-3 w-3" />
-                            <span>REPROGRAMAR</span>
-                          </button>
-                        </div>
+                        <button
+                          onClick={() => abrirModalCompletar(item)}
+                          className="px-3 py-1 bg-gradient-to-r from-green-600 to-blue-600 text-white text-xs font-medium rounded hover:from-green-700 hover:to-blue-700 transition-colors flex items-center space-x-1"
+                        >
+                          <CheckCircle className="h-3 w-3" />
+                          <span>COMPLETAR</span>
+                        </button>
                       )}
 
-                      <button className="p-2 hover:bg-gray-100 rounded transition-colors">
-                        <Eye className="h-4 w-4 text-gray-400" />
+                      <button
+                        onClick={() => abrirDetallesProspecto(item)}
+                        className="p-2 hover:bg-gray-100 rounded transition-colors"
+                      >
+                        <Eye className="h-4 w-4 text-gray-400 hover:text-blue-600" />
                       </button>
                     </div>
                   </div>
@@ -887,247 +882,6 @@ const BalanzaSeguimientos = ({ asesorId: asesorIdProp = null, refreshTrigger = 0
     );
   }
 
-  // Componente Modal de Confirmación
-  const renderModalConfirmar = () => {
-    if (!modalConfirmar) return null;
-
-    return (
-      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-        <div className="bg-white rounded-lg p-6 w-full max-w-md mx-4">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">
-            ✅ Confirmar Seguimiento
-          </h3>
-
-          {/* Información del seguimiento */}
-          <div className="mb-4 p-3 bg-gray-50 rounded-lg">
-            <div className="text-sm text-gray-600">
-              <div><strong>Cliente:</strong> {modalConfirmar.nombre_cliente || modalConfirmar.prospecto_nombre}</div>
-              <div><strong>Tipo:</strong> {modalConfirmar.tipo}</div>
-              <div><strong>Teléfono:</strong> {modalConfirmar.telefono}</div>
-              {modalConfirmar.vencido && (
-                <div className="text-red-600 font-medium">⚠️ Vencido</div>
-              )}
-            </div>
-          </div>
-
-          <form onSubmit={(e) => {
-            e.preventDefault();
-            const formData = new FormData(e.target);
-            const datos = {
-              seguimiento_id: modalConfirmar.prospecto_id, // Usar prospecto_id que viene de la API
-              detalles: formData.get('detalles'),
-              resultado: formData.get('resultado')
-            };
-            confirmarSeguimiento(datos);
-          }}>
-            {/* Campo de detalles */}
-            <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                ¿Qué hiciste?
-              </label>
-              <textarea
-                name="detalles"
-                rows={3}
-                className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
-                placeholder="Describe lo que hiciste en este seguimiento..."
-                required
-              />
-            </div>
-
-            {/* Opciones de resultado */}
-            <div className="mb-6">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                ¿Resultado del contacto?
-              </label>
-              <div className="space-y-2">
-                <label className="flex items-center">
-                  <input
-                    type="radio"
-                    name="resultado"
-                    value="interesado"
-                    className="mr-2"
-                    required
-                  />
-                  <span className="text-sm">Interesado - Reprogramar</span>
-                  <span className="ml-2 px-2 py-1 bg-green-100 text-green-700 text-xs rounded-full font-medium">
-                    🎯 Alto potencial conversión
-                  </span>
-                </label>
-                <label className="flex items-center">
-                  <input
-                    type="radio"
-                    name="resultado"
-                    value="no_interesado"
-                    className="mr-2"
-                  />
-                  <span className="text-sm">No interesado - Descartar</span>
-                </label>
-                <label className="flex items-center">
-                  <input
-                    type="radio"
-                    name="resultado"
-                    value="no_respondio"
-                    className="mr-2"
-                  />
-                  <span className="text-sm">No respondió - Reprogramar</span>
-                </label>
-              </div>
-            </div>
-
-            {/* Botones */}
-            <div className="flex space-x-3">
-              <button
-                type="button"
-                onClick={() => setModalConfirmar(null)}
-                className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition-colors"
-                disabled={procesandoConfirmacion}
-              >
-                Cancelar
-              </button>
-              <button
-                type="submit"
-                className="flex-1 px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors disabled:opacity-50 flex items-center justify-center"
-                disabled={procesandoConfirmacion}
-              >
-                {procesandoConfirmacion ? (
-                  <>
-                    <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-                    Confirmando...
-                  </>
-                ) : (
-                  'CONFIRMAR'
-                )}
-              </button>
-            </div>
-          </form>
-        </div>
-      </div>
-    );
-  };
-
-  // Función para validar horario laboral
-  const esHorarioLaboral = (fecha) => {
-    const date = new Date(fecha);
-    const diaSemana = date.getDay(); // 0 = Domingo, 1 = Lunes, etc.
-    const hora = date.getHours();
-
-    // Lunes a Viernes: 8am-6pm
-    if (diaSemana >= 1 && diaSemana <= 5) {
-      return hora >= 8 && hora < 18;
-    }
-    // Sábado: 9am-12pm
-    if (diaSemana === 6) {
-      return hora >= 9 && hora < 12;
-    }
-    // Domingo: Cerrado
-    return false;
-  };
-
-  // Componente Modal de Reprogramar
-  const renderModalReprogramar = () => {
-    if (!modalReprogramar) return null;
-
-    // Calcular fecha mínima (hoy)
-    const fechaMinima = new Date().toISOString().slice(0, 16);
-
-    return (
-      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-        <div className="bg-white rounded-lg p-6 w-full max-w-md mx-4">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">
-            📅 Reprogramar Seguimiento
-          </h3>
-
-          {/* Información del seguimiento */}
-          <div className="mb-4 p-3 bg-blue-50 rounded-lg">
-            <div className="text-sm text-gray-600">
-              <div><strong>Cliente:</strong> {modalReprogramar.nombre_cliente || modalReprogramar.prospecto_nombre}</div>
-              <div><strong>Tipo:</strong> {modalReprogramar.tipo}</div>
-              <div><strong>Fecha actual:</strong> {new Date(modalReprogramar.fecha_programada).toLocaleString()}</div>
-              {modalReprogramar.vencido && (
-                <div className="text-red-600 font-medium">⚠️ Vencido</div>
-              )}
-            </div>
-          </div>
-
-          <form onSubmit={(e) => {
-            e.preventDefault();
-            const formData = new FormData(e.target);
-            const nuevaFecha = formData.get('nueva_fecha');
-
-            // Validar horario laboral
-            if (!esHorarioLaboral(nuevaFecha)) {
-              mostrarNotificacion('error', '⚠️ La fecha debe estar dentro del horario laboral: L-V 8am-6pm, Sáb 9am-12pm');
-              return;
-            }
-
-            const datos = {
-              seguimiento_id: modalReprogramar.prospecto_id, // Usar prospecto_id que viene de la API
-              nueva_fecha: nuevaFecha,
-              motivo: formData.get('motivo')
-            };
-            reprogramarSeguimiento(datos);
-          }}>
-            {/* Campo de nueva fecha */}
-            <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Nueva fecha y hora
-              </label>
-              <input
-                type="datetime-local"
-                name="nueva_fecha"
-                min={fechaMinima}
-                className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                required
-              />
-              <div className="mt-1 text-xs text-gray-500">
-                📅 Horario laboral: L-V 8am-6pm, Sáb 9am-12pm
-              </div>
-            </div>
-
-            {/* Campo de motivo */}
-            <div className="mb-6">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Motivo de la reprogramación
-              </label>
-              <textarea
-                name="motivo"
-                rows={3}
-                className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="Indica por qué reprogramas este seguimiento..."
-                required
-              />
-            </div>
-
-            {/* Botones */}
-            <div className="flex space-x-3">
-              <button
-                type="button"
-                onClick={() => setModalReprogramar(null)}
-                className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition-colors"
-                disabled={procesandoReprogramacion}
-              >
-                Cancelar
-              </button>
-              <button
-                type="submit"
-                className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50 flex items-center justify-center"
-                disabled={procesandoReprogramacion}
-              >
-                {procesandoReprogramacion ? (
-                  <>
-                    <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-                    Reprogramando...
-                  </>
-                ) : (
-                  'REPROGRAMAR'
-                )}
-              </button>
-            </div>
-          </form>
-        </div>
-      </div>
-    );
-  };
 
   // Modal explicativo del Score
   const renderModalScore = () => {
@@ -1332,16 +1086,45 @@ const BalanzaSeguimientos = ({ asesorId: asesorIdProp = null, refreshTrigger = 0
     <div className="space-y-6 relative" style={{ zIndex: 1 }}>
       {renderBalanza()}
       {renderListaDetalle()}
-      {renderModalConfirmar()}
-      {renderModalReprogramar()}
       {renderNotificacion()}
       {renderModalScore()}
+
+      {/* Modal Completar con Reprogramación */}
+      <ModalCompletarConReprogramacion
+        isOpen={modalCompletarAbierto}
+        seguimiento={seguimientoSeleccionado}
+        onClose={() => {
+          setModalCompletarAbierto(false);
+          setSeguimientoSeleccionado(null);
+        }}
+        onSubmit={completarSeguimientoConReprogramacion}
+        loading={procesandoCompletar}
+      />
 
       {/* Modal Historial Completo */}
       {mostrarHistorial && (
         <HistorialCompleto
           asesorId={vistaSeleccionada}
           onClose={() => setMostrarHistorial(false)}
+        />
+      )}
+
+      {/* Modal Detalles del Prospecto */}
+      {mostrarDetallesProspecto && prospectoSeleccionadoDetalles && (
+        <ProspectoDetailsView
+          prospecto={prospectoSeleccionadoDetalles}
+          onClose={() => {
+            setMostrarDetallesProspecto(false);
+            setProspectoSeleccionadoDetalles(null);
+          }}
+          onEdit={(prospecto) => {
+            // Cerrar el modal de detalles
+            setMostrarDetallesProspecto(false);
+            setProspectoSeleccionadoDetalles(null);
+            // Aquí podrías agregar lógica para abrir el formulario de edición si fuera necesario
+            console.log('Editar prospecto:', prospecto);
+          }}
+          currentUser={usuarioActual}
         />
       )}
     </div>

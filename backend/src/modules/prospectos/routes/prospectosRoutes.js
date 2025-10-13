@@ -776,9 +776,63 @@ router.post('/seguimientos/corregir-null',
 // RUTAS CON PARÁMETROS DINÁMICOS (AL FINAL)
 // ============================================================================
 // Ruta para obtener productos de interés de un prospecto
-router.get('/:id/productos-interes', 
-    requireRole(GRUPOS_ROLES.VENTAS_COMPLETO), 
+router.get('/:id/productos-interes',
+    requireRole(GRUPOS_ROLES.VENTAS_COMPLETO),
     ProspectosController.obtenerProductosInteres
+);
+
+// Ruta para obtener seguimientos de un prospecto específico
+router.get('/:id/seguimientos',
+    requireRole(GRUPOS_ROLES.VENTAS_COMPLETO),
+    async (req, res) => {
+        try {
+            const { id } = req.params;
+
+            if (!id || isNaN(id)) {
+                return res.status(400).json({
+                    success: false,
+                    error: 'ID de prospecto inválido'
+                });
+            }
+
+            const { query } = require('../../../config/database');
+
+            const result = await query(`
+                SELECT
+                    s.id,
+                    s.prospecto_id,
+                    s.tipo,
+                    s.fecha_programada,
+                    s.fecha_completado,
+                    s.completado,
+                    s.resultado,
+                    s.descripcion,
+                    s.notas,
+                    s.calificacion,
+                    s.asesor_id,
+                    s.created_at,
+                    s.updated_at,
+                    CONCAT(u.nombre, ' ', u.apellido) as asesor_nombre
+                FROM seguimientos s
+                LEFT JOIN usuarios u ON s.asesor_id = u.id
+                WHERE s.prospecto_id = $1
+                ORDER BY s.fecha_programada DESC, s.created_at DESC
+            `, [id]);
+
+            res.json({
+                success: true,
+                data: result.rows,
+                total: result.rows.length
+            });
+
+        } catch (error) {
+            console.error('Error obteniendo seguimientos del prospecto:', error);
+            res.status(500).json({
+                success: false,
+                error: 'Error al obtener seguimientos: ' + error.message
+            });
+        }
+    }
 );
 
 // 🚀 ANALYTICS UNIFICADOS - Nueva función que resuelve inconsistencias

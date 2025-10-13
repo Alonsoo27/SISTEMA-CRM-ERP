@@ -110,10 +110,10 @@ class NotificacionesController {
 
             logger.info(`🔔 Creando notificaciones (${modo}): tipo=${tipo}, usuarios=${usuarios.length || 1}`);
 
-            // VALIDACIONES INTELIGENTES
-            if (!data.titulo && !data.mensaje) {
-                throw new Error('Se requiere al menos título o mensaje');
-            }
+            // ✅ NORMALIZAR NOMBRES DE PROPIEDADES
+            // Permitir tanto "codigo" como "prospecto_codigo", etc.
+            if (data.prospecto_codigo && !data.codigo) data.codigo = data.prospecto_codigo;
+            if (data.prospecto_nombre && !data.nombre_cliente) data.nombre_cliente = data.prospecto_nombre;
 
             // CONFIGURACIÓN AUTOMÁTICA DE PRIORIDAD (si está habilitada)
             let prioridadCalculada = data.prioridad || 'normal';
@@ -165,7 +165,7 @@ class NotificacionesController {
                         accion_texto: this.generarTextoAccion(tipo, prioridadCalculada),
                         created_at: fechaActual,
                         expira_en: this.calcularExpiracion(tipo, prioridadCalculada),
-                        
+
                         // METADATOS INTELIGENTES (si están habilitados)
                         ...(incluir_metadatos ? {
                             datos_adicionales: JSON.stringify({
@@ -179,6 +179,11 @@ class NotificacionesController {
                             })
                         } : {})
                     };
+
+                    // VALIDAR QUE SE HAYAN GENERADO TÍTULO Y MENSAJE
+                    if (!notificacion.titulo || !notificacion.mensaje) {
+                        throw new Error(`No se pudo generar contenido para notificación tipo: ${tipo}`);
+                    }
 
                     // INSERTAR EN BASE DE DATOS
                     const insertQuery = `
@@ -421,35 +426,35 @@ class NotificacionesController {
         if (data.accion_url) return data.accion_url;
 
         const urls = {
-            // Seguimientos
-            'seguimiento_vencido': data.prospecto_id ? `/prospectos/${data.prospecto_id}` : '/prospectos?tab=seguimientos',
-            'seguimiento_urgente': data.prospecto_id ? `/prospectos/${data.prospecto_id}` : '/prospectos',
-            'seguimiento_critico': data.prospecto_id ? `/prospectos/${data.prospecto_id}` : '/prospectos',
-            'seguimiento_completado': data.prospecto_id ? `/prospectos/${data.prospecto_id}` : '/prospectos?tab=historial',
-            'seguimiento_proximo': data.prospecto_id ? `/prospectos/${data.prospecto_id}` : '/prospectos?tab=seguimientos',
+            // Seguimientos - Llevan a vista "seguimientos"
+            'seguimiento_vencido': data.prospecto_id ? `/prospectos?view=seguimientos&id=${data.prospecto_id}&action=view` : '/prospectos?view=seguimientos',
+            'seguimiento_urgente': data.prospecto_id ? `/prospectos?view=seguimientos&id=${data.prospecto_id}&action=view` : '/prospectos?view=seguimientos',
+            'seguimiento_critico': data.prospecto_id ? `/prospectos?view=seguimientos&id=${data.prospecto_id}&action=view` : '/prospectos?view=seguimientos',
+            'seguimiento_completado': data.prospecto_id ? `/prospectos?view=kanban&id=${data.prospecto_id}&action=view` : '/prospectos?view=seguimientos',
+            'seguimiento_proximo': data.prospecto_id ? `/prospectos?view=seguimientos&id=${data.prospecto_id}&action=view` : '/prospectos?view=seguimientos',
 
-            // Prospectos
-            'prospecto_creado': data.prospecto_id ? `/prospectos/${data.prospecto_id}` : '/prospectos',
-            'prospecto_reasignado': data.prospecto_id ? `/prospectos/${data.prospecto_id}` : '/prospectos',
-            'prospecto_eliminado': '/prospectos?tab=eliminados',
-            'prospecto_libre_activado': data.prospecto_id ? `/prospectos/${data.prospecto_id}` : '/prospectos?filtro=modo_libre',
+            // Prospectos - Llevan a vista "kanban" (pipeline)
+            'prospecto_creado': data.prospecto_id ? `/prospectos?view=kanban&id=${data.prospecto_id}&action=view` : '/prospectos?view=kanban',
+            'prospecto_reasignado': data.prospecto_id ? `/prospectos?view=kanban&id=${data.prospecto_id}&action=view` : '/prospectos?view=kanban',
+            'prospecto_eliminado': '/prospectos?view=lista&filtro=eliminados',
+            'prospecto_libre_activado': data.prospecto_id ? `/prospectos?view=kanban&id=${data.prospecto_id}&action=view` : '/prospectos?view=kanban&filtro=modo_libre',
 
-            // Estados y ventas
-            'estado_cotizado': data.prospecto_id ? `/prospectos/${data.prospecto_id}` : '/prospectos?estado=Cotizado',
-            'estado_negociacion': data.prospecto_id ? `/prospectos/${data.prospecto_id}` : '/prospectos?estado=Negociacion',
-            'venta_cerrada': data.venta_id ? `/ventas/${data.venta_id}` : '/ventas',
-            'venta_perdida': data.prospecto_id ? `/prospectos/${data.prospecto_id}` : '/reportes/ventas-perdidas',
-            'conversion_exitosa': data.venta_id ? `/ventas/${data.venta_id}` : '/ventas',
+            // Estados y ventas - Prospectos en kanban, ventas en lista
+            'estado_cotizado': data.prospecto_id ? `/prospectos?view=kanban&id=${data.prospecto_id}&action=view` : '/prospectos?view=kanban&estado=Cotizado',
+            'estado_negociacion': data.prospecto_id ? `/prospectos?view=kanban&id=${data.prospecto_id}&action=view` : '/prospectos?view=kanban&estado=Negociacion',
+            'venta_cerrada': data.venta_id ? `/ventas?view=lista&id=${data.venta_id}&action=view` : '/ventas?view=lista',
+            'venta_perdida': data.prospecto_id ? `/prospectos?view=lista&id=${data.prospecto_id}&action=view` : '/reportes/ventas-perdidas',
+            'conversion_exitosa': data.venta_id ? `/ventas?view=lista&id=${data.venta_id}&action=view` : '/ventas?view=lista',
 
-            // Alertas
-            'oportunidad_alta': data.prospecto_id ? `/prospectos/${data.prospecto_id}` : '/prospectos?filtro=alto_valor',
-            'alerta_reasignaciones': data.prospecto_id ? `/prospectos/${data.prospecto_id}` : '/prospectos?filtro=multiples_reasignaciones',
-            'meta_alcanzada': '/dashboard/metas',
+            // Alertas - Según contexto
+            'oportunidad_alta': data.prospecto_id ? `/prospectos?view=kanban&id=${data.prospecto_id}&action=view` : '/prospectos?view=kanban&filtro=alto_valor',
+            'alerta_reasignaciones': data.prospecto_id ? `/prospectos?view=lista&id=${data.prospecto_id}&action=view` : '/prospectos?view=lista&filtro=multiples_reasignaciones',
+            'meta_alcanzada': '/ventas?view=metricas',
 
             // Sistema
-            'sistema': '/configuracion',
+            'sistema': '/prospectos?view=kanban',
             'marketing': '/marketing/campanas',
-            'manual': data.prospecto_id ? `/prospectos/${data.prospecto_id}` : '/dashboard'
+            'manual': data.prospecto_id ? `/prospectos?view=kanban&id=${data.prospecto_id}&action=view` : '/dashboard'
         };
 
         return urls[tipo] || '/dashboard';
@@ -691,7 +696,9 @@ class NotificacionesController {
                     valor_estimado: notif.valor_estimado,
                     estado: notif.estado
                 } : null,
-                metadatos: notif.datos_adicionales ? JSON.parse(notif.datos_adicionales) : null
+                metadatos: notif.datos_adicionales ?
+                    (typeof notif.datos_adicionales === 'string' ? JSON.parse(notif.datos_adicionales) : notif.datos_adicionales)
+                    : null
             }));
 
             let estadisticas = null;

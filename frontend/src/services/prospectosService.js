@@ -76,6 +76,13 @@ class ProspectosService {
     });
     return await this.handleResponse(response);
   }
+
+  async obtenerSeguimientosPorProspecto(prospectoId) {
+    const response = await fetch(`${API_BASE_URL}/${prospectoId}/seguimientos`, {
+      headers: this.getAuthHeaders()
+    });
+    return await this.handleResponse(response);
+  }
   
   async cambiarEstado(id, nuevoEstado, motivo = '') {
     const response = await fetch(`${API_BASE_URL}/${id}/estado`, {
@@ -246,20 +253,42 @@ class ProspectosService {
     return await this.handleResponse(response);
   }
 
-  async completarSeguimiento(seguimientoId, resultado = '') {
+  /**
+   * Completar seguimiento con opción de reprogramación múltiple
+   * @param {number} seguimientoId - ID del seguimiento a completar
+   * @param {Object} datos - Datos del seguimiento
+   * @param {string} datos.resultado - Resultado del seguimiento
+   * @param {string} datos.notas - Notas detalladas
+   * @param {number} datos.calificacion - Calificación 1-5
+   * @param {Array} datos.seguimientos_futuros - Array de seguimientos a crear
+   * @returns {Promise}
+   *
+   * @example
+   * // Uso básico (sin reprogramación)
+   * completarSeguimiento(123, { resultado: 'Cliente Interesado', notas: 'Llamada exitosa', calificacion: 5 })
+   *
+   * @example
+   * // Con reprogramación múltiple
+   * completarSeguimiento(123, {
+   *   resultado: 'Cliente Interesado',
+   *   notas: 'Solicitó más información',
+   *   calificacion: 5,
+   *   seguimientos_futuros: [
+   *     { tipo: 'Llamada', fecha_programada: '2025-01-15T10:00:00', notas: 'Llamar para enviar cotización' },
+   *     { tipo: 'Email', fecha_programada: '2025-01-16T14:00:00', notas: 'Enviar cotización por correo' }
+   *   ]
+   * })
+   */
+  async completarSeguimiento(seguimientoId, datos = {}) {
+    // Compatibilidad hacia atrás: si se pasa solo un string, asumirlo como resultado
+    const payload = typeof datos === 'string'
+      ? { resultado: datos }
+      : datos;
+
     const response = await fetch(`${API_BASE_URL}/seguimientos/${seguimientoId}/completar`, {
       method: 'PUT',
       headers: this.getAuthHeaders(),
-      body: JSON.stringify({ resultado })
-    });
-    return await this.handleResponse(response);
-  }
-
-  async posponerSeguimiento(seguimientoId, nuevaFecha, motivo) {
-    const response = await fetch(`${API_BASE_URL}/seguimientos/${seguimientoId}/posponer`, {
-      method: 'PUT',
-      headers: this.getAuthHeaders(),
-      body: JSON.stringify({ nueva_fecha: nuevaFecha, motivo })
+      body: JSON.stringify(payload)
     });
     return await this.handleResponse(response);
   }

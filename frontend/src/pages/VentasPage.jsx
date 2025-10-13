@@ -1,5 +1,6 @@
 // src/pages/VentasPage.jsx - VERSIÓN CON SMART HEADER ADAPTATIVO
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   Plus, BarChart3, List, DollarSign, Filter, Download,
   RefreshCw, Settings, Search, Calendar, AlertCircle,
@@ -28,6 +29,7 @@ const VentasPage = () => {
   console.log('🎬 [VentasPage] RENDER');
 
   const { canCreate, canEdit } = useModulePermissions('ventas');
+  const [searchParams, setSearchParams] = useSearchParams();
   const [vistaActual, setVistaActual] = useState('lista');
   const [showVentaForm, setShowVentaForm] = useState(false);
   const [ventaSeleccionada, setVentaSeleccionada] = useState(null);
@@ -92,6 +94,60 @@ const VentasPage = () => {
       cargarDashboard(dashboardActivo);
     }
   }, [vistaActual]); // ❌ REMOVIDO dashboardActivo de dependencias
+
+  // 🔔 Leer query params para navegación desde notificaciones
+  useEffect(() => {
+    const view = searchParams.get('view');
+    const ventaId = searchParams.get('id');
+    const action = searchParams.get('action');
+
+    // 1. PRIMERO cambiar la vista si se especifica
+    if (view && ['lista', 'metricas', 'pipeline', 'clientes', 'actividad', 'dashboards-admin'].includes(view)) {
+      console.log('📍 Cambiando a vista de ventas:', view);
+      setVistaActual(view);
+    }
+
+    // 2. DESPUÉS cargar la venta si hay ID y acción
+    if (ventaId && action === 'view') {
+      console.log('📨 Notificación: Cargando venta', ventaId);
+      // Pequeño delay para que la vista se establezca primero
+      setTimeout(() => {
+        cargarVenta(ventaId);
+      }, 100);
+    }
+
+    // 3. Limpiar query params después de procesarlos
+    if (view || (ventaId && action)) {
+      const newParams = new URLSearchParams(searchParams);
+      newParams.delete('view');
+      newParams.delete('id');
+      newParams.delete('action');
+      setSearchParams(newParams);
+    }
+  }, [searchParams]);
+
+  const cargarVenta = useCallback(async (ventaId) => {
+    try {
+      setLoading(true);
+      console.log('🔍 Cargando venta ID:', ventaId);
+
+      const response = await ventasService.obtenerVentaPorId(ventaId);
+
+      if (response.success && response.data) {
+        console.log('✅ Venta cargada:', response.data);
+        // Usar las funciones directamente
+        setVentaDetalles(response.data);
+        setShowVentaDetails(true);
+      } else {
+        throw new Error('No se pudo cargar la venta');
+      }
+    } catch (error) {
+      console.error('❌ Error cargando venta:', error);
+      showNotification('Error al cargar la venta', 'error');
+    } finally {
+      setLoading(false);
+    }
+  }, [showNotification]);
 
   // Función para cargar usuario actual dinámicamente
   const cargarUsuarioActual = useCallback(async () => {

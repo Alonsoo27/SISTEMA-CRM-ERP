@@ -1,5 +1,6 @@
 // src/pages/ProspectosPage.jsx
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import {
   Plus, BarChart3, List, Users, Filter, Download,
   RefreshCw, Settings, Search, Calendar, AlertCircle,
@@ -8,6 +9,7 @@ import {
 
 import KanbanBoard from '../components/prospectos/KanbanBoard/KanbanBoard';
 import ProspectoForm from '../components/prospectos/ProspectoForm/ProspectoForm';
+import ProspectoDetailsView from '../components/prospectos/ProspectoDetailsView';
 import ProspectoList from '../components/prospectos/ProspectoList/ProspectoList';
 import KanbanFilters from '../components/prospectos/KanbanFilters/KanbanFilters';
 import AnalyticsEnterprise from '../components/prospectos/AnalyticsEnterprise/AnalyticsEnterprise';
@@ -20,9 +22,13 @@ import { useModulePermissions } from '../hooks/useModulePermissions';
 
 const ProspectosPage = () => {
   const { canCreate, canEdit } = useModulePermissions('prospectos');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const navigate = useNavigate();
   const [vistaActual, setVistaActual] = useState('kanban');
   const [showForm, setShowForm] = useState(false);
   const [prospectoSeleccionado, setProspectoSeleccionado] = useState(null);
+  const [showProspectoDetails, setShowProspectoDetails] = useState(false);
+  const [prospectoDetalles, setProspectoDetalles] = useState(null);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   const [filtros, setFiltros] = useState({
     asesor_id: null,
@@ -66,6 +72,67 @@ const ProspectosPage = () => {
 
     return () => clearInterval(interval);
   }, []);
+
+  // Sistema de notificaciones mejorado (DEFINIR PRIMERO antes de usarlo)
+  const showNotification = useCallback((mensaje, tipo = 'info') => {
+    setNotification({ mensaje, tipo, id: Date.now() });
+    setTimeout(() => setNotification(null), 3000);
+  }, []);
+
+  // Función para cargar prospecto (PARA VISTA DE DETALLES desde notificaciones)
+  const cargarProspecto = useCallback(async (prospectoId) => {
+    try {
+      setLoading(true);
+      console.log('🔍 Cargando prospecto ID:', prospectoId);
+
+      const response = await prospectosService.obtenerPorId(prospectoId);
+
+      if (response.success && response.data) {
+        console.log('✅ Prospecto cargado:', response.data);
+        // Abrir vista de detalles en lugar del formulario de edición
+        setProspectoDetalles(response.data);
+        setShowProspectoDetails(true);
+      } else {
+        throw new Error('No se pudo cargar el prospecto');
+      }
+    } catch (error) {
+      console.error('❌ Error cargando prospecto:', error);
+      showNotification('Error al cargar el prospecto', 'error');
+    } finally {
+      setLoading(false);
+    }
+  }, [showNotification]);
+
+  // 🔔 Leer query params para navegación desde notificaciones
+  useEffect(() => {
+    const view = searchParams.get('view');
+    const prospectoId = searchParams.get('id');
+    const action = searchParams.get('action');
+
+    // 1. PRIMERO cambiar la vista si se especifica
+    if (view && ['kanban', 'lista', 'seguimientos', 'analytics'].includes(view)) {
+      console.log('📍 Cambiando a vista:', view);
+      setVistaActual(view);
+    }
+
+    // 2. DESPUÉS cargar el prospecto si hay ID y acción
+    if (prospectoId && action === 'view') {
+      console.log('📨 Notificación: Cargando prospecto', prospectoId);
+      // Pequeño delay para que la vista se establezca primero
+      setTimeout(() => {
+        cargarProspecto(prospectoId);
+      }, 100);
+    }
+
+    // 3. Limpiar query params después de procesarlos
+    if (view || (prospectoId && action)) {
+      const newParams = new URLSearchParams(searchParams);
+      newParams.delete('view');
+      newParams.delete('id');
+      newParams.delete('action');
+      setSearchParams(newParams);
+    }
+  }, [searchParams, cargarProspecto]);
 
   const cargarStatsGenerales = useCallback(async (silencioso = false) => {
     try {
@@ -111,6 +178,16 @@ const ProspectosPage = () => {
     setShowForm(true);
   }, []);
 
+  const handleVerDetalles = useCallback((prospecto) => {
+    setProspectoDetalles(prospecto);
+    setShowProspectoDetails(true);
+  }, []);
+
+  const handleCloseDetalles = useCallback(() => {
+    setShowProspectoDetails(false);
+    setProspectoDetalles(null);
+  }, []);
+
   const handleFormClose = useCallback(() => {
     setShowForm(false);
     setProspectoSeleccionado(null);
@@ -122,13 +199,7 @@ const ProspectosPage = () => {
     showNotification(`Prospecto ${accion} exitosamente`, 'success');
     setShowForm(false);
     setProspectoSeleccionado(null);
-  }, [prospectoSeleccionado, handleRefresh]);
-
-  // Sistema de notificaciones mejorado
-  const showNotification = useCallback((mensaje, tipo = 'info') => {
-    setNotification({ mensaje, tipo, id: Date.now() });
-    setTimeout(() => setNotification(null), 3000);
-  }, []);
+  }, [prospectoSeleccionado, handleRefresh, showNotification]);
 
   // Función para limpiar todos los filtros
   const handleLimpiarFiltros = useCallback(() => {
@@ -483,6 +554,20 @@ const ProspectosPage = () => {
           mode={prospectoSeleccionado ? 'edit' : 'create'}
           onClose={handleFormClose}
           onSave={handleFormSave}
+        />
+      )}
+
+      {/* Modal de detalles del prospecto */}
+      {showProspectoDetails && prospectoDetalles && (
+        <ProspectoDetailsView
+          prospecto={prospectoDetalles}
+          onClose={handleCloseDetalles}
+          onEdit={(prospecto) => {
+            setShowProspectoDetails(false);
+            setProspectoDetalles(null);
+            handleEditarProspecto(prospecto);
+          }}
+          currentUser={usuarioActual}
         />
       )}
 

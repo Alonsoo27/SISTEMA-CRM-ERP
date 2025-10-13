@@ -47,13 +47,6 @@ router.post('/:id/seguimiento', seguimientosRateLimit, SeguimientosController.cr
  */
 router.put('/:id/completar', seguimientosRateLimit, SeguimientosController.completarSeguimiento);
 
-/**
- * PUT /api/prospectos/seguimientos/:id/posponer
- * Posponer seguimiento con justificación (snooze)
- * Body: { nueva_fecha, motivo }
- */
-router.put('/:id/posponer', seguimientosRateLimit, SeguimientosController.posponerSeguimiento);
-
 // =====================================================
 // RUTAS DEL SISTEMA DE REASIGNACIONES
 // =====================================================

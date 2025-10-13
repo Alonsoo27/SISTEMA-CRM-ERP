@@ -1,5 +1,6 @@
 // frontend/src/components/common/NotificationToast.jsx
 import React, { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { X, AlertTriangle, AlertCircle, Info, CheckCircle } from 'lucide-react';
 
 /**
@@ -11,6 +12,7 @@ import { X, AlertTriangle, AlertCircle, Info, CheckCircle } from 'lucide-react';
  */
 
 const NotificationToast = ({ notification, onClose, duration = 8000 }) => {
+    const navigate = useNavigate();
     const [isVisible, setIsVisible] = useState(false);
     const [isExiting, setIsExiting] = useState(false);
 
@@ -87,9 +89,11 @@ const NotificationToast = ({ notification, onClose, duration = 8000 }) => {
         if (notification.accion_url) {
             // Navegar a la URL
             if (notification.accion_url.startsWith('http')) {
+                // URL externa - abrir en nueva pestaña
                 window.open(notification.accion_url, '_blank');
             } else {
-                window.location.href = notification.accion_url;
+                // URL interna - usar React Router
+                navigate(notification.accion_url);
             }
         }
         handleClose();

@@ -8,6 +8,9 @@ const NotificacionesController = require('../../notificaciones/controllers/notif
 // 🔄 INTEGRACIÓN CON SISTEMA DE SINCRONIZACIÓN DE CACHE
 const { sincronizarCacheSeguimientos } = require('../utils/sincronizarSeguimientos');
 
+// 📅 INTEGRACIÓN CON HELPER DE FECHAS FLEXIBLE
+const { calcularFechaLimite, esHorarioLaboral } = require('../utils/fechasHelper');
+
 // CONFIGURACIÓN DE LOGGING
 const logger = winston.createLogger({
     level: 'info',
@@ -164,7 +167,7 @@ class SeguimientosController {
     
     /**
      * PUT /api/prospectos/seguimientos/:id/completar
-     * Marcar seguimiento como completado - CON CONVERSIÓN AUTOMÁTICA
+     * Marcar seguimiento como completado - CON CONVERSIÓN AUTOMÁTICA Y REPROGRAMACIÓN MÚLTIPLE
      */
     static async completarSeguimiento(req, res) {
         try {
@@ -173,9 +176,11 @@ class SeguimientosController {
                 resultado = 'Seguimiento completado',
                 notas = '',
                 calificacion = null,
-                reprogramar = false,        // ✅ NUEVO: Si se debe crear siguiente seguimiento
-                nueva_fecha = null,         // ✅ NUEVO: Fecha del siguiente seguimiento
-                tipo_seguimiento = 'Llamada' // ✅ NUEVO: Tipo del siguiente seguimiento
+                seguimientos_futuros = []  // ✅ NUEVO: Array de seguimientos a crear
+                // Formato: [
+                //   { tipo: 'Llamada', fecha_programada: '...', notas: '...' },
+                //   { tipo: 'WhatsApp', fecha_programada: '...', notas: '...' }
+                // ]
             } = req.body;
 
             if (!id || isNaN(id)) {
@@ -203,34 +208,57 @@ class SeguimientosController {
 
             const data = updateResult.rows[0];
 
-            // ✅ REPROGRAMACIÓN: Crear siguiente seguimiento si se solicita
-            if (reprogramar && nueva_fecha) {
-                try {
-                    const fechaLimite = new Date(nueva_fecha);
-                    fechaLimite.setHours(fechaLimite.getHours() + 18);
+            // ✅ REPROGRAMACIÓN MÚLTIPLE: Crear seguimientos futuros si se solicitan
+            let seguimientosCreados = 0;
+            if (Array.isArray(seguimientos_futuros) && seguimientos_futuros.length > 0) {
+                logger.info(`🔄 Creando ${seguimientos_futuros.length} seguimientos futuros para prospecto ${data.prospecto_id}`);
 
-                    await query(`
-                        INSERT INTO seguimientos (
-                            prospecto_id, asesor_id, fecha_programada, fecha_limite,
-                            tipo, descripcion, completado, visible_para_asesor
-                        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-                    `, [
-                        data.prospecto_id,
-                        data.asesor_id,
-                        nueva_fecha,
-                        fechaLimite.toISOString(),
-                        tipo_seguimiento,
-                        `Seguimiento reprogramado: ${resultado}`,
-                        false,
-                        true
-                    ]);
+                for (const seguimiento of seguimientos_futuros) {
+                    try {
+                        const { tipo, fecha_programada, notas: notasSeguimiento } = seguimiento;
 
-                    logger.info(`✅ Seguimiento reprogramado para prospecto ${data.prospecto_id} - Nueva fecha: ${nueva_fecha}`);
+                        // Validar datos requeridos
+                        if (!tipo || !fecha_programada) {
+                            logger.warn(`⚠️ Seguimiento omitido: falta tipo o fecha_programada`);
+                            continue;
+                        }
 
-                } catch (errorReprogramacion) {
-                    logger.error('❌ Error al reprogramar seguimiento:', errorReprogramacion);
-                    // Continuar aunque falle la reprogramación
+                        // Validar horario laboral
+                        if (!esHorarioLaboral(fecha_programada)) {
+                            logger.warn(`⚠️ Fecha fuera de horario laboral: ${fecha_programada} (tipo: ${tipo})`);
+                            // Continuar de todos modos, el helper ajustará automáticamente
+                        }
+
+                        // Calcular fecha_limite usando helper flexible (sin hardcode de 18h)
+                        const fechaLimite = calcularFechaLimite(fecha_programada, tipo);
+
+                        // Crear seguimiento
+                        await query(`
+                            INSERT INTO seguimientos (
+                                prospecto_id, asesor_id, fecha_programada, fecha_limite,
+                                tipo, descripcion, completado, visible_para_asesor
+                            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                        `, [
+                            data.prospecto_id,
+                            data.asesor_id,
+                            fecha_programada,
+                            fechaLimite,
+                            tipo,
+                            notasSeguimiento || `Seguimiento reprogramado: ${resultado}`,
+                            false,
+                            true
+                        ]);
+
+                        seguimientosCreados++;
+                        logger.info(`✅ Seguimiento ${tipo} creado para ${fecha_programada} (límite: ${fechaLimite})`);
+
+                    } catch (errorSeguimiento) {
+                        logger.error(`❌ Error creando seguimiento ${seguimiento.tipo}:`, errorSeguimiento);
+                        // Continuar con los siguientes seguimientos
+                    }
                 }
+
+                logger.info(`✅ ${seguimientosCreados}/${seguimientos_futuros.length} seguimientos creados exitosamente`);
             }
 
             // 🔄 SINCRONIZAR CACHE: Buscar el siguiente seguimiento pendiente y actualizar campos de cache
@@ -266,12 +294,12 @@ class SeguimientosController {
             // ============================================
             // 🚀 CONVERSIÓN AUTOMÁTICA
             // ============================================
-            
-            if (this.debeConvertirAutomaticamente(resultado)) {
+
+            if (SeguimientosController.debeConvertirAutomaticamente(resultado)) {
                 logger.info(`🎯 Resultado exitoso detectado: ${resultado} - Iniciando conversión automática`);
-                
+
                 try {
-                    const resultadoConversion = await this.ejecutarConversionAutomatica({
+                    const resultadoConversion = await SeguimientosController.ejecutarConversionAutomatica({
                         prospecto_id: data.prospecto_id,
                         seguimiento_id: id,
                         asesor_id: req.user?.id,
@@ -348,111 +376,6 @@ class SeguimientosController {
         }
     }
     
-    /**
-     * PUT /api/prospectos/seguimientos/:id/posponer
-     * Posponer seguimiento (snooze) - MEJORADO: Crea nuevo seguimiento en lugar de actualizar
-     */
-    static async posponerSeguimiento(req, res) {
-        try {
-            const { id } = req.params;
-            const { nueva_fecha, motivo } = req.body;
-
-            if (!id || isNaN(id)) {
-                return res.status(400).json({
-                    success: false,
-                    error: 'ID de seguimiento inválido'
-                });
-            }
-
-            if (!nueva_fecha || !motivo) {
-                return res.status(400).json({
-                    success: false,
-                    error: 'Nueva fecha y motivo son obligatorios'
-                });
-            }
-
-            // Validar que la nueva fecha sea futura
-            const fechaNueva = new Date(nueva_fecha);
-            if (fechaNueva <= new Date()) {
-                return res.status(400).json({
-                    success: false,
-                    error: 'La nueva fecha debe ser futura'
-                });
-            }
-
-            // Obtener datos del seguimiento actual
-            const seguimientoActual = await query(`
-                SELECT prospecto_id, asesor_id, tipo FROM seguimientos WHERE id = $1
-            `, [id]);
-
-            if (!seguimientoActual.rows || seguimientoActual.rows.length === 0) {
-                return res.status(404).json({
-                    success: false,
-                    error: 'Seguimiento no encontrado'
-                });
-            }
-
-            const { prospecto_id, asesor_id, tipo } = seguimientoActual.rows[0];
-
-            // ✅ NUEVO ENFOQUE: Marcar actual como pospuesto (completado con motivo especial)
-            await query(`
-                UPDATE seguimientos
-                SET completado = $1,
-                    fecha_completado = $2,
-                    resultado = $3,
-                    notas = $4,
-                    pospuesto = $5
-                WHERE id = $6
-            `, [true, new Date().toISOString(), 'pospuesto', motivo, true, id]);
-
-            // ✅ Crear NUEVO seguimiento con la fecha reprogramada
-            const nuevaFechaLimite = new Date(fechaNueva.getTime() + (18 * 60 * 60 * 1000));
-
-            const nuevoSeguimiento = await query(`
-                INSERT INTO seguimientos (
-                    prospecto_id, asesor_id, fecha_programada, fecha_limite,
-                    tipo, descripcion, completado, visible_para_asesor
-                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-                RETURNING *
-            `, [
-                prospecto_id,
-                asesor_id,
-                nueva_fecha,
-                nuevaFechaLimite.toISOString(),
-                tipo,
-                `Seguimiento pospuesto: ${motivo}`,
-                false,
-                true
-            ]);
-
-            const data = nuevoSeguimiento.rows[0];
-
-            // 🔄 SINCRONIZAR CACHE: Actualizar campos de cache en prospecto
-            try {
-                await sincronizarCacheSeguimientos(prospecto_id);
-                logger.info(`🔄 Cache de seguimientos sincronizado para prospecto ${prospecto_id}`);
-            } catch (errorSync) {
-                logger.error('⚠️ Error sincronizando cache de seguimientos:', errorSync);
-                // No detener el flujo si falla la sincronización
-            }
-
-            logger.info(`✅ Seguimiento ${id} pospuesto y nuevo seguimiento ${data.id} creado para ${nueva_fecha}`);
-
-            res.json({
-                success: true,
-                data: data,
-                message: 'Seguimiento pospuesto exitosamente'
-            });
-            
-        } catch (error) {
-            logger.error('Error en posponerSeguimiento:', error);
-            res.status(500).json({
-                success: false,
-                error: 'Error al posponer seguimiento: ' + error.message
-            });
-        }
-    }
-    
     // =====================================================
     // 🚀 SISTEMA DE CONVERSIÓN AUTOMÁTICA
     // =====================================================
@@ -487,8 +410,8 @@ class SeguimientosController {
         try {
             const { prospecto_id } = req.params;
             const { valor_estimado, notas_conversion } = req.body;
-            
-            const resultado = await this.ejecutarConversionAutomatica({
+
+            const resultado = await SeguimientosController.ejecutarConversionAutomatica({
                 prospecto_id: parseInt(prospecto_id),
                 asesor_id: req.user?.id,
                 resultado: 'Conversion_Manual',
@@ -771,7 +694,7 @@ class SeguimientosController {
 
                     if (nuevasReasignaciones <= 2) {
                         // REASIGNACIÓN NORMAL (1er o 2do rebote)
-                        const resultadoReasignacion = await this.reasignarProspecto(seguimiento.prospecto_id, 'seguimiento_vencido');
+                        const resultadoReasignacion = await SeguimientosController.reasignarProspecto(seguimiento.prospecto_id, 'seguimiento_vencido');
 
                         if (resultadoReasignacion && resultadoReasignacion.action === 'modo_libre') {
                             resultado.modo_libre_activado++;
@@ -789,7 +712,7 @@ class SeguimientosController {
 
                     } else {
                         // ACTIVAR MODO LIBRE (3er strike)
-                        await this.activarModoLibre(seguimiento.prospecto_id);
+                        await SeguimientosController.activarModoLibre(seguimiento.prospecto_id);
                         resultado.modo_libre_activado++;
 
                         // Actualizar estado del prospecto a modo libre
@@ -892,7 +815,7 @@ class SeguimientosController {
             ]);
             
             // Crear notificaciones
-            await this.crearNotificacionesReasignacion(
+            await SeguimientosController.crearNotificacionesReasignacion(
                 prospecto_id,
                 prospecto.asesor_id,
                 asesorSeleccionado.id,
@@ -945,7 +868,7 @@ class SeguimientosController {
             }
             
             // Notificar a todos los asesores mediante el sistema unificado
-            await this.crearNotificacionModoLibre(prospecto_id, asesor_ids);
+            await SeguimientosController.crearNotificacionModoLibre(prospecto_id, asesor_ids);
 
             // 🔔 NOTIFICACIÓN VÍA SISTEMA UNIFICADO: prospecto_libre_activado
             try {
