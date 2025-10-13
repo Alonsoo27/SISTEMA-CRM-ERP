@@ -5,8 +5,11 @@
 
 class ApiClient {
     constructor() {
-        // URL base del backend - obtener de .env
-        this.baseURL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
+        // URL base del backend - obtener de .env o usar Railway en producción
+        this.baseURL = import.meta.env.VITE_API_URL ||
+                       (import.meta.env.MODE === 'production'
+                         ? 'https://sistema-crm-erp-production.up.railway.app/api'
+                         : 'http://localhost:3001/api');
         
         // Headers por defecto
         this.defaultHeaders = {
