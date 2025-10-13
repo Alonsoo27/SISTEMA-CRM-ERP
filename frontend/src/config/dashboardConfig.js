@@ -2,8 +2,11 @@
 // CONFIGURACIÓN DEL DASHBOARD PERSONAL
 // ============================================
 
+// Importar configuración centralizada
+import { API_CONFIG as CENTRAL_API_CONFIG } from './apiConfig';
+
 export const API_CONFIG = {
-  BASE_URL: import.meta.env.VITE_API_URL || 'http://localhost:3001',
+  BASE_URL: CENTRAL_API_CONFIG.BASE_URL,
   TIMEOUT: 10000, // 10 segundos
   RETRY_ATTEMPTS: 3,
   ENABLE_CACHE: import.meta.env.MODE === 'production',
