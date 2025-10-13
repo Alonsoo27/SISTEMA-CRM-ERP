@@ -300,14 +300,14 @@ const requireOwnership = (req, res, next) => {
 
     // Extraer IDs solicitados de parámetros de ruta y query
     const {
-        asesorId, usuarioId, userId, id
+        asesor_id, asesorId, usuarioId, userId, id
     } = req.params;
 
     const asesorIdQuery = req.query.asesor_id;
     const userIdQuery = req.query.user_id;
 
     // Determinar qué ID se está solicitando
-    const requestedId = asesorId || usuarioId || userId || id;
+    const requestedId = asesor_id || asesorId || usuarioId || userId || id;
     const requestedIdFromQuery = asesorIdQuery || userIdQuery;
 
     // Log detallado para debugging
