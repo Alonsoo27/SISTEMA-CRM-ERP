@@ -1,6 +1,7 @@
 // src/components/common/VistaSelector.jsx
 import React, { useState, useEffect } from 'react';
 import { Users, User, ChevronDown, Eye } from 'lucide-react';
+import apiClient from '../../services/apiClient';
 
 /**
  * Selector de Vista Genérico
@@ -44,29 +45,21 @@ const VistaSelector = ({
     try {
       setLoading(true);
 
-      // 🎯 USAR LA RUTA OPTIMIZADA DE VENDEDORES
-      const response = await fetch('http://localhost:3001/api/usuarios/vendedores', {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        }
-      });
-
-      const data = await response.json();
+      // 🎯 USAR LA RUTA OPTIMIZADA DE VENDEDORES CON API CLIENT
+      const data = await apiClient.get('/usuarios/vendedores');
 
       if (data.success) {
         // Backend ya filtra por activos, tomar directamente
         const vendedores = data.data; // Ya vienen filtrados del backend
         console.log(`✅ [VistaSelector] ${vendedores.length} vendedores cargados`);
         setAsesores(vendedores);
-      } else if (response.status === 403) {
-        // Fallback: intentar con la ruta general si tiene permisos
-        const responseAlt = await fetch('http://localhost:3001/api/usuarios', {
-          headers: {
-            'Authorization': `Bearer ${localStorage.getItem('token')}`
-          }
-        });
+      }
+    } catch (error) {
+      console.error('❌ [VistaSelector] Error cargando asesores:', error);
 
-        const dataAlt = await responseAlt.json();
+      // Fallback: intentar con la ruta general si tiene permisos
+      try {
+        const dataAlt = await apiClient.get('/usuarios');
 
         if (dataAlt.success) {
           const vendedores = dataAlt.data.filter(u =>
@@ -75,9 +68,9 @@ const VistaSelector = ({
           console.log(`✅ [VistaSelector] ${vendedores.length} vendedores cargados (fallback)`);
           setAsesores(vendedores);
         }
+      } catch (fallbackError) {
+        console.error('❌ [VistaSelector] Error en fallback:', fallbackError);
       }
-    } catch (error) {
-      console.error('❌ [VistaSelector] Error cargando asesores:', error);
     } finally {
       setLoading(false);
     }

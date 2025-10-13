@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { Users, User, ChevronDown, Eye } from 'lucide-react';
 import prospectosService from '../../services/prospectosService';
+import apiClient from '../../services/apiClient';
 
 /**
  * Selector de Vista para Seguimientos
@@ -36,36 +37,30 @@ const VistaSelectorSeguimientos = ({
   const cargarAsesores = async () => {
     try {
       setLoading(true);
-      // 🎯 USAR LA RUTA OPTIMIZADA DE VENDEDORES
-      const response = await fetch('http://localhost:3001/api/usuarios/vendedores', {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        }
-      });
-      const data = await response.json();
+      // 🎯 USAR LA RUTA OPTIMIZADA DE VENDEDORES CON API CLIENT
+      const data = await apiClient.get('/usuarios/vendedores');
 
       if (data.success) {
         // Ya viene filtrado del backend, solo asegurarse de que estén activos
         const vendedores = data.data.filter(u => u.activo);
         setAsesores(vendedores);
-      } else if (response.status === 403) {
-        console.warn('Usuario no tiene permisos para ver vendedores. Intentando con ruta alternativa...');
-        // Fallback: intentar con la ruta general si tiene permisos
-        const responseAlt = await fetch('http://localhost:3001/api/usuarios', {
-          headers: {
-            'Authorization': `Bearer ${localStorage.getItem('token')}`
-          }
-        });
-        const dataAlt = await responseAlt.json();
+      }
+    } catch (error) {
+      console.error('Error cargando asesores:', error);
+      console.warn('Usuario no tiene permisos para ver vendedores. Intentando con ruta alternativa...');
+
+      // Fallback: intentar con la ruta general si tiene permisos
+      try {
+        const dataAlt = await apiClient.get('/usuarios');
         if (dataAlt.success) {
           const vendedores = dataAlt.data.filter(u =>
             u.activo && (u.rol_id === 7 || u.vende === true)
           );
           setAsesores(vendedores);
         }
+      } catch (fallbackError) {
+        console.error('Error en fallback:', fallbackError);
       }
-    } catch (error) {
-      console.error('Error cargando asesores:', error);
     } finally {
       setLoading(false);
     }

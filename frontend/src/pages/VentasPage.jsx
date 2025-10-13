@@ -17,6 +17,7 @@ import ActividadPage from '../components/ventas/ActividadPage/ActividadPageEnhan
 import ventasService from '../services/ventasService';
 import authService from '../services/authService';
 import clientesService from '../services/clientesService';
+import apiClient from '../services/apiClient';
 import VistaUnificada from '../components/VistaUnificada';
 import AnalisisGeografico from '../components/AnalisisGeografico';
 import ABCProductos from '../components/ABCProductos';
@@ -197,11 +198,7 @@ const VentasPage = () => {
         statsData = {};
       }
       try {
-        const token = localStorage.getItem('token');
-        const bonosResponse = await fetch('http://localhost:3001/api/comisiones/bono-actual/1', {
-          headers: { 'Authorization': `Bearer ${token}` }
-        });
-        const bonosData = await bonosResponse.json();
+        const bonosData = await apiClient.get('/comisiones/bono-actual/1');
 
         if (bonosData.success) {
           statsData.bono_actual = bonosData.data.bono_actual.bono_usd;
