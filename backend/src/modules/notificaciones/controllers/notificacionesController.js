@@ -585,13 +585,43 @@ class NotificacionesController {
 
             const usuarioLogueado = req.user;
 
-            logger.info(`🔔 Obteniendo notificaciones para usuario ${usuarioId} - Solicitado por: ${usuarioLogueado?.user_id} (${usuarioLogueado?.rol})`);
+            // 🔍 VALIDACIÓN DE ESTRUCTURA req.user
+            if (!usuarioLogueado || !usuarioLogueado.user_id || !usuarioLogueado.rol) {
+                logger.error(`❌ Estructura req.user inválida:`, usuarioLogueado);
+                return res.status(401).json({
+                    success: false,
+                    error: 'Usuario no autenticado correctamente',
+                    code: 'INVALID_USER_STRUCTURE'
+                });
+            }
 
-            // 🔐 VALIDACIÓN POR ROL
-            const rolUsuario = usuarioLogueado?.rol?.toUpperCase() || '';
+            logger.info(`🔔 Obteniendo notificaciones para usuario ${usuarioId} - Solicitado por: ${usuarioLogueado.user_id} (${usuarioLogueado.rol})`);
+
+            // 🔐 VALIDACIÓN POR ROL CON MANEJO DE ERRORES
+            let rolUsuario;
+            try {
+                rolUsuario = typeof usuarioLogueado.rol === 'string'
+                    ? usuarioLogueado.rol.toUpperCase()
+                    : (usuarioLogueado.rol?.nombre || '').toUpperCase();
+
+                logger.info(`🎭 Rol procesado: "${rolUsuario}" - Verificando permisos...`);
+            } catch (rolError) {
+                logger.error(`❌ Error procesando rol:`, rolError);
+                return res.status(500).json({
+                    success: false,
+                    error: 'Error procesando rol de usuario',
+                    code: 'ROL_PROCESSING_ERROR'
+                });
+            }
+
+            // Verificar si es ejecutivo
+            const esEjecutivoFlag = esEjecutivo(rolUsuario);
+            const esJefeFlag = esJefe(rolUsuario);
+
+            logger.info(`🔍 Debug permisos: esEjecutivo=${esEjecutivoFlag}, esJefe=${esJefeFlag}, rol="${rolUsuario}"`);
 
             // Si NO es ejecutivo ni jefe, solo puede ver sus propias notificaciones
-            if (!esEjecutivo(rolUsuario) && !esJefe(rolUsuario)) {
+            if (!esEjecutivoFlag && !esJefeFlag) {
                 if (parseInt(usuarioLogueado.user_id) !== parseInt(usuarioId)) {
                     logger.warn(`❌ Acceso denegado: Usuario ${usuarioLogueado.user_id} (${rolUsuario}) intentó ver notificaciones de usuario ${usuarioId}`);
                     return res.status(403).json({
@@ -603,25 +633,39 @@ class NotificacionesController {
             }
 
             // Si es JEFE (pero no ejecutivo), validar que el usuario pertenezca a su equipo
-            if (esJefe(rolUsuario) && !esEjecutivo(rolUsuario)) {
-                const perteneceEquipo = await this.validarUsuarioEnEquipo(
-                    usuarioLogueado.user_id,
-                    usuarioId
-                );
+            if (esJefeFlag && !esEjecutivoFlag) {
+                logger.info(`👔 Usuario es JEFE (no ejecutivo) - Validando equipo...`);
 
-                if (!perteneceEquipo) {
-                    logger.warn(`❌ Acceso denegado: Jefe ${usuarioLogueado.user_id} intentó ver notificaciones de usuario ${usuarioId} que no pertenece a su equipo`);
-                    return res.status(403).json({
+                try {
+                    const perteneceEquipo = await this.validarUsuarioEnEquipo(
+                        usuarioLogueado.user_id,
+                        usuarioId
+                    );
+
+                    if (!perteneceEquipo) {
+                        logger.warn(`❌ Acceso denegado: Jefe ${usuarioLogueado.user_id} intentó ver notificaciones de usuario ${usuarioId} que no pertenece a su equipo`);
+                        return res.status(403).json({
+                            success: false,
+                            error: 'Solo puedes ver notificaciones de tu equipo',
+                            code: 'FORBIDDEN_TEAM_ACCESS'
+                        });
+                    }
+
+                    logger.info(`✅ Usuario ${usuarioId} pertenece al equipo del jefe ${usuarioLogueado.user_id}`);
+                } catch (equipoError) {
+                    logger.error(`❌ Error validando equipo:`, equipoError);
+                    return res.status(500).json({
                         success: false,
-                        error: 'Solo puedes ver notificaciones de tu equipo',
-                        code: 'FORBIDDEN_TEAM_ACCESS'
+                        error: 'Error validando permisos de equipo',
+                        code: 'TEAM_VALIDATION_ERROR',
+                        details: process.env.NODE_ENV === 'development' ? equipoError.message : undefined
                     });
                 }
             }
 
             // EJECUTIVOS: Pueden ver todo (no se valida nada adicional)
-            if (esEjecutivo(rolUsuario)) {
-                logger.info(`✅ Acceso ejecutivo: Usuario ${usuarioLogueado.user_id} puede ver notificaciones de cualquier usuario`);
+            if (esEjecutivoFlag) {
+                logger.info(`✅ Acceso ejecutivo: Usuario ${usuarioLogueado.user_id} (${rolUsuario}) puede ver notificaciones de cualquier usuario`);
             }
 
             // Construir query base
@@ -739,14 +783,44 @@ class NotificacionesController {
             const { incluir_desglose = false } = req.query;
 
             const usuarioLogueado = req.user;
-            const rolUsuario = usuarioLogueado?.rol?.toUpperCase() || '';
 
-            logger.info(`📊 Obteniendo contador para usuario ${usuarioId} - Solicitado por: ${usuarioLogueado?.user_id} (${rolUsuario})`);
+            // 🔍 VALIDACIÓN DE ESTRUCTURA req.user
+            if (!usuarioLogueado || !usuarioLogueado.user_id || !usuarioLogueado.rol) {
+                logger.error(`❌ Estructura req.user inválida en contador:`, usuarioLogueado);
+                return res.status(401).json({
+                    success: false,
+                    error: 'Usuario no autenticado correctamente',
+                    code: 'INVALID_USER_STRUCTURE',
+                    contador: 0
+                });
+            }
 
-            // 🔐 VALIDACIÓN POR ROL (misma lógica que obtenerNotificaciones)
+            // 🔐 VALIDACIÓN POR ROL CON MANEJO DE ERRORES
+            let rolUsuario;
+            try {
+                rolUsuario = typeof usuarioLogueado.rol === 'string'
+                    ? usuarioLogueado.rol.toUpperCase()
+                    : (usuarioLogueado.rol?.nombre || '').toUpperCase();
+            } catch (rolError) {
+                logger.error(`❌ Error procesando rol en contador:`, rolError);
+                return res.status(500).json({
+                    success: false,
+                    error: 'Error procesando rol de usuario',
+                    code: 'ROL_PROCESSING_ERROR',
+                    contador: 0
+                });
+            }
+
+            logger.info(`📊 Obteniendo contador para usuario ${usuarioId} - Solicitado por: ${usuarioLogueado.user_id} (${rolUsuario})`);
+
+            // Verificar si es ejecutivo
+            const esEjecutivoFlag = esEjecutivo(rolUsuario);
+            const esJefeFlag = esJefe(rolUsuario);
+
+            logger.info(`🔍 Debug contador: esEjecutivo=${esEjecutivoFlag}, esJefe=${esJefeFlag}, rol="${rolUsuario}"`);
 
             // Si NO es ejecutivo ni jefe, solo puede ver su propio contador
-            if (!esEjecutivo(rolUsuario) && !esJefe(rolUsuario)) {
+            if (!esEjecutivoFlag && !esJefeFlag) {
                 if (parseInt(usuarioLogueado.user_id) !== parseInt(usuarioId)) {
                     logger.warn(`❌ Acceso denegado: Usuario ${usuarioLogueado.user_id} (${rolUsuario}) intentó ver contador de usuario ${usuarioId}`);
                     return res.status(403).json({
@@ -759,19 +833,34 @@ class NotificacionesController {
             }
 
             // Si es JEFE (pero no ejecutivo), validar que el usuario pertenezca a su equipo
-            if (esJefe(rolUsuario) && !esEjecutivo(rolUsuario)) {
-                const perteneceEquipo = await this.validarUsuarioEnEquipo(
-                    usuarioLogueado.user_id,
-                    usuarioId
-                );
+            if (esJefeFlag && !esEjecutivoFlag) {
+                logger.info(`👔 Usuario es JEFE (no ejecutivo) - Validando equipo para contador...`);
 
-                if (!perteneceEquipo) {
-                    logger.warn(`❌ Acceso denegado: Jefe ${usuarioLogueado.user_id} intentó ver contador de usuario ${usuarioId} que no pertenece a su equipo`);
-                    return res.status(403).json({
+                try {
+                    const perteneceEquipo = await this.validarUsuarioEnEquipo(
+                        usuarioLogueado.user_id,
+                        usuarioId
+                    );
+
+                    if (!perteneceEquipo) {
+                        logger.warn(`❌ Acceso denegado: Jefe ${usuarioLogueado.user_id} intentó ver contador de usuario ${usuarioId} que no pertenece a su equipo`);
+                        return res.status(403).json({
+                            success: false,
+                            error: 'Solo puedes ver el contador de tu equipo',
+                            code: 'FORBIDDEN_TEAM_ACCESS',
+                            contador: 0
+                        });
+                    }
+
+                    logger.info(`✅ Usuario ${usuarioId} pertenece al equipo del jefe ${usuarioLogueado.user_id}`);
+                } catch (equipoError) {
+                    logger.error(`❌ Error validando equipo en contador:`, equipoError);
+                    return res.status(500).json({
                         success: false,
-                        error: 'Solo puedes ver el contador de tu equipo',
-                        code: 'FORBIDDEN_TEAM_ACCESS',
-                        contador: 0
+                        error: 'Error validando permisos de equipo',
+                        code: 'TEAM_VALIDATION_ERROR',
+                        contador: 0,
+                        details: process.env.NODE_ENV === 'development' ? equipoError.message : undefined
                     });
                 }
             }
