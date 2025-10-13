@@ -74,6 +74,12 @@ const VentasPage = () => {
   const [usuarioActual, setUsuarioActual] = useState(null);
   const [usuarioLoading, setUsuarioLoading] = useState(true);
 
+  // ✅ DEFINIR showNotification PRIMERO (antes de usarlo en callbacks)
+  const showNotification = useCallback((mensaje, tipo = 'info') => {
+    setNotification({ mensaje, tipo, id: Date.now() });
+    setTimeout(() => setNotification(null), 3000);
+  }, []);
+
   // Cargar usuario actual al inicializar
   useEffect(() => {
     cargarUsuarioActual();
@@ -188,7 +194,7 @@ const VentasPage = () => {
     } finally {
       setUsuarioLoading(false);
     }
-  }, []);
+  }, [showNotification]);
   const cargarStatsGenerales = useCallback(async (silencioso = false) => {
     try {
       if (!silencioso) setStatsLoading(true);
@@ -224,7 +230,7 @@ const VentasPage = () => {
     } finally {
       if (!silencioso) setStatsLoading(false);
     }
-  }, []);
+  }, [showNotification]);
 
   const cargarDashboard = useCallback(async (dashboardKey) => {
     try {
@@ -262,7 +268,7 @@ const VentasPage = () => {
     } finally {
       setDashboardLoading(false);
     }
-  }, []);
+  }, [showNotification]);
 
   const handleDashboardChange = useCallback((dashboardKey) => {
     // Solo cambiar si es diferente al actual
@@ -276,17 +282,11 @@ const VentasPage = () => {
   const handleRefresh = useCallback(() => {
     setRefreshTrigger(prev => prev + 1);
     showNotification('Datos de ventas actualizados', 'success');
-  }, []);
+  }, [showNotification]);
 
   const handleCrearVenta = useCallback(() => {
     setVentaSeleccionada(null);
     setShowVentaForm(true);
-  }, []);
-
-  // Función de notificaciones (se define primero)
-  const showNotification = useCallback((mensaje, tipo = 'info') => {
-    setNotification({ mensaje, tipo, id: Date.now() });
-    setTimeout(() => setNotification(null), 3000);
   }, []);
 
   // Función para clientes
@@ -360,7 +360,7 @@ const VentasPage = () => {
     showNotification(`Venta ${accion} exitosamente`, 'success');
     setShowVentaForm(false);
     setVentaSeleccionada(null);
-  }, [ventaSeleccionada, handleRefresh]);
+  }, [ventaSeleccionada, handleRefresh, showNotification]);
 
   // Funciones para clientes (usando API real)
   const cargarClientes = useCallback(async () => {
