@@ -6,19 +6,8 @@
 class ApiClient {
     constructor() {
         // URL base del backend - obtener de .env
-        const envURL = import.meta.env.VITE_API_URL;
-
-        // Asegurar que la URL base incluya /api
-        if (envURL) {
-            // Si la URL de entorno ya termina en /api, usarla tal cual
-            this.baseURL = envURL.endsWith('/api') ? envURL : `${envURL}/api`;
-        } else {
-            // Fallback para desarrollo local
-            this.baseURL = 'http://localhost:3001/api';
-        }
-
-        console.log('🔧 ApiClient inicializado con baseURL:', this.baseURL);
-
+        this.baseURL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
+        
         // Headers por defecto
         this.defaultHeaders = {
             'Content-Type': 'application/json'
