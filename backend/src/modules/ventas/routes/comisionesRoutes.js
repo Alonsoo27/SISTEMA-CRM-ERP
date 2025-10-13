@@ -22,11 +22,11 @@ const { GRUPOS_ROLES } = require('../../../config/roles');
 /**
  * @route   GET /api/comisiones/bono-actual/:asesor_id
  * @desc    Obtener bono actual del asesor basado en metas_ventas
- * @access  Private (VENTAS_COMPLETO - todos los vendedores pueden ver bonos)
+ * @access  Private (requireOwnership - propio bono o jefes/ejecutivos)
  */
 router.get('/bono-actual/:asesor_id',
     authenticateToken,
-    requireRole(GRUPOS_ROLES.VENTAS_COMPLETO),
+    requireOwnership,
     (req, res) => ComisionesController.obtenerBonoActual(req, res)
 );
 
@@ -91,11 +91,11 @@ router.get('/', authenticateToken, (req, res) => {
 /**
  * @route   GET /api/comisiones/dashboard/:asesor_id
  * @desc    Redirect a bono-actual (compatibilidad)
- * @access  Private (VENTAS_COMPLETO)
+ * @access  Private (requireOwnership)
  */
 router.get('/dashboard/:asesor_id',
     authenticateToken,
-    requireRole(GRUPOS_ROLES.VENTAS_COMPLETO),
+    requireOwnership,
     (req, res) => ComisionesController.obtenerBonoActual(req, res)
 );
 

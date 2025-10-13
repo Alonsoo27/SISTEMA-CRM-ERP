@@ -261,17 +261,9 @@ class ComisionesController {
 
             const { asesor_id } = req.params;
             const userId = req.user?.user_id || req.user?.id;
-            const userRole = req.user?.rol || 'asesor';
 
-            // Control de acceso
+            // requireOwnership middleware ya validó permisos
             const targetAsesorId = asesor_id || userId;
-            
-            if (!['ADMIN', 'SUPER_ADMIN', 'GERENTE', 'JEFE_VENTAS'].includes(userRole) && targetAsesorId != userId) {
-                return res.status(403).json({
-                    success: false,
-                    message: 'Sin permisos para ver este bono'
-                });
-            }
 
             // Obtener meta actual del asesor
             const metaResult = await query(`
