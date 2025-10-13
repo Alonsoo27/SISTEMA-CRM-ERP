@@ -598,9 +598,9 @@ const metasAvanzado = async (req, res) => {
             asesor.mes
           );
         } else {
-          // Modalidad solo_ventas
-          const bonoSimple = ComisionesController.calcularBono(
-            asesor.meta_valor, 
+          // Modalidad solo_ventas - USAR calcularMejorBono para incluir metas opcionales
+          const bonoSimple = ComisionesController.calcularMejorBono(
+            asesor.meta_valor,
             asesor.valor_logrado
           );
           calculoBono = {
@@ -609,7 +609,8 @@ const metasAvanzado = async (req, res) => {
             nivel: bonoSimple.nivel,
             mensaje: bonoSimple.mensaje,
             modalidad: 'solo_ventas',
-            actividad: null
+            actividad: null,
+            meta_alcanzada: bonoSimple.meta_alcanzada // Meta opcional alcanzada (si aplica)
           };
         }
 
