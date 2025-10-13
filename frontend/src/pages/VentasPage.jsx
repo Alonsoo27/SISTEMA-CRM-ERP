@@ -18,6 +18,7 @@ import ventasService from '../services/ventasService';
 import authService from '../services/authService';
 import clientesService from '../services/clientesService';
 import apiClient from '../services/apiClient';
+import { AuthUtils } from '../utils/auth';
 import VistaUnificada from '../components/VistaUnificada';
 import AnalisisGeografico from '../components/AnalisisGeografico';
 import ABCProductos from '../components/ABCProductos';
@@ -204,7 +205,9 @@ const VentasPage = () => {
         statsData = {};
       }
       try {
-        const bonosData = await apiClient.get('/comisiones/bono-actual/1');
+        // Obtener ID del usuario autenticado
+        const userId = AuthUtils.getUserId() || usuarioActual?.id || 1;
+        const bonosData = await apiClient.get(`/comisiones/bono-actual/${userId}`);
 
         if (bonosData.success) {
           statsData.bono_actual = bonosData.data.bono_actual.bono_usd;

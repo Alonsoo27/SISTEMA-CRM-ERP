@@ -157,7 +157,11 @@ class VentasService {
       let vendidoTotal = 0;
 
       try {
-        const bonosResponse = await this.apiClient.get(`/comisiones/bono-actual/${filtros.asesor_id || 1}`);
+        // Obtener ID del usuario autenticado desde el token
+        const userId = AuthUtils.getUserId();
+        const asesorId = filtros.asesor_id || userId || 1;
+
+        const bonosResponse = await this.apiClient.get(`/comisiones/bono-actual/${asesorId}`);
         bonosData = bonosResponse.data;
         console.log('🔍 DATOS BONOS RECIBIDOS:', bonosData);
 

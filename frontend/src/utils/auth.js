@@ -148,6 +148,24 @@ export const AuthUtils = {
   },
 
   /**
+   * Obtener ID del usuario autenticado desde el token
+   * @returns {number|null} ID del usuario o null
+   */
+  getUserId() {
+    try {
+      const token = this.getAuthToken();
+      if (!token) {
+        return null;
+      }
+      const user = this.getUserFromToken(token);
+      return user?.id || null;
+    } catch (error) {
+      console.error('❌ AuthUtils: Error obteniendo ID de usuario:', error);
+      return null;
+    }
+  },
+
+  /**
    * Manejar error de autenticación
    * Redirige al login y limpia el localStorage
    */
