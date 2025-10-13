@@ -106,7 +106,7 @@ class MetasVentasController {
                 // Desactivar modalidad anterior
                 await query(`
                     UPDATE asesor_configuracion_bonos
-                    SET activo = false, updated_at = NOW()
+                    SET activo = false
                     WHERE asesor_id = $1
                 `, [asesor_id]);
 
@@ -125,8 +125,8 @@ class MetasVentasController {
 
                     await query(`
                         INSERT INTO asesor_configuracion_bonos
-                        (asesor_id, modalidad_bono_id, meses_experiencia, asignado_por, observaciones, created_at, updated_at)
-                        VALUES ($1, $2, $3, $4, $5, NOW(), NOW())
+                        (asesor_id, modalidad_bono_id, fecha_inicio, meses_experiencia, asignado_por, observaciones, activo, created_at)
+                        VALUES ($1, $2, CURRENT_DATE, $3, $4, $5, true, NOW())
                     `, [
                         asesor_id,
                         modalidadResult.rows[0].id,
