@@ -1419,12 +1419,23 @@ const calcularSimuladorBonos = (metaUsd, valorLogrado) => {
   const proximosNiveles = todosLosNiveles
     .filter(nivel => {
       const claveNivel = `${nivel.meta_usd}-${nivel.porcentaje}`;
-      return (
-        nivel.bono > bonoActualValor &&
-        ventasActuales < nivel.ventas_necesarias &&
-        !nivelesMetaAsignada.includes(claveNivel) && // Excluir niveles de la meta asignada
-        nivel.meta_usd >= metaNumero // ✅ SOLO metas iguales o superiores (no inferiores)
-      );
+
+      // Regla 1: Debe dar MÁS bono que el actual
+      if (nivel.bono <= bonoActualValor) return false;
+
+      // Regla 2: Debe requerir ventas MAYORES a las actuales
+      if (ventasActuales >= nivel.ventas_necesarias) return false;
+
+      // Regla 3: No duplicar niveles de la meta asignada
+      if (nivelesMetaAsignada.includes(claveNivel)) return false;
+
+      // Regla 4: NO mostrar metas inferiores a la asignada
+      if (nivel.meta_usd < metaNumero) return false;
+
+      // Regla 5 (NUEVA): Para metas SUPERIORES, SOLO mostrar el 100%
+      if (nivel.meta_usd > metaNumero && nivel.porcentaje < 100) return false;
+
+      return true;
     })
     .sort((a, b) => a.ventas_necesarias - b.ventas_necesarias) // Ordenar por cercanía
     .slice(0, 3) // Los próximos 3 alcanzables
