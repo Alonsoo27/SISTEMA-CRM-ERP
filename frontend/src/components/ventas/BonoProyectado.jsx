@@ -1,7 +1,7 @@
 // Archivo: src/components/ventas/BonoProyectado.jsx
 import React, { useState, useEffect } from 'react';
 import { DollarSign, Target, X, Award, Zap } from 'lucide-react';
-import { API_CONFIG } from '../../config/dashboardConfig';
+import apiClient from '../../services/apiClient';
 
 const BonoProyectado = ({ asesorId }) => {
   const [datosBonus, setDatosBonus] = useState(null);
@@ -15,20 +15,8 @@ const BonoProyectado = ({ asesorId }) => {
       try {
         setCargando(true);
 
-        const token = localStorage.getItem('token');
-        if (!token) {
-          console.error('Token no encontrado');
-          return;
-        }
-
-        const response = await fetch(`${API_CONFIG.BASE_URL}/comisiones/bono-actual/${asesorId}`, {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          }
-        });
-
-        const data = await response.json();
+        // Usar apiClient que ya tiene BASE_URL con /api/ configurado
+        const data = await apiClient.get(`/comisiones/bono-actual/${asesorId}`);
 
         if (data.success) {
           setDatosBonus(data.data);
