@@ -119,7 +119,7 @@ class NotificacionesController {
             let prioridadCalculada = data.prioridad || 'normal';
             
             if (auto_prioridad) {
-                prioridadCalculada = this.calcularPrioridadInteligente({
+                prioridadCalculada = NotificacionesController.calcularPrioridadInteligente({
                     tipo,
                     valor_estimado: data.valor_estimado,
                     horas_vencidas: data.horas_vencidas,
@@ -144,8 +144,8 @@ class NotificacionesController {
                 try {
                     // VALIDAR DUPLICADOS (si está habilitado)
                     if (validar_duplicados && tipo !== 'manual') {
-                        const duplicado = await this.verificarDuplicado(userId, tipo, data.prospecto_id, fechaActual);
-                        
+                        const duplicado = await NotificacionesController.verificarDuplicado(userId, tipo, data.prospecto_id, fechaActual);
+
                         if (duplicado) {
                             duplicados_evitados++;
                             logger.info(`⚠️ Duplicado evitado: usuario ${userId}, tipo ${tipo}`);
@@ -157,14 +157,14 @@ class NotificacionesController {
                     const notificacion = {
                         usuario_id: userId,
                         tipo: tipo,
-                        titulo: this.generarTituloInteligente(data, tipo, modo),
-                        mensaje: this.generarMensajeInteligente(data, tipo, modo),
+                        titulo: NotificacionesController.generarTituloInteligente(data, tipo, modo),
+                        mensaje: NotificacionesController.generarMensajeInteligente(data, tipo, modo),
                         prioridad: prioridadCalculada,
                         prospecto_id: data.prospecto_id || null,
-                        accion_url: this.generarUrlAccion(data, tipo),
-                        accion_texto: this.generarTextoAccion(tipo, prioridadCalculada),
+                        accion_url: NotificacionesController.generarUrlAccion(data, tipo),
+                        accion_texto: NotificacionesController.generarTextoAccion(tipo, prioridadCalculada),
                         created_at: fechaActual,
-                        expira_en: this.calcularExpiracion(tipo, prioridadCalculada),
+                        expira_en: NotificacionesController.calcularExpiracion(tipo, prioridadCalculada),
 
                         // METADATOS INTELIGENTES (si están habilitados)
                         ...(incluir_metadatos ? {
@@ -532,7 +532,7 @@ class NotificacionesController {
      * 🎯 MÉTODOS DE CONVENIENCIA (wrappers para facilidad de uso)
      */
     static async notificarSeguimientoVencido(usuarioId, prospectoData) {
-        return this.crearNotificaciones({
+        return NotificacionesController.crearNotificaciones({
             tipo: 'seguimiento_vencido',
             modo: 'inteligente',
             data: {
@@ -545,7 +545,7 @@ class NotificacionesController {
     }
 
     static async notificarOportunidadAltoValor(usuarioId, prospectoData) {
-        return this.crearNotificaciones({
+        return NotificacionesController.crearNotificaciones({
             tipo: 'oportunidad_alta',
             modo: 'inteligente',
             data: {
@@ -557,7 +557,7 @@ class NotificacionesController {
     }
 
     static async notificacionMasiva(usuarios, data, tipo = 'marketing') {
-        return this.crearNotificaciones({
+        return NotificacionesController.crearNotificaciones({
             tipo: tipo,
             modo: 'masivo',
             usuarios: usuarios,
@@ -637,7 +637,7 @@ class NotificacionesController {
                 logger.info(`👔 Usuario es JEFE (no ejecutivo) - Validando equipo...`);
 
                 try {
-                    const perteneceEquipo = await this.validarUsuarioEnEquipo(
+                    const perteneceEquipo = await NotificacionesController.validarUsuarioEnEquipo(
                         usuarioLogueado.user_id,
                         usuarioId
                     );
@@ -747,7 +747,7 @@ class NotificacionesController {
 
             let estadisticas = null;
             if (incluir_estadisticas === 'true') {
-                estadisticas = await this.calcularEstadisticasUsuario(usuarioId);
+                estadisticas = await NotificacionesController.calcularEstadisticasUsuario(usuarioId);
             }
 
             res.json({
@@ -837,7 +837,7 @@ class NotificacionesController {
                 logger.info(`👔 Usuario es JEFE (no ejecutivo) - Validando equipo para contador...`);
 
                 try {
-                    const perteneceEquipo = await this.validarUsuarioEnEquipo(
+                    const perteneceEquipo = await NotificacionesController.validarUsuarioEnEquipo(
                         usuarioLogueado.user_id,
                         usuarioId
                     );
@@ -990,14 +990,14 @@ class NotificacionesController {
     static async crearNotificacion(req, res) {
         try {
             const opciones = req.body;
-            const resultado = await this.crearNotificaciones(opciones);
-            
+            const resultado = await NotificacionesController.crearNotificaciones(opciones);
+
             if (resultado.success) {
                 res.status(201).json(resultado);
             } else {
                 res.status(400).json(resultado);
             }
-            
+
         } catch (error) {
             logger.error('Error en endpoint crear:', error);
             res.status(500).json({

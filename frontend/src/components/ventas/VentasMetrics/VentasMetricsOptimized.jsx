@@ -149,6 +149,8 @@ const DashboardAsesoresOptimized = ({
     if (modoVista === 'propio') {
       setModoVista('supervisor');
       setAsesorSeleccionado(null);
+      // Cargar asesores al cambiar a modo supervisor
+      cargarAsesores();
     } else {
       setModoVista('propio');
       setAsesorSeleccionado(usuarioActual?.id);
@@ -160,7 +162,7 @@ const DashboardAsesoresOptimized = ({
     setDatosGeografia([]);
     setDatosSectores([]);
     setDatosRanking(null);
-  }, [modoVista, usuarioActual, puedeToggleModos]);
+  }, [modoVista, usuarioActual, puedeToggleModos, cargarAsesores]);
 
   // Cargar métricas del asesor (OPTIMIZADO)
   const cargarMetricas = useCallback(async () => {

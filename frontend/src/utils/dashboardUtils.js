@@ -249,7 +249,9 @@ export const determinarModoVistaInicial = (usuarioActual) => {
 };
 
 export const puedeAlternarModos = (usuarioActual) => {
-  return usuarioActual?.vende && ![2, 3].includes(usuarioActual?.rol_id);
+  // Solo SUPER_ADMIN (rol_id 1) puede alternar entre modo propio y supervisor
+  // Otros roles quedan fijos en su modo determinado por determinarModoVistaInicial
+  return usuarioActual?.rol_id === 1;
 };
 
 // ============================================
