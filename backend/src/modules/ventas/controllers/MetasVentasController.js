@@ -18,6 +18,7 @@ class MetasVentasController {
                 mes = new Date().getMonth() + 1,
                 meta_valor,
                 meta_cantidad,
+                modalidad_bono, // Nuevo: permite cambiar modalidad (solo_ventas / ventas_actividad)
                 observaciones = ''
             } = req.body;
 
@@ -92,6 +93,54 @@ class MetasVentasController {
 
             const nuevaMeta = metaResult.rows[0];
 
+            // Actualizar modalidad de bono si se especificó
+            if (modalidad_bono) {
+                const modalidadesValidas = ['solo_ventas', 'ventas_actividad'];
+                if (!modalidadesValidas.includes(modalidad_bono)) {
+                    return res.status(400).json({
+                        success: false,
+                        message: `Modalidad inválida. Debe ser: ${modalidadesValidas.join(' o ')}`
+                    });
+                }
+
+                // Desactivar modalidad anterior
+                await query(`
+                    UPDATE asesor_configuracion_bonos
+                    SET activo = false, updated_at = NOW()
+                    WHERE asesor_id = $1
+                `, [asesor_id]);
+
+                // Buscar ID de la modalidad solicitada
+                const modalidadResult = await query(`
+                    SELECT id FROM modalidades_bono
+                    WHERE nombre = $1 AND activo = true
+                    LIMIT 1
+                `, [modalidad_bono]);
+
+                if (modalidadResult.rows.length > 0) {
+                    // Crear nueva configuración de modalidad
+                    const mesesExp = Math.floor(
+                        (new Date() - new Date(asesor.created_at)) / (1000 * 60 * 60 * 24 * 30)
+                    );
+
+                    await query(`
+                        INSERT INTO asesor_configuracion_bonos
+                        (asesor_id, modalidad_bono_id, meses_experiencia, asignado_por, observaciones, created_at, updated_at)
+                        VALUES ($1, $2, $3, $4, $5, NOW(), NOW())
+                    `, [
+                        asesor_id,
+                        modalidadResult.rows[0].id,
+                        mesesExp,
+                        userId,
+                        `Modalidad cambiada a ${modalidad_bono} - Configuración manual`
+                    ]);
+
+                    console.log(`✅ Modalidad actualizada: ${asesor.nombre} ${asesor.apellido} → ${modalidad_bono}`);
+                } else {
+                    console.warn(`⚠️ Modalidad '${modalidad_bono}' no encontrada en BD`);
+                }
+            }
+
             console.log(`✅ Meta configurada: ${asesor.nombre} ${asesor.apellido} - $${meta_valor} (${meta_cantidad} ventas) para ${año}-${mes}`);
 
             res.status(201).json({
@@ -103,7 +152,8 @@ class MetasVentasController {
                         nombre: `${asesor.nombre} ${asesor.apellido}`,
                         rol_id: asesor.rol_id
                     },
-                    periodo: `${año}-${String(mes).padStart(2, '0')}`
+                    periodo: `${año}-${String(mes).padStart(2, '0')}`,
+                    modalidad_actualizada: modalidad_bono || null
                 },
                 message: `Meta configurada correctamente para ${asesor.nombre} ${asesor.apellido}`
             });

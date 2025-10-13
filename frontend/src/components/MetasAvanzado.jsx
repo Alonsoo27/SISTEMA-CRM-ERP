@@ -137,7 +137,7 @@ const MetasAvanzado = ({ usuarioActual }) => {
     }
   };
 
-  const configurarMetaManual = async (asesorId, metaValor, metaCantidad, observaciones = '') => {
+  const configurarMetaManual = async (asesorId, metaValor, metaCantidad, modalidadBono, observaciones = '') => {
     try {
       const hoy = new Date();
 
@@ -153,6 +153,7 @@ const MetasAvanzado = ({ usuarioActual }) => {
           mes: hoy.getMonth() + 1,
           meta_valor: metaValor,
           meta_cantidad: metaCantidad,
+          modalidad_bono: modalidadBono,
           observaciones
         })
       });
@@ -996,6 +997,7 @@ const AsesorConfigurableRow = ({ asesor, onConfigurarMeta }) => {
   const [editando, setEditando] = useState(false);
   const [metaValor, setMetaValor] = useState(asesor.meta_valor || '');
   const [metaCantidad, setMetaCantidad] = useState(asesor.meta_cantidad || '');
+  const [modalidad, setModalidad] = useState(asesor.modalidad_bono || 'solo_ventas');
 
   const mesesExperiencia = Math.floor(asesor.meses_experiencia || 0);
   const esNuevo = mesesExperiencia < 3;
@@ -1010,6 +1012,7 @@ const AsesorConfigurableRow = ({ asesor, onConfigurarMeta }) => {
       asesor.asesor_id,
       parseFloat(metaValor),
       parseInt(metaCantidad),
+      modalidad,
       `Configuración manual - ${new Date().toLocaleString()}`
     );
     setEditando(false);
@@ -1019,9 +1022,11 @@ const AsesorConfigurableRow = ({ asesor, onConfigurarMeta }) => {
     if (esNuevo) {
       setMetaValor('2500');
       setMetaCantidad('3');
+      setModalidad('solo_ventas');
     } else {
       setMetaValor('8000');
       setMetaCantidad('10');
+      setModalidad('ventas_actividad');
     }
   };
 
@@ -1087,13 +1092,24 @@ const AsesorConfigurableRow = ({ asesor, onConfigurarMeta }) => {
         </span>
       </td>
       <td className="border border-gray-300 px-4 py-2">
-        <span className={`text-xs px-2 py-1 rounded ${
-          asesor.modalidad_bono === 'ventas_actividad'
-            ? 'bg-purple-100 text-purple-800'
-            : 'bg-gray-100 text-gray-600'
-        }`}>
-          {asesor.modalidad_bono === 'ventas_actividad' ? 'V + A' : 'Solo V'}
-        </span>
+        {editando ? (
+          <select
+            value={modalidad}
+            onChange={(e) => setModalidad(e.target.value)}
+            className="w-full px-2 py-1 border rounded text-sm"
+          >
+            <option value="solo_ventas">Solo Ventas</option>
+            <option value="ventas_actividad">Ventas + Actividad</option>
+          </select>
+        ) : (
+          <span className={`text-xs px-2 py-1 rounded ${
+            asesor.modalidad_bono === 'ventas_actividad'
+              ? 'bg-purple-100 text-purple-800'
+              : 'bg-gray-100 text-gray-600'
+          }`}>
+            {asesor.modalidad_bono === 'ventas_actividad' ? 'V + A' : 'Solo V'}
+          </span>
+        )}
       </td>
       <td className="border border-gray-300 px-4 py-2 text-center">
         {editando ? (
