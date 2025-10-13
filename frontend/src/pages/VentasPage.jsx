@@ -206,7 +206,14 @@ const VentasPage = () => {
       }
       try {
         // Obtener ID del usuario autenticado
-        const userId = AuthUtils.getUserId() || usuarioActual?.id || 1;
+        const userId = AuthUtils.getUserId() || usuarioActual?.id;
+
+        // Solo cargar bonos si tenemos un ID válido
+        if (!userId) {
+          console.warn('⚠️ No se puede cargar bonos: usuario no disponible');
+          throw new Error('Usuario no disponible');
+        }
+
         const bonosData = await apiClient.get(`/comisiones/bono-actual/${userId}`);
 
         if (bonosData.success) {
@@ -933,10 +940,19 @@ const VentasPage = () => {
 
         {vistaActual === 'pipeline' && (
           <div className="h-full p-6 overflow-y-auto">
-            <PipelineMetrics
-              asesorId={usuarioActual?.id || 1}
-              refreshTrigger={refreshTrigger}
-            />
+            {usuarioActual?.id ? (
+              <PipelineMetrics
+                asesorId={usuarioActual.id}
+                refreshTrigger={refreshTrigger}
+              />
+            ) : (
+              <div className="flex items-center justify-center h-64">
+                <div className="text-center">
+                  <AlertCircle className="h-12 w-12 text-yellow-500 mx-auto mb-4" />
+                  <p className="text-gray-600">Cargando información del usuario...</p>
+                </div>
+              </div>
+            )}
           </div>
         )}
 

@@ -159,7 +159,13 @@ class VentasService {
       try {
         // Obtener ID del usuario autenticado desde el token
         const userId = AuthUtils.getUserId();
-        const asesorId = filtros.asesor_id || userId || 1;
+        const asesorId = filtros.asesor_id || userId;
+
+        // Solo cargar bonos si tenemos un ID válido
+        if (!asesorId) {
+          console.warn('⚠️ No se puede cargar bonos: ID de asesor no disponible');
+          throw new Error('ID de asesor no disponible');
+        }
 
         const bonosResponse = await this.apiClient.get(`/comisiones/bono-actual/${asesorId}`);
         bonosData = bonosResponse.data;
