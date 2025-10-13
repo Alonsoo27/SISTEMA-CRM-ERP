@@ -245,9 +245,12 @@ const DashboardAsesoresOptimized = ({
     if (!usuarioActual?.id) return;
 
     // Determinar modo de vista inicial
-    determinarModoVista();
-    // Cargar lista de asesores supervisables
-    cargarAsesores();
+    const modo = determinarModoVista();
+
+    // Solo cargar asesores si el usuario es supervisor (modo supervisor)
+    if (modo === 'supervisor') {
+      cargarAsesores();
+    }
   }, [usuarioActual?.id, determinarModoVista, cargarAsesores]);
 
   // CARGA DE MÉTRICAS - useEffect consolidado
