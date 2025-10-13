@@ -3,11 +3,7 @@
 // ============================================
 
 export const API_CONFIG = {
-  BASE_URL: import.meta.env.VITE_API_URL || (
-    import.meta.env.MODE === 'production'
-      ? 'https://tu-backend-railway.up.railway.app'  // Cambiar por tu URL de Railway
-      : 'http://localhost:3001'
-  ),
+  BASE_URL: import.meta.env.VITE_API_URL || 'http://localhost:3001',
   TIMEOUT: 10000, // 10 segundos
   RETRY_ATTEMPTS: 3,
   ENABLE_CACHE: import.meta.env.MODE === 'production',

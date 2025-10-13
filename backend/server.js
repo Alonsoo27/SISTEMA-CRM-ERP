@@ -13,29 +13,51 @@ const PORT = process.env.PORT || 3001;
 // Esto soluciona el error de express-rate-limit con X-Forwarded-For
 app.set('trust proxy', 1);
 
-// MIDDLEWARE - CONFIGURACIÓN CORS UNIFICADA Y CORREGIDA
+// MIDDLEWARE - CONFIGURACIÓN CORS DINÁMICA PARA RAILWAY
 const allowedOrigins = [
     'http://localhost:5173',
+    'http://localhost:5174',
     'http://localhost:3000',
-    process.env.FRONTEND_URL
+    'http://localhost:3001',
+    process.env.FRONTEND_URL,
+    process.env.RAILWAY_PUBLIC_DOMAIN ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}` : null
 ].filter(Boolean); // Eliminar valores undefined/null
+
+console.log('🔒 CORS configurado para permitir orígenes:', allowedOrigins);
 
 app.use(cors({
     origin: function (origin, callback) {
-        // Permitir requests sin origin (como mobile apps o curl requests)
-        if (!origin) return callback(null, true);
+        // Permitir requests sin origin (como mobile apps, curl, Postman)
+        if (!origin) {
+            return callback(null, true);
+        }
 
-        // En producción, verificar que el origin esté en la lista
-        if (allowedOrigins.indexOf(origin) !== -1 || process.env.NODE_ENV === 'development') {
+        // En desarrollo, permitir todo
+        if (process.env.NODE_ENV === 'development') {
+            return callback(null, true);
+        }
+
+        // En producción con Railway, permitir dominios de Railway
+        if (process.env.RAILWAY_ENVIRONMENT) {
+            // Permitir cualquier dominio .railway.app o .up.railway.app
+            if (origin.endsWith('.railway.app') || origin.endsWith('.up.railway.app')) {
+                return callback(null, true);
+            }
+        }
+
+        // Verificar lista de orígenes permitidos
+        if (allowedOrigins.indexOf(origin) !== -1) {
             callback(null, true);
         } else {
             console.warn(`🚫 CORS bloqueado para origin: ${origin}`);
+            console.warn(`   Orígenes permitidos:`, allowedOrigins);
             callback(new Error('Not allowed by CORS'));
         }
     },
-    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
-    credentials: true
+    credentials: true,
+    optionsSuccessStatus: 200
 }));
 
 // OTROS MIDDLEWARE
