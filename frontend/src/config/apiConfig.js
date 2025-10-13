@@ -5,13 +5,19 @@
 
 // Configuración base
 const getBaseURL = () => {
-  // Para desarrollo local
+  // Prioridad 1: Variable de entorno (funciona en cualquier ambiente)
+  if (import.meta.env.VITE_API_URL) {
+    return import.meta.env.VITE_API_URL;
+  }
+
+  // Prioridad 2: Para desarrollo local
   if (typeof window !== 'undefined' && window.location.hostname === 'localhost') {
     return 'http://localhost:3001';
   }
 
-  // Para producción (Railway)
-  return import.meta.env.VITE_API_URL || 'https://sistema-crm-erp-production.up.railway.app';
+  // Prioridad 3: Fallback para producción (no debería llegar aquí si VITE_API_URL está configurado)
+  console.warn('⚠️ VITE_API_URL no configurado. Usando URL relativa.');
+  return ''; // URL relativa - asume que API está en el mismo dominio
 };
 
 export const API_CONFIG = {
