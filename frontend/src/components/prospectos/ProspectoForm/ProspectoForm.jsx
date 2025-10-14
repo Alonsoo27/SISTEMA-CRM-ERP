@@ -589,10 +589,40 @@ const cargarDatosProspectoCompletos = async (prospectoId) => {
     setLoading(false);
   };
 
+  // Verificar si el formulario tiene datos importantes
+  const tieneContenido = () => {
+    return formData.nombre_cliente.trim() !== '' ||
+           formData.apellido_cliente.trim() !== '' ||
+           formData.telefono.trim() !== '' ||
+           formData.email.trim() !== '' ||
+           formData.empresa.trim() !== '' ||
+           formData.productos_interes.length > 0 ||
+           formData.observaciones.trim() !== '';
+  };
+
+  // Manejar cierre con confirmación inteligente
+  const handleOverlayClick = (e) => {
+    // Solo cerrar si el click fue directamente en el overlay, no en sus hijos
+    if (e.target === e.currentTarget) {
+      // Si hay contenido, pedir confirmación
+      if (tieneContenido()) {
+        const confirmar = window.confirm(
+          '¿Estás seguro de cerrar el formulario? Los cambios no guardados se perderán.'
+        );
+        if (confirmar) {
+          onClose();
+        }
+      } else {
+        // Si está vacío, cerrar sin confirmar
+        onClose();
+      }
+    }
+  };
+
   return (
     <div
       className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
-      onClick={onClose}
+      onMouseDown={handleOverlayClick}
     >
       <div
         className="bg-white rounded-lg shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto"
@@ -609,7 +639,14 @@ const cargarDatosProspectoCompletos = async (prospectoId) => {
             </p>
           </div>
           <button
-            onClick={onClose}
+            onClick={() => {
+              if (tieneContenido()) {
+                const confirmar = window.confirm('¿Estás seguro de cerrar el formulario? Los cambios no guardados se perderán.');
+                if (confirmar) onClose();
+              } else {
+                onClose();
+              }
+            }}
             className="text-white hover:bg-white/20 p-2 rounded-lg transition-all"
           >
             <X className="h-6 w-6" />
@@ -1150,7 +1187,14 @@ const cargarDatosProspectoCompletos = async (prospectoId) => {
           <div className="flex justify-end space-x-3 pt-6 border-t-2 border-gray-200">
             <button
               type="button"
-              onClick={onClose}
+              onClick={() => {
+                if (tieneContenido()) {
+                  const confirmar = window.confirm('¿Estás seguro de cerrar el formulario? Los cambios no guardados se perderán.');
+                  if (confirmar) onClose();
+                } else {
+                  onClose();
+                }
+              }}
               className="px-6 py-3 border-2 border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 hover:border-gray-400 transition-all font-semibold flex items-center"
             >
               <X className="h-4 w-4 mr-2" />
