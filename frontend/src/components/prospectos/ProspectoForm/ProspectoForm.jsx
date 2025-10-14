@@ -10,6 +10,7 @@ import productosService from '../../../services/productosService';
 import { useProspectoData } from '../../../hooks/useProspectoData';
 import { serializarProductosParaEnvio } from '../../../utils/productosUtils';
 import UbicacionesSelector from '../../ui/UbicacionesSelector';
+import ModalConfirmarDuplicado from '../ModalConfirmarDuplicado';
 
 const ProspectoForm = ({ prospecto = null, onClose, onSave, mode = 'create' }) => {
   const prospectoNormalizado = useProspectoData(prospecto);
@@ -38,6 +39,11 @@ const ProspectoForm = ({ prospecto = null, onClose, onSave, mode = 'create' }) =
   const [nuevoProducto, setNuevoProducto] = useState('');
   const [verificandoDuplicado, setVerificandoDuplicado] = useState(false);
   const [duplicadoEncontrado, setDuplicadoEncontrado] = useState(null);
+
+  // Estados para validación avanzada de duplicados
+  const [modalDuplicadoOpen, setModalDuplicadoOpen] = useState(false);
+  const [validacionDuplicado, setValidacionDuplicado] = useState(null);
+  const [intentoCrear, setIntentoCrear] = useState(null);
 
   // Estados para búsqueda de productos reales
   const [busquedaProducto, setBusquedaProducto] = useState('');
@@ -451,45 +457,123 @@ const cargarDatosProspectoCompletos = async (prospectoId) => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
+
     if (!validarFormulario()) return;
-    
-    if (duplicadoEncontrado && mode === 'create') {
-      if (!confirm('Ya existe un prospecto con este teléfono. ¿Desea continuar?')) {
-        return;
-      }
-    }
 
     try {
       setLoading(true);
 
       const dataToSend = {
         ...formData,
-        presupuesto_estimado: formData.presupuesto_estimado ? 
+        presupuesto_estimado: formData.presupuesto_estimado ?
           parseFloat(formData.presupuesto_estimado) : null,
-        valor_estimado: formData.valor_estimado ? 
+        valor_estimado: formData.valor_estimado ?
           parseFloat(formData.valor_estimado) : null,
-        fecha_seguimiento: formData.fecha_seguimiento || 
+        fecha_seguimiento: formData.fecha_seguimiento ||
           (mode === 'create' ? calcularFechaSeguimiento() : null),
         productos_interes: serializarProductosParaEnvio(formData.productos_interes)
       };
 
-      let response;
+      // MODO EDICIÓN: Actualizar directamente
       if (mode === 'edit' && prospecto) {
-        response = await prospectosService.actualizar(prospecto.id, dataToSend);
-      } else {
-        response = await prospectosService.crear(dataToSend);
+        const response = await prospectosService.actualizar(prospecto.id, dataToSend);
+        if (response.success) {
+          onSave?.(response.data);
+          onClose();
+        }
+        return;
       }
+
+      // MODO CREACIÓN: Validación avanzada de duplicados
+      if (mode === 'create') {
+        // Preparar productos para validación (solo códigos)
+        const productosParaValidar = formData.productos_interes
+          .map(p => {
+            if (typeof p === 'object' && p.codigo) {
+              return {
+                codigo_producto: p.codigo,
+                descripcion: p.descripcion_producto
+              };
+            }
+            return null;
+          })
+          .filter(p => p !== null);
+
+        // 1. Validar duplicado avanzado
+        const validacion = await prospectosService.validarDuplicadoAvanzado(
+          formData.telefono,
+          productosParaValidar
+        );
+
+        // 2. Verificar si requiere confirmación (Escenario B: ADVERTIR)
+        if (validacion.requires_confirmation) {
+          // Guardar el intento para usar después de la confirmación
+          setIntentoCrear(dataToSend);
+          setValidacionDuplicado(validacion);
+          setModalDuplicadoOpen(true);
+          setLoading(false);
+          return;
+        }
+
+        // 3. Si no requiere confirmación, crear directamente (Escenarios A, D, NUEVO)
+        const response = await prospectosService.crear(dataToSend);
+        if (response.success) {
+          onSave?.(response.data);
+          onClose();
+        }
+      }
+    } catch (err) {
+      // Manejar errores de bloqueo (Escenario C)
+      if (err.response?.status === 409) {
+        const errorData = err.response.data;
+        setValidacionDuplicado({
+          escenario: 'C_BLOQUEAR_PRODUCTO_AVANZADO',
+          mensaje: errorData.error || 'No se puede crear el prospecto',
+          motivo_bloqueo: errorData.motivo_bloqueo
+        });
+        setModalDuplicadoOpen(true);
+        setLoading(false);
+        return;
+      }
+
+      alert(`Error ${mode === 'edit' ? 'actualizando' : 'creando'} prospecto: ${err.message}`);
+    } finally {
+      if (mode === 'edit') {
+        setLoading(false);
+      }
+    }
+  };
+
+  // Manejar confirmación de duplicado
+  const handleConfirmarDuplicado = async () => {
+    if (!intentoCrear) return;
+
+    try {
+      setLoading(true);
+
+      // Crear con confirmación explícita
+      const response = await prospectosService.crearConConfirmacion(intentoCrear, true);
 
       if (response.success) {
         onSave?.(response.data);
         onClose();
       }
     } catch (err) {
-      alert(`Error ${mode === 'edit' ? 'actualizando' : 'creando'} prospecto: ${err.message}`);
+      alert(`Error creando prospecto: ${err.message}`);
     } finally {
       setLoading(false);
+      setModalDuplicadoOpen(false);
+      setValidacionDuplicado(null);
+      setIntentoCrear(null);
     }
+  };
+
+  // Manejar cancelación del modal
+  const handleCancelarDuplicado = () => {
+    setModalDuplicadoOpen(false);
+    setValidacionDuplicado(null);
+    setIntentoCrear(null);
+    setLoading(false);
   };
 
   return (
@@ -1087,6 +1171,15 @@ const cargarDatosProspectoCompletos = async (prospectoId) => {
             </button>
           </div>
         </form>
+
+        {/* Modal de confirmación de duplicados */}
+        <ModalConfirmarDuplicado
+          open={modalDuplicadoOpen}
+          onClose={handleCancelarDuplicado}
+          onConfirm={handleConfirmarDuplicado}
+          datosValidacion={validacionDuplicado}
+          loading={loading}
+        />
       </div>
     </div>
   );

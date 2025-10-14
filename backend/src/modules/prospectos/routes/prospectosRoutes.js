@@ -539,9 +539,25 @@ router.get('/metricas',
     ProspectosController.obtenerMetricas
 );
 
-router.get('/verificar-duplicado/:telefono', 
-    requireRole(GRUPOS_ROLES.VENTAS_COMPLETO), 
+router.get('/verificar-duplicado/:telefono',
+    requireRole(GRUPOS_ROLES.VENTAS_COMPLETO),
     ProspectosController.verificarDuplicado
+);
+
+// 🚀 NUEVAS RUTAS - SISTEMA DE PROSPECTOS COMPARTIDOS
+router.get('/validar-duplicado-avanzado/:telefono',
+    requireRole(GRUPOS_ROLES.VENTAS_COMPLETO),
+    ProspectosController.validarDuplicadoAvanzado
+);
+
+router.get('/notificaciones-compartidos',
+    requireRole(GRUPOS_ROLES.VENTAS_COMPLETO),
+    ProspectosController.obtenerNotificacionesCompartidos
+);
+
+router.put('/notificaciones-compartidos/:id/marcar-leida',
+    requireRole(GRUPOS_ROLES.VENTAS_COMPLETO),
+    ProspectosController.marcarNotificacionLeida
 );
 
 // ============================================================================

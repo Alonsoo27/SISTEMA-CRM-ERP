@@ -339,8 +339,86 @@ class ProspectosService {
     if (excluirId) {
       url += `?excluir_id=${excluirId}`;
     }
-    
+
     const response = await fetch(url, {
+      headers: this.getAuthHeaders()
+    });
+    return await this.handleResponse(response);
+  }
+
+  // 🚀 NUEVOS MÉTODOS - SISTEMA DE PROSPECTOS COMPARTIDOS
+
+  /**
+   * Validación avanzada de duplicados con sistema multinivel
+   * @param {string} telefono - Número de teléfono a validar
+   * @param {Array} productosInteres - Array de productos [{codigo_producto, descripcion_producto}]
+   * @returns {Promise<Object>} Resultado de validación con escenarios
+   */
+  async validarDuplicadoAvanzado(telefono, productosInteres = []) {
+    const params = new URLSearchParams();
+    if (productosInteres && productosInteres.length > 0) {
+      params.append('productos_interes', JSON.stringify(productosInteres));
+    }
+
+    const url = params.toString()
+      ? `${API_BASE_URL}/validar-duplicado-avanzado/${telefono}?${params.toString()}`
+      : `${API_BASE_URL}/validar-duplicado-avanzado/${telefono}`;
+
+    const response = await fetch(url, {
+      headers: this.getAuthHeaders()
+    });
+    return await this.handleResponse(response);
+  }
+
+  /**
+   * Crear prospecto con confirmación de duplicado
+   * @param {Object} prospecto - Datos del prospecto
+   * @param {boolean} confirmado - Si el usuario confirmó crear duplicado
+   * @returns {Promise<Object>} Respuesta del servidor
+   */
+  async crearConConfirmacion(prospecto, confirmado = false) {
+    const response = await fetch(API_BASE_URL, {
+      method: 'POST',
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify({
+        ...prospecto,
+        confirmacion_duplicado: confirmado
+      })
+    });
+    return await this.handleResponse(response);
+  }
+
+  /**
+   * Obtener notificaciones de prospectos compartidos
+   * @param {Object} opciones - Opciones de filtrado
+   * @returns {Promise<Object>} Notificaciones y estadísticas
+   */
+  async obtenerNotificacionesCompartidos(opciones = {}) {
+    const { limit = 50, solo_no_leidas = false, desde = null } = opciones;
+
+    const params = new URLSearchParams();
+    if (limit) params.append('limit', limit);
+    if (solo_no_leidas) params.append('solo_no_leidas', 'true');
+    if (desde) params.append('desde', desde);
+
+    const url = params.toString()
+      ? `${API_BASE_URL}/notificaciones-compartidos?${params.toString()}`
+      : `${API_BASE_URL}/notificaciones-compartidos`;
+
+    const response = await fetch(url, {
+      headers: this.getAuthHeaders()
+    });
+    return await this.handleResponse(response);
+  }
+
+  /**
+   * Marcar notificación de prospecto compartido como leída
+   * @param {number} notificacionId - ID de la notificación
+   * @returns {Promise<Object>} Resultado
+   */
+  async marcarNotificacionLeida(notificacionId) {
+    const response = await fetch(`${API_BASE_URL}/notificaciones-compartidos/${notificacionId}/marcar-leida`, {
+      method: 'PUT',
       headers: this.getAuthHeaders()
     });
     return await this.handleResponse(response);

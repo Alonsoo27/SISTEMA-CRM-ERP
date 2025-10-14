@@ -17,6 +17,10 @@ const ProspectoProductoInteres = require('../../../models/ProspectoProductoInter
 // 🔔 INTEGRACIÓN CON SISTEMA DE NOTIFICACIONES AUTOMÁTICAS
 const NotificacionesController = require('../../notificaciones/controllers/notificacionesController');
 
+// 🚀 SISTEMA DE VALIDACIÓN MULTINIVEL Y PROSPECTOS COMPARTIDOS
+const ValidacionDuplicados = require('../utils/validacionDuplicados');
+const NotificacionesProspectos = require('../utils/notificacionesProspectos');
+
 //helper
 function parseHistorialSeguro(historial) {
     if (!historial) return [];
@@ -488,20 +492,44 @@ class ProspectosController {
                 });
             }
 
-            // Verificar duplicados por teléfono
-            const duplicadosResult = await query(
-                'SELECT id, codigo, nombre_cliente, apellido_cliente, estado, asesor_nombre FROM prospectos WHERE telefono = $1 AND activo = $2',
-                [datosProspecto.telefono, true]
+            // 🚀 VALIDACIÓN MULTINIVEL DE DUPLICADOS (Sistema de prospectos compartidos)
+            const validacion = await ValidacionDuplicados.validarProspectoDuplicado(
+                datosProspecto.telefono,
+                asesorId,
+                productosInteres
             );
 
-            if (duplicadosResult.rows && duplicadosResult.rows.length > 0) {
-                logger.warn(`Intento de crear prospecto duplicado: ${datosProspecto.telefono}`);
+            logger.info(`Validación de duplicado para ${datosProspecto.telefono}: Escenario ${validacion.escenario}`);
+
+            // ESCENARIO C: BLOQUEAR - Mismo producto en Cotizado/Negociación
+            if (!validacion.permitir) {
+                logger.warn(`Prospecto bloqueado - ${validacion.escenario}: ${datosProspecto.telefono}`);
                 return res.status(409).json({
                     success: false,
-                    error: 'Ya existe un prospecto con este teléfono',
-                    prospecto_existente: duplicadosResult.rows[0]
+                    error: validacion.mensaje,
+                    motivo_bloqueo: validacion.motivo_bloqueo,
+                    asesores_activos: validacion.asesores_activos,
+                    escenario: validacion.escenario
                 });
             }
+
+            // ESCENARIO B: Requiere confirmación del usuario
+            // Si el frontend envió confirmacion=true, continuar; si no, devolver advertencia
+            if (validacion.requires_confirmation && !req.body.confirmacion_duplicado) {
+                logger.info(`Prospecto requiere confirmación - ${validacion.escenario}: ${datosProspecto.telefono}`);
+                return res.status(200).json({
+                    success: true,
+                    requires_confirmation: true,
+                    mensaje: validacion.mensaje,
+                    asesores_activos: validacion.asesores_activos,
+                    productos_en_comun: validacion.productos_en_comun,
+                    escenario: validacion.escenario,
+                    action: 'CONFIRMAR_CREACION'
+                });
+            }
+
+            // ESCENARIOS A, D: Permitir sin restricciones
+            // O Escenario B con confirmación → Continuar con creación
 
             // CORRECCIÓN CRÍTICA: Calcular fecha de seguimiento con timezone Peru
             const fechaActualPeru = obtenerFechaPeruISO();
@@ -617,7 +645,7 @@ class ProspectosController {
                     await ProspectoProductoInteres.crear({
                         prospecto_id: data.id,
                         producto_id: producto.producto_id || null,
-                        codigo_producto: producto.codigo,
+                        codigo_producto: producto.codigo_producto || producto.codigo, // ✅ Aceptar ambos formatos
                         descripcion_producto: producto.descripcion_producto || producto.nombre || producto.descripcion, // ✅
                         marca: producto.marca,
                         categoria_id: null,
@@ -656,10 +684,30 @@ class ProspectosController {
                 // No fallar la creación del prospecto si falla la notificación
             }
 
+            // 🔔 NOTIFICAR A ASESORES EXISTENTES (Prospectos compartidos)
+            if (validacion.requires_confirmation && validacion.asesores_activos?.length > 0) {
+                try {
+                    await NotificacionesProspectos.notificarProspectoCompartido({
+                        telefono: datosProspecto.telefono,
+                        nuevoProspectoId: data.id,
+                        nuevoAsesorId: asesorId,
+                        nuevoAsesorNombre: asesorNombre,
+                        nombreCliente: `${data.nombre_cliente} ${data.apellido_cliente || ''}`.trim(),
+                        asesoresActivos: validacion.asesores_activos
+                    });
+                    logger.info(`✅ Notificaciones de prospecto compartido enviadas (${validacion.asesores_activos.length} asesores)`);
+                } catch (errorNotifCompartido) {
+                    logger.error('⚠️ Error notificando prospecto compartido:', errorNotifCompartido);
+                    // No fallar la creación si falla la notificación
+                }
+            }
+
             res.status(201).json({
                 success: true,
                 data: data,
-                message: 'Prospecto creado exitosamente'
+                message: 'Prospecto creado exitosamente',
+                escenario_duplicado: validacion.escenario,
+                prospectos_compartidos: validacion.asesores_activos?.length || 0
             });
 
         } catch (error) {
@@ -1800,6 +1848,116 @@ static async obtenerPorId(req, res) {
             res.status(500).json({
                 success: false,
                 error: 'Error al verificar duplicado: ' + error.message
+            });
+        }
+    }
+
+    /**
+     * 🚀 GET /api/prospectos/validar-duplicado-avanzado/:telefono
+     * Validación avanzada de duplicados con sistema multinivel
+     */
+    static async validarDuplicadoAvanzado(req, res) {
+        try {
+            const { telefono } = req.params;
+            const { productos_interes } = req.query;
+            const asesorId = req.user?.user_id || req.user?.id;
+
+            if (!telefono) {
+                return res.status(400).json({
+                    success: false,
+                    error: 'Teléfono es requerido'
+                });
+            }
+
+            // Parsear productos si viene como JSON string
+            let productosArray = [];
+            if (productos_interes) {
+                try {
+                    productosArray = JSON.parse(productos_interes);
+                } catch (e) {
+                    productosArray = [];
+                }
+            }
+
+            const validacion = await ValidacionDuplicados.validarProspectoDuplicado(
+                telefono,
+                asesorId,
+                productosArray
+            );
+
+            const resumen = await ValidacionDuplicados.obtenerResumenDuplicados(telefono);
+
+            res.json({
+                success: true,
+                validacion: validacion,
+                resumen_prospectos: resumen
+            });
+
+        } catch (error) {
+            logger.error('Error en validarDuplicadoAvanzado:', error);
+            res.status(500).json({
+                success: false,
+                error: 'Error al validar duplicado: ' + error.message
+            });
+        }
+    }
+
+    /**
+     * 🔔 GET /api/prospectos/notificaciones-compartidos
+     * Obtener notificaciones de prospectos compartidos
+     */
+    static async obtenerNotificacionesCompartidos(req, res) {
+        try {
+            const asesorId = req.user?.user_id || req.user?.id;
+            const { limit, solo_no_leidas, desde } = req.query;
+
+            const notificaciones = await NotificacionesProspectos.obtenerNotificacionesCompartidos(
+                asesorId,
+                {
+                    limit: limit ? parseInt(limit) : 50,
+                    solo_no_leidas: solo_no_leidas === 'true',
+                    desde: desde || null
+                }
+            );
+
+            const estadisticas = await NotificacionesProspectos.obtenerEstadisticasCompartidos(asesorId);
+
+            res.json({
+                success: true,
+                notificaciones: notificaciones,
+                estadisticas: estadisticas
+            });
+
+        } catch (error) {
+            logger.error('Error en obtenerNotificacionesCompartidos:', error);
+            res.status(500).json({
+                success: false,
+                error: 'Error al obtener notificaciones: ' + error.message
+            });
+        }
+    }
+
+    /**
+     * 🔔 PUT /api/prospectos/notificaciones-compartidos/:id/marcar-leida
+     * Marcar notificación de prospecto compartido como leída
+     */
+    static async marcarNotificacionLeida(req, res) {
+        try {
+            const { id } = req.params;
+            const asesorId = req.user?.user_id || req.user?.id;
+
+            await NotificacionesProspectos.marcarComoLeida(parseInt(id), asesorId);
+
+            res.json({
+                success: true,
+                message: 'Notificación marcada como leída'
+            });
+
+        } catch (error) {
+            logger.error('Error en marcarNotificacionLeida:', error);
+            res.status(500).json({
+                success: false,
+                error: 'Error al marcar notificación: ' + error.message
             });
         }
     }
