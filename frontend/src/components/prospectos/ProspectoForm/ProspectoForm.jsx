@@ -499,14 +499,24 @@ const cargarDatosProspectoCompletos = async (prospectoId) => {
           })
           .filter(p => p !== null);
 
+        console.log('🔍 Validando duplicado para:', formData.telefono, 'Productos:', productosParaValidar);
+
         // 1. Validar duplicado avanzado
-        const validacion = await prospectosService.validarDuplicadoAvanzado(
+        const response = await prospectosService.validarDuplicadoAvanzado(
           formData.telefono,
           productosParaValidar
         );
 
+        console.log('📋 Respuesta de validación:', response);
+
+        // Extraer el objeto validacion de la respuesta
+        const validacion = response.validacion || response;
+
+        console.log('📦 Objeto validacion extraído:', validacion);
+
         // 2. Verificar si requiere confirmación (Escenario B: ADVERTIR)
         if (validacion.requires_confirmation) {
+          console.log('⚠️ Requiere confirmación - Mostrando modal');
           // Guardar el intento para usar después de la confirmación
           setIntentoCrear(dataToSend);
           setValidacionDuplicado(validacion);
@@ -515,16 +525,20 @@ const cargarDatosProspectoCompletos = async (prospectoId) => {
           return;
         }
 
+        console.log('✅ No requiere confirmación - Creando directamente');
         // 3. Si no requiere confirmación, crear directamente (Escenarios A, D, NUEVO)
-        const response = await prospectosService.crear(dataToSend);
-        if (response.success) {
-          onSave?.(response.data);
+        const createResponse = await prospectosService.crear(dataToSend);
+        if (createResponse.success) {
+          onSave?.(createResponse.data);
           onClose();
         }
       }
     } catch (err) {
+      console.error('❌ Error en handleSubmit:', err);
+
       // Manejar errores de bloqueo (Escenario C)
       if (err.response?.status === 409) {
+        console.log('🚫 Escenario C - Bloqueo total');
         const errorData = err.response.data;
         setValidacionDuplicado({
           escenario: 'C_BLOQUEAR_PRODUCTO_AVANZADO',
@@ -538,9 +552,8 @@ const cargarDatosProspectoCompletos = async (prospectoId) => {
 
       alert(`Error ${mode === 'edit' ? 'actualizando' : 'creando'} prospecto: ${err.message}`);
     } finally {
-      if (mode === 'edit') {
-        setLoading(false);
-      }
+      // FIX: Siempre limpiar loading, no solo en modo edit
+      setLoading(false);
     }
   };
 

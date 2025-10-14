@@ -19,7 +19,10 @@ class ProspectosService {
   async handleResponse(response) {
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({ error: 'Error desconocido' }));
-      throw new Error(errorData.error || `HTTP Error: ${response.status}`);
+      const error = new Error(errorData.error || `HTTP Error: ${response.status}`);
+      error.status = response.status; // Preservar el status code
+      error.response = { status: response.status, data: errorData }; // Para compatibilidad con Axios
+      throw error;
     }
     return await response.json();
   }
