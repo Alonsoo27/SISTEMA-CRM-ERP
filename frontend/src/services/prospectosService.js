@@ -574,6 +574,69 @@ class ProspectosService {
     });
     return await this.handleResponse(response);
   }
+
+  // ===== MODO LIBRE - PROSPECTOS DISPONIBLES =====
+
+  /**
+   * 🎯 Obtener prospectos disponibles en modo libre
+   * Estos prospectos están abiertos a competencia entre asesores
+   * @returns {Promise<Object>} Lista de prospectos disponibles
+   */
+  async obtenerDisponibles() {
+    const response = await fetch(`${API_BASE_URL}/disponibles`, {
+      headers: this.getAuthHeaders()
+    });
+    return await this.handleResponse(response);
+  }
+
+  /**
+   * 🎁 Tomar un prospecto en modo libre
+   * El primero en tomar el prospecto se lo queda (race condition protected)
+   * @param {number} prospectoId - ID del prospecto a tomar
+   * @returns {Promise<Object>} Resultado de la operación
+   */
+  async tomarProspecto(prospectoId) {
+    const response = await fetch(`${API_BASE_URL}/${prospectoId}/tomar`, {
+      method: 'POST',
+      headers: this.getAuthHeaders()
+    });
+    return await this.handleResponse(response);
+  }
+
+  /**
+   * 📊 Obtener métricas de reasignaciones (para admin/jefes)
+   * @returns {Promise<Object>} Métricas de reasignaciones
+   */
+  async obtenerMetricasReasignaciones() {
+    const response = await fetch(`${API_BASE_URL}/reasignaciones/metricas`, {
+      headers: this.getAuthHeaders()
+    });
+    return await this.handleResponse(response);
+  }
+
+  /**
+   * 📉 Obtener prospectos que un asesor perdió por reasignación
+   * @param {number} asesorId - ID del asesor
+   * @returns {Promise<Object>} Lista de prospectos perdidos
+   */
+  async obtenerMisPerdidos(asesorId) {
+    const response = await fetch(`${API_BASE_URL}/mis-perdidos/${asesorId}`, {
+      headers: this.getAuthHeaders()
+    });
+    return await this.handleResponse(response);
+  }
+
+  /**
+   * 📜 Obtener historial de reasignaciones de un prospecto
+   * @param {number} prospectoId - ID del prospecto
+   * @returns {Promise<Object>} Historial de reasignaciones
+   */
+  async obtenerHistorialReasignaciones(prospectoId) {
+    const response = await fetch(`${API_BASE_URL}/${prospectoId}/historial-reasignaciones`, {
+      headers: this.getAuthHeaders()
+    });
+    return await this.handleResponse(response);
+  }
 }
 
 // Crear instancia singleton

@@ -6,7 +6,87 @@ const obtenerFechaPeruISO = () => {
     return fechaPeru.toISOString();
 };
 
-const { query } = require('../../../config/database');
+/**
+ * 🕐 CALCULAR FECHA LÍMITE: 2 DÍAS LABORALES
+ * Horario laboral: L-V 8am-6pm, Sáb 9am-12pm, Dom no laboral
+ *
+ * @param {Date|string} fechaInicio - Fecha de inicio del seguimiento
+ * @returns {Date} Fecha límite después de 2 días laborales completos
+ */
+const calcular2DiasLaborales = (fechaInicio) => {
+    const fecha = new Date(fechaInicio);
+    let diasLaboralesContados = 0;
+    let fechaActual = new Date(fecha);
+
+    // Avanzar hasta el próximo inicio de jornada laboral
+    while (true) {
+        const diaSemana = fechaActual.getDay(); // 0=dom, 1=lun, ..., 6=sáb
+        const hora = fechaActual.getHours();
+
+        // Saltar domingos completamente
+        if (diaSemana === 0) {
+            fechaActual.setDate(fechaActual.getDate() + 1);
+            fechaActual.setHours(8, 0, 0, 0); // Lunes 8am
+            continue;
+        }
+
+        // Sábados: solo laborable de 9am-12pm
+        if (diaSemana === 6) {
+            if (hora >= 12) {
+                // Ya pasó mediodía del sábado, ir al lunes 8am
+                fechaActual.setDate(fechaActual.getDate() + 2);
+                fechaActual.setHours(8, 0, 0, 0);
+                continue;
+            }
+            if (hora < 9) {
+                // Antes de las 9am del sábado, ajustar a 9am
+                fechaActual.setHours(9, 0, 0, 0);
+            }
+            // Sábado cuenta como medio día laboral (3 horas)
+            if (diasLaboralesContados < 2) {
+                fechaActual.setHours(12, 0, 0, 0); // Fin de jornada sábado
+                diasLaboralesContados += 0.3; // 3h de 10h = 0.3 días
+                if (diasLaboralesContados >= 2) break;
+                // Ir al lunes
+                fechaActual.setDate(fechaActual.getDate() + 2);
+                fechaActual.setHours(8, 0, 0, 0);
+            }
+            continue;
+        }
+
+        // Lunes a Viernes: 8am-6pm (10 horas = 1 día laboral)
+        if (hora >= 18) {
+            // Ya pasó las 6pm, ir al siguiente día 8am
+            fechaActual.setDate(fechaActual.getDate() + 1);
+            fechaActual.setHours(8, 0, 0, 0);
+            continue;
+        }
+
+        if (hora < 8) {
+            // Antes de las 8am, ajustar a 8am
+            fechaActual.setHours(8, 0, 0, 0);
+        }
+
+        // Contar día laboral completo (L-V)
+        if (diasLaboralesContados < 2) {
+            diasLaboralesContados++;
+            if (diasLaboralesContados >= 2) {
+                // Ya cumplimos 2 días laborales, establecer hora límite 6pm
+                fechaActual.setHours(18, 0, 0, 0);
+                break;
+            }
+            // Ir al siguiente día
+            fechaActual.setDate(fechaActual.getDate() + 1);
+            fechaActual.setHours(8, 0, 0, 0);
+        } else {
+            break;
+        }
+    }
+
+    return fechaActual;
+};
+
+const { query, pool } = require('../../../config/database');
 const winston = require('winston');
 const cacheService = require('../../../services/CacheService');
 
@@ -613,8 +693,8 @@ class ProspectosController {
             // ✅ CREAR SEGUIMIENTO AUTOMÁTICO EN TABLA SEGUIMIENTOS
             if (fechaSeguimiento) {
                 try {
-                    const fechaLimite = new Date(fechaSeguimiento);
-                    fechaLimite.setHours(fechaLimite.getHours() + 18);
+                    // 🕐 CORRECCIÓN: Usar 2 días laborales en lugar de 18 horas corridas
+                    const fechaLimite = calcular2DiasLaborales(fechaSeguimiento);
 
                     await query(`
                         INSERT INTO seguimientos (
@@ -632,7 +712,7 @@ class ProspectosController {
                         true
                     ]);
 
-                    logger.info(`✅ Seguimiento inicial creado para prospecto ${data.codigo} - Fecha: ${fechaSeguimiento}`);
+                    logger.info(`✅ Seguimiento inicial creado para prospecto ${data.codigo} - Fecha: ${fechaSeguimiento}, Límite: ${fechaLimite.toISOString()}`);
                 } catch (errorSeguimiento) {
                     logger.error(`⚠️ Error al crear seguimiento inicial para prospecto ${data.codigo}:`, errorSeguimiento);
                     // No fallar la creación del prospecto si falla el seguimiento
@@ -3035,6 +3115,502 @@ static async obtenerPorId(req, res) {
                     filtros_aplicados: req.body.filtros || null,
                     timestamp: obtenerFechaPeruISO()
                 }
+            });
+        }
+    }
+
+    // ============================================================================
+    // 🆕 SISTEMA DE MODO LIBRE Y HISTORIAL DE REASIGNACIONES
+    // ============================================================================
+
+    /**
+     * 🔧 MÉTODO HELPER: Inicializar tracking cuando prospecto entra en modo libre
+     * Debe llamarse cada vez que un prospecto cambia a modo_libre = true
+     */
+    static async inicializarModoLibre(prospecto_id, asesor_anterior_id, motivo = 'Reasignación automática') {
+        try {
+            // Verificar si ya existe un registro activo
+            const existente = await query(
+                'SELECT id FROM prospecto_modo_libre WHERE prospecto_id = $1 AND activo = true',
+                [prospecto_id]
+            );
+
+            if (existente.rows.length > 0) {
+                // Ya existe, solo actualizar la fecha
+                await query(`
+                    UPDATE prospecto_modo_libre
+                    SET fecha_inicio_modo_libre = NOW()
+                    WHERE prospecto_id = $1 AND activo = true
+                `, [prospecto_id]);
+
+                logger.info(`♻️ Prospecto ${prospecto_id} reactivado en modo libre`);
+            } else {
+                // Crear nuevo registro
+                await query(`
+                    INSERT INTO prospecto_modo_libre (
+                        prospecto_id,
+                        asesores_con_acceso,
+                        fecha_inicio_modo_libre,
+                        activo,
+                        cerrado
+                    ) VALUES ($1, ARRAY[$2::integer], NOW(), true, false)
+                `, [
+                    prospecto_id,
+                    asesor_anterior_id
+                ]);
+
+                logger.info(`🆕 Prospecto ${prospecto_id} inicializado en modo libre`);
+            }
+
+            return { success: true };
+        } catch (error) {
+            logger.error('Error en inicializarModoLibre:', error);
+            return { success: false, error: error.message };
+        }
+    }
+
+    /**
+     * 🔧 MÉTODO HELPER: Registrar que un asesor vio un prospecto en modo libre
+     * Útil para analytics y detectar interés múltiple
+     */
+    static async registrarVisualizacionModoLibre(prospecto_id, asesor_id, asesor_nombre) {
+        try {
+            await query(`
+                UPDATE prospecto_modo_libre
+                SET asesores_con_acceso = array_append(
+                        CASE
+                            WHEN $2 = ANY(asesores_con_acceso) THEN asesores_con_acceso
+                            ELSE asesores_con_acceso
+                        END,
+                        CASE
+                            WHEN $2 = ANY(asesores_con_acceso) THEN NULL
+                            ELSE $2
+                        END
+                    ),
+                    interacciones_simultaneas =
+                        COALESCE(interacciones_simultaneas, '{}'::jsonb) ||
+                        jsonb_build_object($2::text, jsonb_build_object(
+                            'timestamp', NOW(),
+                            'accion', 'visualizacion',
+                            'asesor_nombre', $3
+                        ))
+                WHERE prospecto_id = $1 AND activo = true
+            `, [prospecto_id, asesor_id, asesor_nombre]);
+
+            return { success: true };
+        } catch (error) {
+            logger.error('Error en registrarVisualizacionModoLibre:', error);
+            return { success: false, error: error.message };
+        }
+    }
+
+    /**
+     * POST /api/prospectos/:id/tomar
+     * Tomar un prospecto en modo libre (asignarlo al asesor actual)
+     * 🔒 PROTEGIDO CONTRA RACE CONDITIONS con transacción SQL
+     */
+    static async tomarProspecto(req, res) {
+        const client = await pool.connect();
+
+        try {
+            const { id } = req.params;
+            const asesor_id = req.user.id;
+            const asesor_nombre = `${req.user.nombre} ${req.user.apellido || ''}`.trim();
+
+            // 🔒 INICIAR TRANSACCIÓN ATÓMICA
+            await client.query('BEGIN');
+
+            // 🎯 SELECT FOR UPDATE: Bloquear el prospecto para esta transacción
+            const prospectoResult = await client.query(
+                'SELECT * FROM prospectos WHERE id = $1 AND activo = true FOR UPDATE',
+                [id]
+            );
+
+            if (!prospectoResult.rows || prospectoResult.rows.length === 0) {
+                await client.query('ROLLBACK');
+                return res.status(404).json({
+                    success: false,
+                    error: 'Prospecto no encontrado'
+                });
+            }
+
+            const prospecto = prospectoResult.rows[0];
+
+            // ❌ VALIDAR: Prospecto ya no está disponible
+            if (!prospecto.modo_libre) {
+                await client.query('ROLLBACK');
+
+                logger.warn(`❌ Intento fallido: Asesor ${asesor_id} intentó tomar prospecto ${prospecto.codigo} ya tomado por ${prospecto.asesor_nombre}`);
+
+                return res.status(400).json({
+                    success: false,
+                    error: 'Este prospecto ya fue tomado por otro asesor',
+                    tomado_por: prospecto.asesor_nombre,
+                    codigo: prospecto.codigo
+                });
+            }
+
+            // ✅ ASIGNAR EL PROSPECTO (salir de modo libre)
+            const updateResult = await client.query(`
+                UPDATE prospectos
+                SET modo_libre = false,
+                    asesor_id = $1,
+                    asesor_nombre = $2,
+                    fecha_modo_libre = NULL
+                WHERE id = $3
+                RETURNING *
+            `, [asesor_id, asesor_nombre, id]);
+
+            const prospectoActualizado = updateResult.rows[0];
+
+            // 📊 REGISTRAR EN prospecto_modo_libre quién ganó
+            await client.query(`
+                UPDATE prospecto_modo_libre
+                SET asesor_ganador_id = $1,
+                    fecha_cierre = NOW(),
+                    cerrado = true,
+                    activo = false
+                WHERE prospecto_id = $2 AND activo = true
+            `, [asesor_id, id]);
+
+            // 📝 Crear seguimiento automático
+            // 🕐 CORRECCIÓN: Usar 2 días laborales desde ahora
+            const ahora = new Date();
+            const fechaProgramada = calcular2DiasLaborales(ahora);
+            const fechaLimite = calcular2DiasLaborales(fechaProgramada);
+
+            await client.query(`
+                INSERT INTO seguimientos (
+                    prospecto_id, asesor_id, fecha_programada, fecha_limite,
+                    tipo, descripcion, completado, visible_para_asesor
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+            `, [
+                id,
+                asesor_id,
+                fechaProgramada.toISOString(),
+                fechaLimite.toISOString(),
+                'Llamada',
+                'Seguimiento después de tomar prospecto en modo libre',
+                false,
+                true
+            ]);
+
+            // ✅ COMMIT: Todo exitoso
+            await client.query('COMMIT');
+
+            logger.info(`✅ Prospecto ${prospecto.codigo} tomado por ${asesor_nombre} desde modo libre`);
+
+            res.json({
+                success: true,
+                message: 'Prospecto asignado exitosamente',
+                data: {
+                    prospecto_id: id,
+                    codigo: prospecto.codigo,
+                    nombre_cliente: prospecto.nombre_cliente,
+                    nuevo_asesor: asesor_nombre,
+                    proximo_seguimiento: fechaProgramada
+                }
+            });
+
+        } catch (error) {
+            // ❌ ROLLBACK en caso de error
+            await client.query('ROLLBACK');
+            logger.error('Error en tomarProspecto:', error);
+            res.status(500).json({
+                success: false,
+                error: 'Error al tomar prospecto: ' + error.message
+            });
+        } finally {
+            client.release();
+        }
+    }
+
+    /**
+     * GET /api/prospectos/disponibles
+     * Listar todos los prospectos en modo libre (disponibles para tomar)
+     */
+    static async obtenerDisponibles(req, res) {
+        try {
+            const result = await query(`
+                SELECT
+                    p.id,
+                    p.codigo,
+                    p.nombre_cliente,
+                    p.apellido_cliente,
+                    p.empresa,
+                    p.telefono,
+                    p.email,
+                    p.valor_estimado,
+                    p.probabilidad_cierre,
+                    p.numero_reasignaciones,
+                    p.fecha_modo_libre,
+                    p.canal_contacto,
+                    p.estado,
+                    p.created_at,
+                    -- Calcular hace cuánto tiempo está disponible
+                    EXTRACT(EPOCH FROM (NOW() - p.fecha_modo_libre))/3600 as horas_disponible
+                FROM prospectos p
+                WHERE p.modo_libre = true
+                AND p.activo = true
+                AND p.estado NOT IN ('Cerrado', 'Perdido')
+                ORDER BY p.valor_estimado DESC, p.fecha_modo_libre ASC
+            `);
+
+            const prospectos = result.rows.map(p => ({
+                ...p,
+                horas_disponible: Math.round(p.horas_disponible || 0),
+                valor_estimado: parseFloat(p.valor_estimado || 0)
+            }));
+
+            res.json({
+                success: true,
+                data: prospectos,
+                total: prospectos.length,
+                valor_total_disponible: prospectos.reduce((sum, p) => sum + p.valor_estimado, 0)
+            });
+
+        } catch (error) {
+            logger.error('Error en obtenerDisponibles:', error);
+            res.status(500).json({
+                success: false,
+                error: 'Error al obtener prospectos disponibles: ' + error.message
+            });
+        }
+    }
+
+    /**
+     * GET /api/prospectos/mis-perdidos/:asesor_id
+     * Obtener prospectos que el asesor perdió por reasignación
+     */
+    static async obtenerMisPerdidos(req, res) {
+        try {
+            const { asesor_id } = req.params;
+            const { limit = 50 } = req.query;
+
+            const result = await query(`
+                SELECT
+                    p.id,
+                    p.codigo,
+                    p.nombre_cliente,
+                    p.apellido_cliente,
+                    p.empresa,
+                    p.valor_estimado,
+                    p.probabilidad_cierre,
+                    p.estado as estado_actual,
+                    p.asesor_nombre as asesor_actual,
+                    nr.motivo as motivo_reasignacion,
+                    nr.fecha_reasignacion as fecha_que_lo_perdi,
+                    nr.asesor_gano_id,
+                    u_gano.nombre || ' ' || u_gano.apellido as nuevo_asesor_nombre,
+                    EXTRACT(EPOCH FROM (nr.fecha_reasignacion - p.created_at))/86400 as dias_que_lo_tuve
+                FROM notificaciones_reasignacion nr
+                INNER JOIN prospectos p ON nr.prospecto_id = p.id
+                LEFT JOIN usuarios u_gano ON nr.asesor_gano_id = u_gano.id
+                WHERE nr.tipo = 'perdida'
+                AND nr.asesor_perdio_id = $1
+                ORDER BY nr.fecha_reasignacion DESC
+                LIMIT $2
+            `, [asesor_id, limit]);
+
+            const prospectos_perdidos = result.rows.map(p => ({
+                ...p,
+                dias_que_lo_tuve: parseFloat((p.dias_que_lo_tuve || 0).toFixed(1)),
+                valor_estimado: parseFloat(p.valor_estimado || 0)
+            }));
+
+            const valor_total_perdido = prospectos_perdidos.reduce((sum, p) => sum + p.valor_estimado, 0);
+
+            res.json({
+                success: true,
+                data: {
+                    prospectos_perdidos,
+                    total: prospectos_perdidos.length,
+                    valor_total_perdido
+                }
+            });
+
+        } catch (error) {
+            logger.error('Error en obtenerMisPerdidos:', error);
+            res.status(500).json({
+                success: false,
+                error: 'Error al obtener prospectos perdidos: ' + error.message
+            });
+        }
+    }
+
+    /**
+     * GET /api/prospectos/:id/historial-reasignaciones
+     * Obtener historial completo de reasignaciones de un prospecto
+     */
+    static async obtenerHistorialReasignaciones(req, res) {
+        try {
+            const { id } = req.params;
+
+            // Obtener datos del prospecto
+            const prospectoResult = await query(
+                'SELECT codigo, nombre_cliente, asesor_nombre, numero_reasignaciones, modo_libre FROM prospectos WHERE id = $1',
+                [id]
+            );
+
+            if (!prospectoResult.rows || prospectoResult.rows.length === 0) {
+                return res.status(404).json({
+                    success: false,
+                    error: 'Prospecto no encontrado'
+                });
+            }
+
+            const prospecto = prospectoResult.rows[0];
+
+            // Obtener historial de reasignaciones
+            const historialResult = await query(`
+                SELECT
+                    nr.id,
+                    nr.tipo,
+                    nr.motivo,
+                    nr.fecha_reasignacion as fecha,
+                    nr.asesor_perdio_id,
+                    u_perdio.nombre || ' ' || u_perdio.apellido as asesor_perdio_nombre,
+                    nr.asesor_gano_id,
+                    u_gano.nombre || ' ' || u_gano.apellido as asesor_gano_nombre,
+                    nr.titulo,
+                    nr.mensaje
+                FROM notificaciones_reasignacion nr
+                LEFT JOIN usuarios u_perdio ON nr.asesor_perdio_id = u_perdio.id
+                LEFT JOIN usuarios u_gano ON nr.asesor_gano_id = u_gano.id
+                WHERE nr.prospecto_id = $1
+                ORDER BY nr.fecha_reasignacion ASC
+            `, [id]);
+
+            // Extraer asesores únicos
+            const asesoresSet = new Set();
+            historialResult.rows.forEach(r => {
+                if (r.asesor_perdio_nombre) asesoresSet.add(r.asesor_perdio_nombre);
+                if (r.asesor_gano_nombre) asesoresSet.add(r.asesor_gano_nombre);
+            });
+
+            res.json({
+                success: true,
+                data: {
+                    prospecto: {
+                        codigo: prospecto.codigo,
+                        nombre_cliente: prospecto.nombre_cliente,
+                        asesor_actual: prospecto.asesor_nombre,
+                        numero_reasignaciones: prospecto.numero_reasignaciones,
+                        en_modo_libre: prospecto.modo_libre
+                    },
+                    historial: historialResult.rows,
+                    resumen: {
+                        total_reasignaciones: prospecto.numero_reasignaciones,
+                        asesores_que_lo_tuvieron: Array.from(asesoresSet)
+                    }
+                }
+            });
+
+        } catch (error) {
+            logger.error('Error en obtenerHistorialReasignaciones:', error);
+            res.status(500).json({
+                success: false,
+                error: 'Error al obtener historial de reasignaciones: ' + error.message
+            });
+        }
+    }
+
+    /**
+     * GET /api/prospectos/reasignaciones/metricas
+     * Métricas globales de reasignaciones (para admin/jefes)
+     */
+    static async obtenerMetricasReasignaciones(req, res) {
+        try {
+            const { periodo = 'mes_actual' } = req.query;
+
+            // Calcular rango de fechas
+            let fechaDesde;
+            const fechaHasta = new Date();
+
+            switch (periodo) {
+                case 'semana_actual':
+                    fechaDesde = new Date(fechaHasta.getTime() - (7 * 24 * 60 * 60 * 1000));
+                    break;
+                case 'mes_pasado':
+                    fechaDesde = new Date(fechaHasta.getFullYear(), fechaHasta.getMonth() - 1, 1);
+                    fechaHasta.setMonth(fechaHasta.getMonth(), 0);
+                    break;
+                default: // mes_actual
+                    fechaDesde = new Date(fechaHasta.getFullYear(), fechaHasta.getMonth(), 1);
+            }
+
+            // Métricas globales
+            const globalResult = await query(`
+                SELECT
+                    COUNT(*) as total_reasignaciones,
+                    COUNT(DISTINCT prospecto_id) as prospectos_afectados,
+                    COUNT(*) FILTER (WHERE tipo = 'modo_libre') as modo_libre_activados
+                FROM notificaciones_reasignacion
+                WHERE fecha_reasignacion >= $1 AND fecha_reasignacion <= $2
+            `, [fechaDesde, fechaHasta]);
+
+            // Métricas por asesor
+            const porAsesorResult = await query(`
+                SELECT
+                    u.id as asesor_id,
+                    u.nombre || ' ' || u.apellido as asesor_nombre,
+                    COUNT(*) FILTER (WHERE nr.tipo = 'perdida') as prospectos_perdidos,
+                    COUNT(*) FILTER (WHERE nr.tipo = 'ganancia') as prospectos_ganados
+                FROM usuarios u
+                LEFT JOIN notificaciones_reasignacion nr ON
+                    (u.id = nr.asesor_perdio_id AND nr.tipo = 'perdida') OR
+                    (u.id = nr.asesor_gano_id AND nr.tipo = 'ganancia')
+                WHERE nr.fecha_reasignacion >= $1 AND nr.fecha_reasignacion <= $2
+                GROUP BY u.id, u.nombre, u.apellido
+                HAVING COUNT(*) > 0
+                ORDER BY prospectos_perdidos DESC
+            `, [fechaDesde, fechaHasta]);
+
+            // Métricas por motivo
+            const porMotivoResult = await query(`
+                SELECT
+                    motivo,
+                    COUNT(*) as cantidad
+                FROM notificaciones_reasignacion
+                WHERE fecha_reasignacion >= $1 AND fecha_reasignacion <= $2
+                GROUP BY motivo
+                ORDER BY cantidad DESC
+            `, [fechaDesde, fechaHasta]);
+
+            const metricas = globalResult.rows[0];
+            const porAsesor = porAsesorResult.rows.map(r => ({
+                ...r,
+                prospectos_perdidos: parseInt(r.prospectos_perdidos || 0),
+                prospectos_ganados: parseInt(r.prospectos_ganados || 0),
+                neto: parseInt(r.prospectos_ganados || 0) - parseInt(r.prospectos_perdidos || 0)
+            }));
+
+            const motivos = {};
+            porMotivoResult.rows.forEach(r => {
+                motivos[r.motivo] = parseInt(r.cantidad);
+            });
+
+            res.json({
+                success: true,
+                data: {
+                    periodo: {
+                        tipo: periodo,
+                        desde: fechaDesde,
+                        hasta: fechaHasta
+                    },
+                    total_reasignaciones: parseInt(metricas.total_reasignaciones || 0),
+                    prospectos_afectados: parseInt(metricas.prospectos_afectados || 0),
+                    modo_libre_activados: parseInt(metricas.modo_libre_activados || 0),
+                    por_asesor: porAsesor,
+                    motivos: motivos
+                }
+            });
+
+        } catch (error) {
+            logger.error('Error en obtenerMetricasReasignaciones:', error);
+            res.status(500).json({
+                success: false,
+                error: 'Error al obtener métricas de reasignaciones: ' + error.message
             });
         }
     }

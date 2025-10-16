@@ -789,6 +789,29 @@ router.post('/seguimientos/corregir-null',
 );
 
 // ============================================================================
+// 🆕 RUTAS DE MODO LIBRE Y REASIGNACIONES
+// ============================================================================
+
+// 🎯 Listar prospectos disponibles en modo libre
+router.get('/disponibles',
+    requireRole(GRUPOS_ROLES.VENTAS_COMPLETO),
+    ProspectosController.obtenerDisponibles
+);
+
+// 📊 Métricas de reasignaciones (para admin/jefes)
+router.get('/reasignaciones/metricas',
+    requireRole(GRUPOS_ROLES.JEFES_Y_EJECUTIVOS),
+    ProspectosController.obtenerMetricasReasignaciones
+);
+
+// 📉 Prospectos que un asesor perdió por reasignación
+router.get('/mis-perdidos/:asesor_id',
+    requireRole(GRUPOS_ROLES.VENTAS_COMPLETO),
+    requireOwnership,
+    ProspectosController.obtenerMisPerdidos
+);
+
+// ============================================================================
 // RUTAS CON PARÁMETROS DINÁMICOS (AL FINAL)
 // ============================================================================
 // Ruta para obtener productos de interés de un prospecto
@@ -861,6 +884,22 @@ router.get('/analytics-completos',
 router.get('/analytics-completos/:asesorId',
     requireRole(GRUPOS_ROLES.VENTAS_COMPLETO),
     ProspectosController.obtenerAnalyticsCompletos
+);
+
+// ============================================================================
+// 🆕 RUTAS DE MODO LIBRE CON PARÁMETRO :id
+// ============================================================================
+
+// 🎯 Tomar un prospecto en modo libre (asignarlo al asesor)
+router.post('/:id/tomar',
+    requireRole(GRUPOS_ROLES.VENTAS_COMPLETO),
+    ProspectosController.tomarProspecto
+);
+
+// 📜 Historial de reasignaciones de un prospecto
+router.get('/:id/historial-reasignaciones',
+    requireRole(GRUPOS_ROLES.VENTAS_COMPLETO),
+    ProspectosController.obtenerHistorialReasignaciones
 );
 
 router.get('/:id', 

@@ -216,11 +216,62 @@ const generarSugerenciasFechas = (tipoSeguimiento = 'Llamada', estadoProspecto =
     return sugerencias;
 };
 
+/**
+ * 🕐 CALCULAR FECHA LÍMITE: 2 DÍAS LABORALES COMPLETOS
+ * Horario laboral: L-V 8am-6pm, Sáb 9am-12pm, Dom no laboral
+ *
+ * @param {Date|string} fechaInicio - Fecha de inicio del seguimiento
+ * @returns {Date} Fecha límite después de 2 días laborales completos (6pm del segundo día laboral)
+ */
+const calcular2DiasLaborales = (fechaInicio) => {
+    const fecha = new Date(fechaInicio);
+    let diasLaboralesContados = 0;
+    let fechaActual = new Date(fecha);
+
+    // Avanzar hasta completar 2 días laborales completos
+    while (diasLaboralesContados < 2) {
+        const diaSemana = fechaActual.getDay(); // 0=dom, 1=lun, ..., 6=sáb
+
+        // Saltar domingos
+        if (diaSemana === 0) {
+            fechaActual.setDate(fechaActual.getDate() + 1);
+            fechaActual.setHours(8, 0, 0, 0);
+            continue;
+        }
+
+        // Sábados cuentan como día parcial (3 horas de 10 = 0.3 días)
+        if (diaSemana === 6) {
+            fechaActual.setHours(12, 0, 0, 0); // Fin jornada sábado
+            diasLaboralesContados += 0.3;
+            if (diasLaboralesContados < 2) {
+                fechaActual.setDate(fechaActual.getDate() + 2); // Ir al lunes
+                fechaActual.setHours(8, 0, 0, 0);
+            }
+            continue;
+        }
+
+        // Lunes a Viernes cuenta como 1 día completo
+        diasLaboralesContados++;
+        if (diasLaboralesContados >= 2) {
+            // Establecer hora límite a 6pm del segundo día laboral
+            fechaActual.setHours(18, 0, 0, 0);
+            break;
+        }
+
+        // Ir al siguiente día laboral
+        fechaActual.setDate(fechaActual.getDate() + 1);
+        fechaActual.setHours(8, 0, 0, 0);
+    }
+
+    return fechaActual;
+};
+
 module.exports = {
     calcularFechaLimite,
     ajustarAHorarioLaboral,
     esHorarioLaboral,
     obtenerInfoHorarioLaboral,
     obtenerProximaFechaLaboral,
-    generarSugerenciasFechas
+    generarSugerenciasFechas,
+    calcular2DiasLaborales
 };

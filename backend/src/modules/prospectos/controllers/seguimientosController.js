@@ -9,7 +9,7 @@ const NotificacionesController = require('../../notificaciones/controllers/notif
 const { sincronizarCacheSeguimientos } = require('../utils/sincronizarSeguimientos');
 
 // 📅 INTEGRACIÓN CON HELPER DE FECHAS FLEXIBLE
-const { calcularFechaLimite, esHorarioLaboral } = require('../utils/fechasHelper');
+const { calcularFechaLimite, esHorarioLaboral, calcular2DiasLaborales } = require('../utils/fechasHelper');
 
 // CONFIGURACIÓN DE LOGGING
 const logger = winston.createLogger({
@@ -84,10 +84,9 @@ class SeguimientosController {
             }
             
             const asesor_id = req.user?.id || 1;
-            
-            // Calcular fecha límite (18 horas laborales después)
-            const fechaBase = new Date(fecha_programada);
-            const fecha_limite = new Date(fechaBase.getTime() + (18 * 60 * 60 * 1000)); // 18 horas después
+
+            // 🕐 CORRECCIÓN: Usar 2 días laborales en lugar de 18 horas corridas
+            const fecha_limite = calcular2DiasLaborales(fecha_programada);
             
             // Crear seguimiento
             const insertQuery = `
@@ -556,8 +555,8 @@ class SeguimientosController {
             const result = await query(`
                 SELECT s.*,
                        p.id as prospecto_id, p.codigo, p.nombre_cliente, p.estado,
-                       p.numero_reasignaciones, p.asesor_id, p.asesor_nombre,
-                       p.modo_libre, p.activo, p.estado_seguimiento
+                       p.numero_reasignaciones, p.asesor_id as prospecto_asesor_id, p.asesor_nombre,
+                       p.modo_libre, p.activo, p.estado_seguimiento, p.valor_estimado
                 FROM seguimientos s
                 INNER JOIN prospectos p ON s.prospecto_id = p.id
                 WHERE s.completado = $1 AND s.vencido = $2 AND s.fecha_limite < $3
@@ -614,10 +613,10 @@ class SeguimientosController {
             
             // Obtener seguimientos vencidos
             const result = await query(`
-                SELECT s.*, 
-                       p.id as prospecto_id, p.codigo, p.nombre_cliente, p.estado, 
-                       p.numero_reasignaciones, p.asesor_id, p.asesor_nombre, 
-                       p.modo_libre, p.activo
+                SELECT s.*,
+                       p.id as prospecto_id, p.codigo, p.nombre_cliente, p.estado,
+                       p.numero_reasignaciones, p.asesor_id as prospecto_asesor_id, p.asesor_nombre,
+                       p.modo_libre, p.activo, p.valor_estimado
                 FROM seguimientos s
                 INNER JOIN prospectos p ON s.prospecto_id = p.id
                 WHERE s.completado = $1 AND s.fecha_limite < $2
@@ -638,15 +637,24 @@ class SeguimientosController {
             
             for (const seguimiento of vencidos || []) {
                 try {
+                    // ✅ FIX: Verificación defensiva - Saltar prospectos cerrados o perdidos
+                    if (seguimiento.estado === 'Cerrado' || seguimiento.estado === 'Perdido') {
+                        logger.warn(`⚠️ Seguimiento ${seguimiento.id} saltado: prospecto ${seguimiento.codigo} está en estado ${seguimiento.estado}`);
+                        resultado.procesados++;
+                        continue;
+                    }
+
                     // Verificar si el seguimiento lleva más de 18 horas vencido
                     const horasVencidas = (new Date() - new Date(seguimiento.fecha_limite)) / (1000 * 60 * 60);
 
-                    // Marcar seguimiento como vencido y no visible para el asesor actual
+                    // ✅ FIX: Marcar seguimiento como completado automáticamente al procesar
+                    // Esto previene que se vuelva a procesar en la siguiente ejecución del cron
                     await query(`
                         UPDATE seguimientos
-                        SET vencido = $1, visible_para_asesor = $2
-                        WHERE id = $3
-                    `, [true, false, seguimiento.id]);
+                        SET vencido = $1, visible_para_asesor = $2, completado = $3,
+                            fecha_completado = $4, resultado = $5
+                        WHERE id = $6
+                    `, [true, false, true, new Date(), 'Procesado automáticamente - seguimiento vencido', seguimiento.id]);
 
                     // 🔔 NOTIFICACIÓN: seguimiento_vencido
                     try {
@@ -657,7 +665,7 @@ class SeguimientosController {
                             tipo: tipoNotificacion,
                             modo: 'basico',
                             data: {
-                                usuario_id: seguimiento.asesor_id,
+                                usuario_id: seguimiento.prospecto_asesor_id, // ✅ CORREGIDO: Usar asesor ACTUAL del prospecto
                                 prospecto_id: seguimiento.prospecto_id,
                                 prospecto_codigo: seguimiento.codigo,
                                 prospecto_nombre: seguimiento.nombre_cliente,
@@ -667,7 +675,7 @@ class SeguimientosController {
                             },
                             auto_prioridad: true
                         });
-                        logger.info(`✅ Notificación ${tipoNotificacion} enviada para seguimiento ${seguimiento.id}`);
+                        logger.info(`✅ Notificación ${tipoNotificacion} enviada a asesor ${seguimiento.prospecto_asesor_id} para seguimiento ${seguimiento.id}`);
                     } catch (errorNotif) {
                         logger.error('⚠️ Error creando notificación de seguimiento vencido:', errorNotif);
                     }
@@ -803,17 +811,41 @@ class SeguimientosController {
             
             // Actualizar prospecto
             await query(`
-                UPDATE prospectos 
+                UPDATE prospectos
                 SET asesor_id = $1, asesor_nombre = $2, numero_reasignaciones = $3, seguimiento_vencido = $4
                 WHERE id = $5
             `, [
-                asesorSeleccionado.id, 
+                asesorSeleccionado.id,
                 `${asesorSeleccionado.nombre} ${asesorSeleccionado.apellido}`,
                 prospecto.numero_reasignaciones + 1,
                 true,
                 prospecto_id
             ]);
-            
+
+            // ✅ FIX: Crear nuevo seguimiento para el nuevo asesor
+            // 🕐 CORRECCIÓN: Usar 2 días laborales desde ahora
+            const ahora = new Date();
+            const fechaProgramada = calcular2DiasLaborales(ahora);
+            const fechaLimite = calcular2DiasLaborales(fechaProgramada);
+
+            await query(`
+                INSERT INTO seguimientos (
+                    prospecto_id, asesor_id, fecha_programada, fecha_limite,
+                    tipo, descripcion, completado, visible_para_asesor
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+            `, [
+                prospecto_id,
+                asesorSeleccionado.id,
+                fechaProgramada.toISOString(),
+                fechaLimite.toISOString(),
+                'Llamada',
+                `Seguimiento automático después de reasignación por: ${motivo}`,
+                false,
+                true
+            ]);
+
+            logger.info(`✅ Nuevo seguimiento creado para ${asesorSeleccionado.nombre} (fecha: ${fechaProgramada.toISOString()})`);
+
             // Crear notificaciones
             await SeguimientosController.crearNotificacionesReasignacion(
                 prospecto_id,
@@ -821,7 +853,7 @@ class SeguimientosController {
                 asesorSeleccionado.id,
                 motivo
             );
-            
+
             logger.info(`🔄 Prospecto ${prospecto.codigo} reasignado de ${prospecto.asesor_nombre} a ${asesorSeleccionado.nombre}`);
             
             return {
