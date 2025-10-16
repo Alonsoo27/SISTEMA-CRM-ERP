@@ -41,6 +41,9 @@ const BalanzaSeguimientos = ({ asesorId: asesorIdProp = null, refreshTrigger = 0
     busqueda: ''
   });
 
+  // Estado para controlar qué prospectos están expandidos (desplegables)
+  const [prospectosExpandidos, setProspectosExpandidos] = useState({});
+
   // 🔒 OBTENER USUARIO REAL del localStorage
   const usuarioActual = useMemo(() => {
     try {
@@ -113,6 +116,14 @@ const BalanzaSeguimientos = ({ asesorId: asesorIdProp = null, refreshTrigger = 0
     setNotificacion({ tipo, mensaje });
     // Auto-ocultar después de 4 segundos
     setTimeout(() => setNotificacion(null), 4000);
+  };
+
+  // Función para toggle expandir/colapsar prospecto
+  const toggleProspectoExpandido = (prospectoId) => {
+    setProspectosExpandidos(prev => ({
+      ...prev,
+      [prospectoId]: !prev[prospectoId]
+    }));
   };
 
   useEffect(() => {
@@ -625,6 +636,36 @@ const BalanzaSeguimientos = ({ asesorId: asesorIdProp = null, refreshTrigger = 0
       return true;
     });
 
+    // 🎯 AGRUPACIÓN POR PROSPECTO (solo para realizados)
+    let datosAgrupados = datos;
+    if (vistaDetalle === 'realizados') {
+      const gruposPorProspecto = {};
+
+      datos.forEach(seguimiento => {
+        const prospectoId = seguimiento.prospecto_id || seguimiento.id;
+
+        if (!gruposPorProspecto[prospectoId]) {
+          gruposPorProspecto[prospectoId] = {
+            prospecto: seguimiento,
+            seguimientos: [],
+            seguimiento_mas_reciente: seguimiento
+          };
+        }
+
+        gruposPorProspecto[prospectoId].seguimientos.push(seguimiento);
+
+        // Actualizar el más reciente
+        const fechaActual = new Date(seguimiento.fecha_completado || seguimiento.created_at);
+        const fechaReciente = new Date(gruposPorProspecto[prospectoId].seguimiento_mas_reciente.fecha_completado || gruposPorProspecto[prospectoId].seguimiento_mas_reciente.created_at);
+
+        if (fechaActual > fechaReciente) {
+          gruposPorProspecto[prospectoId].seguimiento_mas_reciente = seguimiento;
+        }
+      });
+
+      datosAgrupados = Object.values(gruposPorProspecto);
+    }
+
     const titulo = vistaDetalle === 'pendientes' ? 'Seguimientos Pendientes' : 'Seguimientos Realizados (Últimos 7 días)';
     const icono = vistaDetalle === 'pendientes' ? Clock : CheckCircle;
     const colorTema = vistaDetalle === 'pendientes' ? 'red' : 'green';
@@ -636,6 +677,11 @@ const BalanzaSeguimientos = ({ asesorId: asesorIdProp = null, refreshTrigger = 0
       ...(seguimientos.realizados_semana || []).map(s => s.tipo)
     ])].filter(Boolean);
 
+    // Calcular el total real de seguimientos (para mostrar en el contador)
+    const totalSeguimientosReales = vistaDetalle === 'realizados'
+      ? datosAgrupados.reduce((acc, grupo) => acc + (grupo.seguimientos ? grupo.seguimientos.length : 1), 0)
+      : datosAgrupados.length;
+
     return (
       <div className="mt-8 bg-white rounded-lg shadow-lg border">
         <div className={`px-6 py-4 bg-${colorTema}-50 border-b border-${colorTema}-200 rounded-t-lg`}>
@@ -644,8 +690,13 @@ const BalanzaSeguimientos = ({ asesorId: asesorIdProp = null, refreshTrigger = 0
               {React.createElement(icono, { className: `h-6 w-6 text-${colorTema}-600` })}
               <h3 className={`text-lg font-semibold text-${colorTema}-800`}>{titulo}</h3>
               <span className={`px-3 py-1 bg-${colorTema}-200 text-${colorTema}-800 rounded-full text-sm font-medium`}>
-                {datos.length}
+                {vistaDetalle === 'realizados' ? `${datosAgrupados.length} prospectos` : datosAgrupados.length}
               </span>
+              {vistaDetalle === 'realizados' && totalSeguimientosReales > datosAgrupados.length && (
+                <span className="text-xs text-gray-600">
+                  ({totalSeguimientosReales} seguimientos totales)
+                </span>
+              )}
             </div>
             <button
               onClick={() => setVistaDetalle(null)}
@@ -711,25 +762,43 @@ const BalanzaSeguimientos = ({ asesorId: asesorIdProp = null, refreshTrigger = 0
         </div>
 
         <div className="max-h-96 overflow-y-auto">
-          {datos.length === 0 ? (
+          {datosAgrupados.length === 0 ? (
             <div className="p-8 text-center text-gray-500">
               <Target className="h-12 w-12 mx-auto mb-4 text-gray-400" />
               <p>No hay {vistaDetalle} en este momento</p>
             </div>
           ) : (
             <div className="divide-y divide-gray-200">
-              {datos.map((item, index) => (
-                <div key={item.id || index} className="p-4 hover:bg-gray-50 transition-colors">
-                  <div className="flex items-center justify-between">
-                    <div className="flex-1">
+              {datosAgrupados.map((itemGrupo, index) => {
+                // Determinar si es un grupo o un item individual
+                const esGrupo = vistaDetalle === 'realizados' && itemGrupo.seguimientos;
+                const item = esGrupo ? itemGrupo.seguimiento_mas_reciente : itemGrupo;
+                const prospectoId = item.prospecto_id || item.id;
+                const estaExpandido = prospectosExpandidos[prospectoId];
+                const totalSeguimientos = esGrupo ? itemGrupo.seguimientos.length : 1;
+
+                return (
+                  <div key={prospectoId || index} className="hover:bg-gray-50 transition-colors">
+                    {/* Card Principal */}
+                    <div className="p-4">
                       <div className="flex items-center justify-between">
-                        <h4 className="font-medium text-gray-900">
-                          {`${item.nombre_cliente || item.prospecto_nombre || ''} ${item.apellido_cliente || ''}`.trim() || 'Sin nombre'}
-                        </h4>
-                        <div className="text-xs text-gray-500 font-mono">
-                          #{item.prospecto_codigo || item.codigo || 'N/A'}
-                        </div>
-                      </div>
+                        <div className="flex-1">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center space-x-2">
+                              <h4 className="font-medium text-gray-900">
+                                {`${item.nombre_cliente || item.prospecto_nombre || ''} ${item.apellido_cliente || ''}`.trim() || 'Sin nombre'}
+                              </h4>
+                              {/* Contador de seguimientos */}
+                              {esGrupo && totalSeguimientos > 1 && (
+                                <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded-full text-xs font-semibold">
+                                  {totalSeguimientos} seguimientos
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-xs text-gray-500 font-mono">
+                              #{item.prospecto_codigo || item.codigo || 'N/A'}
+                            </div>
+                          </div>
 
                       <div className="flex items-center space-x-4 mt-1 text-sm text-gray-600">
                         <span className="flex items-center space-x-1">
@@ -756,101 +825,159 @@ const BalanzaSeguimientos = ({ asesorId: asesorIdProp = null, refreshTrigger = 0
                         )}
                       </div>
 
-                      <div className="mt-2 text-xs space-y-1">
-                        <div className="flex items-center justify-between text-gray-500">
-                          <span>
-                            {vistaDetalle === 'pendientes'
-                              ? `⏰ Vence: ${new Date(item.fecha_programada).toLocaleDateString()} ${new Date(item.fecha_programada).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
-                              : `✅ Completado: ${new Date(item.fecha_completado || item.created_at).toLocaleDateString()} ${new Date(item.fecha_completado || item.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
-                            }
-                          </span>
-                          {vistaDetalle === 'pendientes' && item.fecha_programada && (
-                            <span className={`px-2 py-1 rounded text-xs font-medium ${
-                              new Date(item.fecha_programada) < new Date()
-                                ? 'bg-red-100 text-red-700'
-                                : new Date(item.fecha_programada) < new Date(Date.now() + 24 * 60 * 60 * 1000)
-                                ? 'bg-yellow-100 text-yellow-700'
-                                : 'bg-green-100 text-green-700'
-                            }`}>
-                              {new Date(item.fecha_programada) < new Date()
-                                ? '🚨 Vencido'
-                                : new Date(item.fecha_programada) < new Date(Date.now() + 24 * 60 * 60 * 1000)
-                                ? '⚠️ Hoy'
-                                : '📅 Programado'
-                              }
+                          <div className="mt-2 text-xs space-y-1">
+                            <div className="flex items-center justify-between text-gray-500">
+                              <span>
+                                {vistaDetalle === 'pendientes'
+                                  ? `⏰ Vence: ${new Date(item.fecha_programada).toLocaleDateString()} ${new Date(item.fecha_programada).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+                                  : `✅ Último: ${new Date(item.fecha_completado || item.created_at).toLocaleDateString()} ${new Date(item.fecha_completado || item.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+                                }
+                              </span>
+                              {vistaDetalle === 'pendientes' && item.fecha_programada && (
+                                <span className={`px-2 py-1 rounded text-xs font-medium ${
+                                  new Date(item.fecha_programada) < new Date()
+                                    ? 'bg-red-100 text-red-700'
+                                    : new Date(item.fecha_programada) < new Date(Date.now() + 24 * 60 * 60 * 1000)
+                                    ? 'bg-yellow-100 text-yellow-700'
+                                    : 'bg-green-100 text-green-700'
+                                }`}>
+                                  {new Date(item.fecha_programada) < new Date()
+                                    ? '🚨 Vencido'
+                                    : new Date(item.fecha_programada) < new Date(Date.now() + 24 * 60 * 60 * 1000)
+                                    ? '⚠️ Hoy'
+                                    : '📅 Programado'
+                                  }
+                                </span>
+                              )}
+                            </div>
+
+                            {item.resultado && (
+                              <div className="text-gray-600 bg-gray-50 p-2 rounded">
+                                <span className="font-medium">📝 Resultado:</span> {item.resultado}
+                              </div>
+                            )}
+
+                            {item.estado && (
+                              <div className="flex items-center text-gray-500">
+                                <span className="font-medium">Estado:</span>
+                                <span className={`ml-2 px-2 py-1 rounded text-xs font-medium ${
+                                  item.estado === 'Negociacion' ? 'bg-orange-100 text-orange-700' :
+                                  item.estado === 'Cotizado' ? 'bg-blue-100 text-blue-700' :
+                                  item.estado === 'Cerrado' ? 'bg-green-100 text-green-700' :
+                                  'bg-gray-100 text-gray-700'
+                                }`}>
+                                  {item.estado}
+                                </span>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          {item.vencido && (
+                            <span className="px-2 py-1 bg-red-100 text-red-800 rounded text-xs font-medium">
+                              Vencido
                             </span>
                           )}
-                        </div>
-
-                        {item.descripcion && (
-                          <div className="text-gray-600 bg-gray-50 p-2 rounded">
-                            <span className="font-medium">📝 Notas:</span> {item.descripcion}
-                          </div>
-                        )}
-
-                        {item.estado && (
-                          <div className="flex items-center text-gray-500">
-                            <span className="font-medium">Estado:</span>
-                            <span className={`ml-2 px-2 py-1 rounded text-xs font-medium ${
-                              item.estado === 'Negociacion' ? 'bg-orange-100 text-orange-700' :
-                              item.estado === 'Cotizado' ? 'bg-blue-100 text-blue-700' :
-                              item.estado === 'Cerrado' ? 'bg-green-100 text-green-700' :
-                              'bg-gray-100 text-gray-700'
-                            }`}>
-                              {item.estado}
+                          {item.tipo && (
+                            <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded text-xs font-medium">
+                              {item.tipo}
                             </span>
-                          </div>
-                        )}
+                          )}
+                          {item.valor_estimado && item.valor_estimado >= 2000 && (
+                            <span className="px-2 py-1 bg-yellow-100 text-yellow-800 rounded text-xs font-medium">
+                              💎 Alto valor
+                            </span>
+                          )}
+                          {item.valor_estimado && item.valor_estimado >= 1000 && item.valor_estimado < 2000 && (
+                            <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded text-xs font-medium">
+                              💼 Valor medio
+                            </span>
+                          )}
+                          {item.estado === 'Negociacion' && (
+                            <span className="px-2 py-1 bg-green-100 text-green-800 rounded text-xs font-medium">
+                              🎯 Conv. potencial
+                            </span>
+                          )}
+
+                          {/* Botón expandir/colapsar (solo si hay múltiples seguimientos) */}
+                          {esGrupo && totalSeguimientos > 1 && (
+                            <button
+                              onClick={() => toggleProspectoExpandido(prospectoId)}
+                              className="px-3 py-1 bg-blue-100 text-blue-700 text-xs font-medium rounded hover:bg-blue-200 transition-colors flex items-center space-x-1"
+                            >
+                              <ChevronDown className={`h-3 w-3 transform transition-transform ${estaExpandido ? 'rotate-180' : ''}`} />
+                              <span>{estaExpandido ? 'Ocultar' : 'Ver todos'}</span>
+                            </button>
+                          )}
+
+                          {/* Botón de acción - solo para pendientes */}
+                          {vistaDetalle === 'pendientes' && !item.completado && (
+                            <button
+                              onClick={() => abrirModalCompletar(item)}
+                              className="px-3 py-1 bg-gradient-to-r from-green-600 to-blue-600 text-white text-xs font-medium rounded hover:from-green-700 hover:to-blue-700 transition-colors flex items-center space-x-1"
+                            >
+                              <CheckCircle className="h-3 w-3" />
+                              <span>COMPLETAR</span>
+                            </button>
+                          )}
+
+                          <button
+                            onClick={() => abrirDetallesProspecto(item)}
+                            className="p-2 hover:bg-gray-100 rounded transition-colors"
+                          >
+                            <Eye className="h-4 w-4 text-gray-400 hover:text-blue-600" />
+                          </button>
+                        </div>
                       </div>
                     </div>
-                    <div className="flex items-center space-x-2">
-                      {item.vencido && (
-                        <span className="px-2 py-1 bg-red-100 text-red-800 rounded text-xs font-medium">
-                          Vencido
-                        </span>
-                      )}
-                      {item.tipo && (
-                        <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded text-xs font-medium">
-                          {item.tipo}
-                        </span>
-                      )}
-                      {item.valor_estimado && item.valor_estimado >= 2000 && (
-                        <span className="px-2 py-1 bg-yellow-100 text-yellow-800 rounded text-xs font-medium">
-                          💎 Alto valor
-                        </span>
-                      )}
-                      {item.valor_estimado && item.valor_estimado >= 1000 && item.valor_estimado < 2000 && (
-                        <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded text-xs font-medium">
-                          💼 Valor medio
-                        </span>
-                      )}
-                      {item.estado === 'Negociacion' && (
-                        <span className="px-2 py-1 bg-green-100 text-green-800 rounded text-xs font-medium">
-                          🎯 Conv. potencial
-                        </span>
-                      )}
 
-                      {/* Botón de acción - solo para pendientes */}
-                      {vistaDetalle === 'pendientes' && !item.completado && (
-                        <button
-                          onClick={() => abrirModalCompletar(item)}
-                          className="px-3 py-1 bg-gradient-to-r from-green-600 to-blue-600 text-white text-xs font-medium rounded hover:from-green-700 hover:to-blue-700 transition-colors flex items-center space-x-1"
-                        >
-                          <CheckCircle className="h-3 w-3" />
-                          <span>COMPLETAR</span>
-                        </button>
-                      )}
-
-                      <button
-                        onClick={() => abrirDetallesProspecto(item)}
-                        className="p-2 hover:bg-gray-100 rounded transition-colors"
-                      >
-                        <Eye className="h-4 w-4 text-gray-400 hover:text-blue-600" />
-                      </button>
-                    </div>
+                    {/* Sección Desplegable - Solo para grupos con múltiples seguimientos */}
+                    {esGrupo && totalSeguimientos > 1 && estaExpandido && (
+                      <div className="px-4 pb-4 bg-gray-50 border-t border-gray-200">
+                        <div className="pt-3 space-y-2">
+                          <div className="text-xs font-semibold text-gray-700 mb-2">
+                            📋 Historial de seguimientos ({totalSeguimientos}):
+                          </div>
+                          {itemGrupo.seguimientos
+                            .sort((a, b) => new Date(b.fecha_completado || b.created_at) - new Date(a.fecha_completado || a.created_at))
+                            .map((seg, idx) => (
+                              <div key={seg.id || idx} className="bg-white p-3 rounded border border-gray-200 text-xs">
+                                <div className="flex items-center justify-between mb-1">
+                                  <span className="font-medium text-gray-900">
+                                    {idx === 0 ? '🔵 Más reciente' : `#${idx + 1}`}
+                                  </span>
+                                  <span className="text-gray-500">
+                                    {new Date(seg.fecha_completado || seg.created_at).toLocaleDateString()} {new Date(seg.fecha_completado || seg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                  </span>
+                                </div>
+                                <div className="flex items-center space-x-2 text-gray-600">
+                                  <span className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded">
+                                    {seg.tipo}
+                                  </span>
+                                  {seg.vencido && (
+                                    <span className="px-2 py-0.5 bg-red-100 text-red-700 rounded">
+                                      Vencido
+                                    </span>
+                                  )}
+                                </div>
+                                {seg.resultado && (
+                                  <div className="mt-1 text-gray-700">
+                                    <span className="font-medium">📝</span> {seg.resultado}
+                                  </div>
+                                )}
+                                {seg.notas && (
+                                  <div className="mt-1 text-gray-600 italic">
+                                    "{seg.notas}"
+                                  </div>
+                                )}
+                              </div>
+                            ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>

@@ -1163,14 +1163,14 @@ class SeguimientosController {
 
             const realizadosQuery = asesor_id
                 ? `SELECT s.*,
-                       p.codigo, p.nombre_cliente, p.empresa, p.telefono, p.estado, p.valor_estimado
+                       p.codigo, p.nombre_cliente, p.apellido_cliente, p.empresa, p.telefono, p.estado, p.valor_estimado
                 FROM seguimientos s
                 INNER JOIN prospectos p ON s.prospecto_id = p.id
                 WHERE s.asesor_id = $1 AND s.completado = $2
                 AND COALESCE(s.fecha_completado, s.updated_at, s.created_at) >= $3
                 ORDER BY COALESCE(s.fecha_completado, s.updated_at, s.created_at) DESC`
                 : `SELECT s.*,
-                       p.codigo, p.nombre_cliente, p.empresa, p.telefono, p.estado, p.valor_estimado
+                       p.codigo, p.nombre_cliente, p.apellido_cliente, p.empresa, p.telefono, p.estado, p.valor_estimado
                 FROM seguimientos s
                 INNER JOIN prospectos p ON s.prospecto_id = p.id
                 WHERE s.completado = $1 AND COALESCE(s.fecha_completado, s.updated_at, s.created_at) >= $2
