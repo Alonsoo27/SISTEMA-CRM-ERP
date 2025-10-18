@@ -11,8 +11,10 @@ const {
     iniciarCampana,
     finalizarCampana,
     getCampanaActiva,
-    getMisCampanasActivas,  // ← Nuevo
-    agregarLineaCampana      // ← Nuevo
+    getMisCampanasActivas,
+    agregarLineaCampana,
+    getProspectosCampana,      // ← Nuevo
+    getDashboardCampana         // ← Nuevo
 } = require('../controllers/CampanasAsesorController');
 
 const { authenticateToken, requireRole } = require('../../../middleware/auth');
@@ -62,6 +64,24 @@ router.put('/:id/finalizar',
     authenticateToken,
     requireRole(GRUPOS_ROLES.VENTAS_COMPLETO),
     finalizarCampana
+);
+
+// ============================================
+// RUTAS DE ANALYTICS Y TRACKING
+// ============================================
+
+// Obtener prospectos de una campaña específica
+router.get('/:id/prospectos',
+    authenticateToken,
+    requireRole(GRUPOS_ROLES.VENTAS_COMPLETO),
+    getProspectosCampana
+);
+
+// Dashboard completo de una campaña (métricas y analytics)
+router.get('/:id/dashboard',
+    authenticateToken,
+    requireRole(GRUPOS_ROLES.VENTAS_COMPLETO),
+    getDashboardCampana
 );
 
 // ============================================

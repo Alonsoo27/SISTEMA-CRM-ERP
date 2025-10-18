@@ -4,7 +4,8 @@ import {
   Clock, CheckCircle, XCircle, Activity, Phone, MessageSquare,
   Play, Square, RefreshCw, AlertCircle, Timer, Calendar,
   User, BarChart3, Eye, TrendingUp, History, ChevronDown,
-  ChevronUp, Target, Users, Zap, Award, Filter, Bell
+  ChevronUp, Target, Users, Zap, Award, Filter, Bell, X,
+  FileText, TrendingDown
 } from 'lucide-react';
 import { API_CONFIG } from '../../../config/apiConfig';
 import {
@@ -42,6 +43,10 @@ const ActividadPageEnhanced = () => {
   const [historialLoading, setHistorialLoading] = useState(false);
   const [campanasData, setCampanasData] = useState([]);
   const [campanasLoading, setCampanasLoading] = useState(false);
+  const [campanaSeleccionada, setCampanaSeleccionada] = useState(null);
+  const [campanaDetalle, setCampanaDetalle] = useState(null);
+  const [campanaDetalleLoading, setCampanaDetalleLoading] = useState(false);
+  const [soloProspectosActivos, setSoloProspectosActivos] = useState(false);
 
   // Obtener información del usuario desde localStorage
   const obtenerInfoUsuario = () => {
@@ -288,6 +293,45 @@ const ActividadPageEnhanced = () => {
       }
     } catch (error) {
       console.error('Error cargando vendedores:', error);
+    }
+  };
+
+  // Cargar detalle completo de una campaña
+  const cargarDetalleCampana = async (campanaId) => {
+    try {
+      setCampanaDetalleLoading(true);
+
+      // Cargar dashboard y prospectos en paralelo
+      const [dashboardRes, prospectosRes] = await Promise.all([
+        fetch(`${API_CONFIG.BASE_URL}/api/campanas-asesor/${campanaId}/dashboard`, {
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('token')}`,
+            'Content-Type': 'application/json'
+          }
+        }),
+        fetch(`${API_CONFIG.BASE_URL}/api/campanas-asesor/${campanaId}/prospectos`, {
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('token')}`,
+            'Content-Type': 'application/json'
+          }
+        })
+      ]);
+
+      if (dashboardRes.ok && prospectosRes.ok) {
+        const dashboard = await dashboardRes.json();
+        const prospectos = await prospectosRes.json();
+
+        if (dashboard.success && prospectos.success) {
+          setCampanaDetalle({
+            dashboard: dashboard.data,
+            prospectos: prospectos  // Guardar el objeto completo, no prospectos.data
+          });
+        }
+      }
+    } catch (error) {
+      console.error('Error cargando detalle de campaña:', error);
+    } finally {
+      setCampanaDetalleLoading(false);
     }
   };
 
@@ -1082,8 +1126,15 @@ const ActividadPageEnhanced = () => {
       );
     }
 
-    const campanasActivas = campanasData.filter(c => c.estado === 'activa');
-    const campanasFinalizadas = campanasData.filter(c => c.estado === 'finalizada');
+    // Filtrar campañas activas
+    let campanasActivas = campanasData.filter(c => c.estado === 'activa');
+    let campanasFinalizadas = campanasData.filter(c => c.estado === 'finalizada');
+
+    // Aplicar filtro de prospectos pendientes si está activo
+    if (soloProspectosActivos) {
+      campanasActivas = campanasActivas.filter(c => (c.prospectos_pendientes || 0) > 0);
+      campanasFinalizadas = campanasFinalizadas.filter(c => (c.prospectos_pendientes || 0) > 0);
+    }
 
     return (
       <div className="space-y-6">
@@ -1131,9 +1182,36 @@ const ActividadPageEnhanced = () => {
           </div>
         )}
 
+        {/* Filtro de prospectos activos */}
+        <div className="bg-white p-4 rounded-xl shadow-lg border border-gray-100">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Filter className="h-4 w-4 text-gray-600" />
+              <span className="text-sm font-medium text-gray-700">Filtros:</span>
+            </div>
+            <button
+              onClick={() => setSoloProspectosActivos(!soloProspectosActivos)}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                soloProspectosActivos
+                  ? 'bg-blue-600 text-white shadow-md'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              {soloProspectosActivos ? '✓ Solo con Prospectos Pendientes' : 'Mostrar Solo con Prospectos Pendientes'}
+            </button>
+          </div>
+        </div>
+
         {/* Campañas Activas */}
         <div className="bg-white p-6 rounded-xl shadow-lg">
-          <h3 className="text-lg font-bold text-gray-900 mb-4">Campañas Activas</h3>
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-bold text-gray-900">Campañas Activas</h3>
+            {soloProspectosActivos && (
+              <span className="text-xs text-blue-600 bg-blue-50 px-3 py-1 rounded-full">
+                Filtrando: solo con prospectos pendientes
+              </span>
+            )}
+          </div>
           {campanasActivas.length === 0 ? (
             <div className="text-center py-8">
               <Target className="h-12 w-12 text-gray-400 mx-auto mb-4" />
@@ -1153,15 +1231,27 @@ const ActividadPageEnhanced = () => {
                         <p className="text-xs text-purple-600 font-medium mt-1">{campana.asesor_nombre}</p>
                       )}
                     </div>
-                    <button
-                      onClick={() => finalizarCampana(campana.id)}
-                      className="text-sm text-red-600 hover:text-red-700 font-medium"
-                    >
-                      Finalizar
-                    </button>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={async () => {
+                          setCampanaSeleccionada(campana);
+                          await cargarDetalleCampana(campana.id);
+                        }}
+                        className="text-sm text-blue-600 hover:text-blue-700 font-medium flex items-center gap-1"
+                      >
+                        <Eye className="h-4 w-4" />
+                        Ver Detalle
+                      </button>
+                      <button
+                        onClick={() => finalizarCampana(campana.id)}
+                        className="text-sm text-red-600 hover:text-red-700 font-medium"
+                      >
+                        Finalizar
+                      </button>
+                    </div>
                   </div>
 
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
                     <div className="bg-blue-50 p-3 rounded-lg">
                       <p className="text-xs text-blue-600 font-medium">Mensajes</p>
                       <p className="text-xl font-bold text-blue-700">{campana.total_mensajes || 0}</p>
@@ -1169,6 +1259,14 @@ const ActividadPageEnhanced = () => {
                     <div className="bg-green-50 p-3 rounded-lg">
                       <p className="text-xs text-green-600 font-medium">Llamadas</p>
                       <p className="text-xl font-bold text-green-700">{campana.total_llamadas || 0}</p>
+                    </div>
+                    <div className="bg-cyan-50 p-3 rounded-lg">
+                      <p className="text-xs text-cyan-600 font-medium">Prospectos</p>
+                      <p className="text-xl font-bold text-cyan-700">{campana.total_prospectos || 0}</p>
+                    </div>
+                    <div className="bg-indigo-50 p-3 rounded-lg">
+                      <p className="text-xs text-indigo-600 font-medium">Convertidos</p>
+                      <p className="text-xl font-bold text-indigo-700">{campana.prospectos_convertidos || 0}</p>
                     </div>
                     <div className="bg-purple-50 p-3 rounded-lg">
                       <p className="text-xs text-purple-600 font-medium">Ventas</p>
@@ -1194,7 +1292,14 @@ const ActividadPageEnhanced = () => {
         {/* Historial de Campañas Finalizadas */}
         {campanasFinalizadas.length > 0 && (
           <div className="bg-white p-6 rounded-xl shadow-lg">
-            <h3 className="text-lg font-bold text-gray-900 mb-4">Historial de Campañas</h3>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-bold text-gray-900">Historial de Campañas</h3>
+              {soloProspectosActivos && (
+                <span className="text-xs text-blue-600 bg-blue-50 px-3 py-1 rounded-full">
+                  Filtrando: solo con prospectos pendientes
+                </span>
+              )}
+            </div>
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
@@ -1207,26 +1312,300 @@ const ActividadPageEnhanced = () => {
                     <th className="py-2 px-2 text-right">Ventas</th>
                     <th className="py-2 px-2 text-right">Monto</th>
                     <th className="py-2 px-2 text-right">Conv.</th>
+                    <th className="py-2 px-2 text-right">Acciones</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {campanasFinalizadas.map((campana) => (
-                    <tr key={campana.id} className="border-b hover:bg-gray-50">
-                      <td className="py-2 px-2">{campana.linea_producto}</td>
-                      {isManager() && <td className="py-2 px-2 text-xs text-gray-600">{campana.asesor_nombre}</td>}
-                      <td className="py-2 px-2 text-xs">{formatDate(campana.fecha_inicio)} - {formatDate(campana.fecha_fin)}</td>
-                      <td className="py-2 px-2 text-right">{campana.dias_trabajados}</td>
-                      <td className="py-2 px-2 text-right">{campana.total_mensajes}</td>
-                      <td className="py-2 px-2 text-right">{campana.total_ventas}</td>
-                      <td className="py-2 px-2 text-right">$ {formatMoney(campana.monto_total_vendido)}</td>
-                      <td className="py-2 px-2 text-right text-purple-600 font-medium">{campana.tasa_conversion}%</td>
-                    </tr>
-                  ))}
+                  {campanasFinalizadas.map((campana) => {
+                    // Calcular efectividad comercial: (ventas / mensajes) × 100
+                    const efectividad = campana.total_mensajes > 0
+                      ? ((campana.total_ventas / campana.total_mensajes) * 100).toFixed(2)
+                      : 0;
+
+                    return (
+                      <tr key={campana.id} className="border-b hover:bg-gray-50">
+                        <td className="py-2 px-2">{campana.linea_producto}</td>
+                        {isManager() && <td className="py-2 px-2 text-xs text-gray-600">{campana.asesor_nombre}</td>}
+                        <td className="py-2 px-2 text-xs">{formatDate(campana.fecha_inicio)} - {formatDate(campana.fecha_fin)}</td>
+                        <td className="py-2 px-2 text-right">{campana.dias_trabajados}</td>
+                        <td className="py-2 px-2 text-right">{campana.total_mensajes}</td>
+                        <td className="py-2 px-2 text-right">{campana.total_ventas}</td>
+                        <td className="py-2 px-2 text-right">$ {formatMoney(campana.monto_total_vendido)}</td>
+                        <td className="py-2 px-2 text-right text-purple-600 font-medium">{efectividad}%</td>
+                        <td className="py-2 px-2 text-right">
+                          <button
+                            onClick={async () => {
+                              setCampanaSeleccionada(campana);
+                              await cargarDetalleCampana(campana.id);
+                            }}
+                            className="text-xs text-blue-600 hover:text-blue-700 font-medium flex items-center gap-1 ml-auto"
+                          >
+                            <Eye className="h-3 w-3" />
+                            Ver
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
           </div>
         )}
+      </div>
+    );
+  };
+
+  // Modal de detalle de campaña
+  const ModalDetalleCampana = () => {
+    if (!campanaSeleccionada) return null;
+
+    const formatMoney = (monto) => {
+      return new Intl.NumberFormat('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(monto || 0);
+    };
+
+    const formatDate = (fecha) => {
+      if (!fecha) return '-';
+      return new Date(fecha).toLocaleDateString('es-PE');
+    };
+
+    // Estados activos vs inactivos
+    const ESTADOS_ACTIVOS = ['Prospecto', 'Cotizado', 'Negociación'];
+    const ESTADOS_INACTIVOS = ['Cerrado', 'Perdido'];
+
+    const esProspectoActivo = (estado) => {
+      return ESTADOS_ACTIVOS.includes(estado);
+    };
+
+    // Separar prospectos por estado
+    // El endpoint devuelve { prospectos: [...], total, convertidos }
+    const todosProspectos = campanaDetalle?.prospectos?.prospectos || [];
+    const prospectosActivos = todosProspectos.filter(p => esProspectoActivo(p.estado));
+    const prospectosInactivos = todosProspectos.filter(p => !esProspectoActivo(p.estado));
+
+    // Prevenir scroll del body cuando el modal está abierto
+    React.useEffect(() => {
+      document.body.style.overflow = 'hidden';
+      return () => {
+        document.body.style.overflow = 'unset';
+      };
+    }, []);
+
+    return (
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+        onClick={(e) => {
+          // Solo cerrar si se hace clic en el overlay, no en el contenido
+          if (e.target === e.currentTarget) {
+            setCampanaSeleccionada(null);
+            setCampanaDetalle(null);
+          }
+        }}
+      >
+        <div className="bg-white rounded-xl shadow-2xl max-w-6xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+          {/* Header */}
+          <div className="flex items-center justify-between p-6 border-b">
+            <div>
+              <h2 className="text-2xl font-bold text-gray-900">
+                {campanaSeleccionada.nombre_campana || campanaSeleccionada.linea_producto}
+              </h2>
+              <p className="text-sm text-gray-600 mt-1">
+                {formatDate(campanaSeleccionada.fecha_inicio)} - {campanaSeleccionada.estado === 'activa' ? 'Actualmente' : formatDate(campanaSeleccionada.fecha_fin)}
+              </p>
+            </div>
+            <button
+              onClick={() => {
+                setCampanaSeleccionada(null);
+                setCampanaDetalle(null);
+              }}
+              className="text-gray-400 hover:text-gray-600"
+            >
+              <X className="h-6 w-6" />
+            </button>
+          </div>
+
+          {/* Content */}
+          <div className="flex-1 overflow-y-auto p-6">
+            {campanaDetalleLoading ? (
+              <div className="flex items-center justify-center h-64">
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+              </div>
+            ) : campanaDetalle ? (
+              <div className="space-y-6">
+                {/* Métricas principales */}
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                  <div className="bg-blue-50 p-4 rounded-lg">
+                    <p className="text-xs text-blue-600 font-medium mb-1">Total Prospectos</p>
+                    <p className="text-3xl font-bold text-blue-700">{todosProspectos.length}</p>
+                  </div>
+                  <div className="bg-cyan-50 p-4 rounded-lg border-2 border-cyan-200">
+                    <p className="text-xs text-cyan-600 font-medium mb-1">Prospectos Activos</p>
+                    <p className="text-3xl font-bold text-cyan-700">{prospectosActivos.length}</p>
+                    <p className="text-xs text-cyan-600 mt-1">En proceso</p>
+                  </div>
+                  <div className="bg-gray-50 p-4 rounded-lg">
+                    <p className="text-xs text-gray-600 font-medium mb-1">Prospectos Inactivos</p>
+                    <p className="text-3xl font-bold text-gray-700">{prospectosInactivos.length}</p>
+                    <p className="text-xs text-gray-600 mt-1">Cerrado/Perdido</p>
+                  </div>
+                  <div className="bg-purple-50 p-4 rounded-lg">
+                    <p className="text-xs text-purple-600 font-medium mb-1">Total Ventas</p>
+                    <p className="text-3xl font-bold text-purple-700">
+                      {campanaSeleccionada.total_ventas || 0}
+                    </p>
+                  </div>
+                  <div className="bg-orange-50 p-4 rounded-lg">
+                    <p className="text-xs text-orange-600 font-medium mb-1">Tasa Conversión</p>
+                    <p className="text-3xl font-bold text-orange-700">{campanaSeleccionada.tasa_conversion || 0}%</p>
+                  </div>
+                </div>
+
+                {/* Prospectos Activos */}
+                {prospectosActivos.length > 0 && (
+                  <div className="bg-white border-2 border-cyan-200 rounded-lg p-4">
+                    <h3 className="text-lg font-bold text-cyan-900 mb-4 flex items-center gap-2">
+                      <FileText className="h-5 w-5" />
+                      Prospectos Activos ({prospectosActivos.length})
+                      <span className="text-xs font-normal text-cyan-600 ml-2">En Prospecto, Cotizado o Negociación</span>
+                    </h3>
+                    <div className="space-y-4">
+                      {prospectosActivos.map((prospecto) => (
+                        <div key={prospecto.id} className="border border-cyan-200 rounded-lg p-4 hover:bg-cyan-50 transition-colors">
+                          <div className="flex justify-between items-start mb-3">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2 mb-1">
+                                <span className="font-mono text-xs font-medium text-gray-600">{prospecto.codigo}</span>
+                                <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-cyan-100 text-cyan-700">
+                                  {prospecto.estado}
+                                </span>
+                              </div>
+                              <p className="font-semibold text-gray-900">{prospecto.nombre_cliente}</p>
+                              {prospecto.empresa && <p className="text-sm text-gray-600">{prospecto.empresa}</p>}
+                              <p className="text-xs text-gray-500 mt-1">{formatDate(prospecto.fecha_creacion)}</p>
+                            </div>
+                            <div className="text-right">
+                              <p className="text-sm text-gray-600">Valor Estimado</p>
+                              <p className="text-xl font-bold text-cyan-700">$ {formatMoney(prospecto.campana_valor_producto || prospecto.valor_estimado)}</p>
+                            </div>
+                          </div>
+
+                          {/* Productos del prospecto */}
+                          {prospecto.productos && prospecto.productos.length > 0 && (
+                            <div className="mt-3 pt-3 border-t border-cyan-100">
+                              <p className="text-xs font-semibold text-gray-700 mb-2">Productos de interés:</p>
+                              <div className="space-y-1">
+                                {prospecto.productos.map((producto, idx) => (
+                                  <div key={idx} className="flex justify-between items-center text-xs bg-white rounded px-2 py-1">
+                                    <div className="flex-1">
+                                      <span className="font-medium text-gray-900">{producto.descripcion}</span>
+                                      {producto.linea_producto && (
+                                        <span className="text-gray-500 ml-2">• {producto.linea_producto}</span>
+                                      )}
+                                    </div>
+                                    <div className="text-right">
+                                      <span className="text-gray-600">Cant: {producto.cantidad_estimada || 1}</span>
+                                      <span className="font-semibold text-cyan-700 ml-3">$ {formatMoney(producto.valor_linea)}</span>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Prospectos Inactivos */}
+                {prospectosInactivos.length > 0 && (
+                  <div className="bg-white border border-gray-200 rounded-lg p-4">
+                    <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
+                      <FileText className="h-5 w-5" />
+                      Prospectos Inactivos ({prospectosInactivos.length})
+                      <span className="text-xs font-normal text-gray-600 ml-2">Cerrados o Perdidos</span>
+                    </h3>
+                    <div className="space-y-4">
+                      {prospectosInactivos.map((prospecto) => (
+                        <div key={prospecto.id} className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50 transition-colors">
+                          <div className="flex justify-between items-start mb-3">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2 mb-1">
+                                <span className="font-mono text-xs font-medium text-gray-600">{prospecto.codigo}</span>
+                                {prospecto.convertido_venta ? (
+                                  <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-700">
+                                    <CheckCircle className="h-3 w-3 mr-1" />
+                                    Vendido
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-700">
+                                    <XCircle className="h-3 w-3 mr-1" />
+                                    {prospecto.estado}
+                                  </span>
+                                )}
+                              </div>
+                              <p className="font-semibold text-gray-900">{prospecto.nombre_cliente}</p>
+                              {prospecto.empresa && <p className="text-sm text-gray-600">{prospecto.empresa}</p>}
+                              <div className="flex items-center gap-2 mt-1">
+                                <p className="text-xs text-gray-500">{formatDate(prospecto.fecha_creacion)}</p>
+                                {prospecto.venta_codigo && (
+                                  <>
+                                    <span className="text-gray-400">→</span>
+                                    <span className="font-mono text-xs font-medium text-green-600">{prospecto.venta_codigo}</span>
+                                  </>
+                                )}
+                              </div>
+                            </div>
+                            <div className="text-right">
+                              <p className="text-sm text-gray-600">{prospecto.convertido_venta ? 'Monto Vendido' : 'Valor Estimado'}</p>
+                              <p className="text-xl font-bold text-green-700">
+                                $ {formatMoney(prospecto.venta_monto || prospecto.campana_valor_producto || prospecto.valor_estimado)}
+                              </p>
+                              {prospecto.fecha_venta && (
+                                <p className="text-xs text-gray-500 mt-1">Vendido: {formatDate(prospecto.fecha_venta)}</p>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Productos del prospecto/venta */}
+                          {prospecto.productos && prospecto.productos.length > 0 && (
+                            <div className="mt-3 pt-3 border-t border-gray-100">
+                              <p className="text-xs font-semibold text-gray-700 mb-2">
+                                {prospecto.convertido_venta ? 'Productos vendidos:' : 'Productos que consideró:'}
+                              </p>
+                              <div className="space-y-1">
+                                {prospecto.productos.map((producto, idx) => (
+                                  <div key={idx} className="flex justify-between items-center text-xs bg-white rounded px-2 py-1">
+                                    <div className="flex-1">
+                                      <span className="font-medium text-gray-900">{producto.descripcion}</span>
+                                      {producto.linea_producto && (
+                                        <span className="text-gray-500 ml-2">• {producto.linea_producto}</span>
+                                      )}
+                                    </div>
+                                    <div className="text-right">
+                                      <span className="text-gray-600">Cant: {producto.cantidad_estimada || 1}</span>
+                                      <span className={`font-semibold ml-3 ${prospecto.convertido_venta ? 'text-green-700' : 'text-gray-700'}`}>
+                                        $ {formatMoney(producto.valor_linea)}
+                                      </span>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="text-center py-12">
+                <AlertCircle className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                <p className="text-gray-600">No se pudo cargar el detalle de la campaña</p>
+              </div>
+            )}
+          </div>
+        </div>
       </div>
     );
   };
@@ -1331,6 +1710,9 @@ const ActividadPageEnhanced = () => {
 
         {/* Notificaciones */}
         <NotificationComponent />
+
+        {/* Modal de detalle de campaña */}
+        <ModalDetalleCampana />
       </div>
     </div>
   );

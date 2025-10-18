@@ -13,33 +13,77 @@ const getMisCampanas = async (req, res) => {
         const userId = req.user.id;
         const { estado = 'todas' } = req.query;
 
-        let whereClause = 'WHERE usuario_id = $1';
+        let whereClause = 'WHERE ca.usuario_id = $1';
         if (estado !== 'todas') {
-            whereClause += ` AND estado = '${estado}'`;
+            whereClause += ` AND ca.estado = '${estado}'`;
         }
 
         const result = await query(`
+            WITH ventas_campana AS (
+                -- FUENTE 1: Ventas de prospectos marcados con esta campaña
+                SELECT
+                    ca.id as campana_id,
+                    v.id as venta_id,
+                    vd.total_linea,
+                    'prospecto_marcado' as fuente
+                FROM campanas_asesor ca
+                INNER JOIN prospectos p ON ca.id = p.campana_id AND p.activo = true
+                INNER JOIN ventas v ON p.id = v.prospecto_id AND v.activo = true
+                INNER JOIN venta_detalles vd ON v.id = vd.venta_id AND vd.activo = true
+                INNER JOIN productos prod ON vd.producto_id = prod.id AND prod.linea_producto = ca.linea_producto
+                ${whereClause}
+
+                UNION ALL
+
+                -- FUENTE 2: Ventas directas durante el período de la campaña
+                SELECT
+                    ca.id as campana_id,
+                    v.id as venta_id,
+                    vd.total_linea,
+                    'venta_directa' as fuente
+                FROM campanas_asesor ca
+                INNER JOIN ventas v ON v.asesor_id = ca.usuario_id
+                    AND v.fecha_venta >= ca.fecha_inicio
+                    AND (ca.fecha_fin IS NULL OR v.fecha_venta <= ca.fecha_fin)
+                    AND v.prospecto_id IS NULL
+                    AND v.activo = true
+                INNER JOIN venta_detalles vd ON v.id = vd.venta_id AND vd.activo = true
+                INNER JOIN productos prod ON vd.producto_id = prod.id AND prod.linea_producto = ca.linea_producto
+                ${whereClause}
+            )
             SELECT
-                id,
-                linea_producto,
-                nombre_campana,
-                fecha_inicio,
-                fecha_fin,
-                estado,
-                total_mensajes,
-                total_llamadas,
-                dias_trabajados,
-                horas_efectivas,
-                total_ventas,
-                monto_total_vendido,
-                tasa_conversion,
-                notas,
-                created_at
-            FROM campanas_asesor
+                ca.id,
+                ca.linea_producto,
+                ca.nombre_campana,
+                ca.fecha_inicio,
+                ca.fecha_fin,
+                ca.estado,
+                ca.total_mensajes,
+                ca.total_llamadas,
+                ca.dias_trabajados,
+                ca.horas_efectivas,
+                ca.notas,
+                ca.created_at,
+                COUNT(DISTINCT p.id) as total_prospectos,
+                COUNT(DISTINCT CASE WHEN p.convertido_venta = true THEN p.id END) as prospectos_convertidos,
+                COUNT(DISTINCT CASE WHEN p.convertido_venta = false AND p.estado IN ('Prospecto', 'Cotizado', 'Negociación') THEN p.id END) as prospectos_pendientes,
+                COUNT(DISTINCT vc.venta_id) as total_ventas,
+                COALESCE(SUM(vc.total_linea), 0) as monto_total_vendido,
+                CASE
+                    WHEN COUNT(DISTINCT p.id) > 0 THEN
+                        ROUND((COUNT(DISTINCT CASE WHEN p.convertido_venta = true THEN p.id END)::DECIMAL / COUNT(DISTINCT p.id)) * 100, 2)
+                    ELSE 0
+                END as tasa_conversion
+            FROM campanas_asesor ca
+            LEFT JOIN prospectos p ON ca.id = p.campana_id AND p.activo = true
+            LEFT JOIN ventas_campana vc ON ca.id = vc.campana_id
             ${whereClause}
+            GROUP BY ca.id, ca.linea_producto, ca.nombre_campana, ca.fecha_inicio, ca.fecha_fin,
+                     ca.estado, ca.total_mensajes, ca.total_llamadas, ca.dias_trabajados,
+                     ca.horas_efectivas, ca.notas, ca.created_at
             ORDER BY
-                CASE WHEN estado = 'activa' THEN 1 ELSE 2 END,
-                fecha_inicio DESC
+                CASE WHEN ca.estado = 'activa' THEN 1 ELSE 2 END,
+                ca.fecha_inicio DESC
         `, [userId]);
 
         res.json({
@@ -98,15 +142,76 @@ const getVistaEquipo = async (req, res) => {
             : '';
 
         const result = await query(`
+            WITH ventas_campana AS (
+                -- FUENTE 1: Ventas de prospectos marcados con esta campaña
+                SELECT
+                    ca.id as campana_id,
+                    v.id as venta_id,
+                    vd.total_linea,
+                    'prospecto_marcado' as fuente
+                FROM campanas_asesor ca
+                INNER JOIN prospectos p ON ca.id = p.campana_id AND p.activo = true
+                INNER JOIN ventas v ON p.id = v.prospecto_id AND v.activo = true
+                INNER JOIN venta_detalles vd ON v.id = vd.venta_id AND vd.activo = true
+                INNER JOIN productos prod ON vd.producto_id = prod.id AND prod.linea_producto = ca.linea_producto
+                ${whereClause}
+
+                UNION ALL
+
+                -- FUENTE 2: Ventas directas durante el período de la campaña
+                SELECT
+                    ca.id as campana_id,
+                    v.id as venta_id,
+                    vd.total_linea,
+                    'venta_directa' as fuente
+                FROM campanas_asesor ca
+                INNER JOIN ventas v ON v.asesor_id = ca.usuario_id
+                    AND v.fecha_venta >= ca.fecha_inicio
+                    AND (ca.fecha_fin IS NULL OR v.fecha_venta <= ca.fecha_fin)
+                    AND v.prospecto_id IS NULL
+                    AND v.activo = true
+                INNER JOIN venta_detalles vd ON v.id = vd.venta_id AND vd.activo = true
+                INNER JOIN productos prod ON vd.producto_id = prod.id AND prod.linea_producto = ca.linea_producto
+                ${whereClause}
+            )
             SELECT
-                ca.*,
+                ca.id,
+                ca.usuario_id,
+                ca.linea_producto,
+                ca.nombre_campana,
+                ca.fecha_inicio,
+                ca.fecha_fin,
+                ca.estado,
+                ca.total_mensajes,
+                ca.total_llamadas,
+                ca.dias_trabajados,
+                ca.horas_efectivas,
+                ca.notas,
+                ca.created_at,
+                ca.updated_at,
                 u.nombre || ' ' || u.apellido as asesor_nombre,
                 u.email as asesor_email,
-                r.nombre as rol
+                r.nombre as rol,
+                COUNT(DISTINCT p.id) as total_prospectos,
+                COUNT(DISTINCT CASE WHEN p.convertido_venta = true THEN p.id END) as prospectos_convertidos,
+                COUNT(DISTINCT CASE WHEN p.convertido_venta = false AND p.estado IN ('Prospecto', 'Cotizado', 'Negociación') THEN p.id END) as prospectos_pendientes,
+                COUNT(DISTINCT vc.venta_id) as total_ventas,
+                COALESCE(SUM(vc.total_linea), 0) as monto_total_vendido,
+                CASE
+                    WHEN COUNT(DISTINCT p.id) > 0 THEN
+                        ROUND((COUNT(DISTINCT CASE WHEN p.convertido_venta = true THEN p.id END)::DECIMAL / COUNT(DISTINCT p.id)) * 100, 2)
+                    ELSE 0
+                END as tasa_conversion
             FROM campanas_asesor ca
             INNER JOIN usuarios u ON ca.usuario_id = u.id
             LEFT JOIN roles r ON u.rol_id = r.id
+            LEFT JOIN prospectos p ON ca.id = p.campana_id AND p.activo = true
+            LEFT JOIN ventas_campana vc ON ca.id = vc.campana_id
             ${whereClause}
+            GROUP BY ca.id, ca.usuario_id, ca.linea_producto, ca.nombre_campana, ca.fecha_inicio, ca.fecha_fin,
+                     ca.estado, ca.total_mensajes, ca.total_llamadas, ca.dias_trabajados,
+                     ca.horas_efectivas, ca.notas, ca.created_at, ca.updated_at,
+                     u.nombre, u.apellido, u.email, r.nombre
             ORDER BY
                 CASE WHEN ca.estado = 'activa' THEN 1 ELSE 2 END,
                 ca.fecha_inicio DESC
@@ -444,12 +549,266 @@ async function calcularMetricasVentas(campanaId) {
     }
 }
 
+// ============================================
+// OBTENER PROSPECTOS DE UNA CAMPAÑA
+// ============================================
+const getProspectosCampana = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const userId = req.user.id;
+        const userRole = req.user.rol?.toUpperCase();
+
+        // Validar permisos: solo el dueño o managers
+        const esManager = ['SUPER_ADMIN', 'GERENTE', 'ADMIN', 'JEFE_VENTAS'].includes(userRole);
+
+        // Verificar que la campaña existe y pertenece al usuario (si no es manager)
+        let campanaQuery = 'SELECT * FROM campanas_asesor WHERE id = $1';
+        let campanaParams = [id];
+
+        if (!esManager) {
+            campanaQuery += ' AND usuario_id = $2';
+            campanaParams.push(userId);
+        }
+
+        const campanaResult = await query(campanaQuery, campanaParams);
+
+        if (campanaResult.rows.length === 0) {
+            return res.status(404).json({
+                success: false,
+                message: 'Campaña no encontrada o sin permisos'
+            });
+        }
+
+        // Obtener prospectos de la campaña
+        const prospectos = await query(`
+            SELECT
+                p.id,
+                p.codigo,
+                p.nombre_cliente,
+                p.apellido_cliente,
+                p.empresa,
+                p.email,
+                p.telefono,
+                p.valor_estimado,
+                p.estado,
+                p.convertido_venta,
+                p.venta_id,
+                p.campana_linea_detectada,
+                p.campana_valor_producto,
+                p.created_at as fecha_creacion,
+                p.fecha_cierre,
+                v.codigo as venta_codigo,
+                v.valor_total as venta_monto,
+                v.estado_detallado as venta_estado,
+                v.fecha_venta,
+                EXTRACT(DAY FROM (COALESCE(p.fecha_cierre, NOW()) - p.created_at)) as dias_hasta_conversion
+            FROM prospectos p
+            LEFT JOIN ventas v ON p.venta_id = v.id
+            WHERE p.campana_id = $1
+            ORDER BY
+                p.convertido_venta DESC,
+                p.created_at DESC
+        `, [id]);
+
+        // Para cada prospecto, obtener sus productos
+        const prospectosConProductos = await Promise.all(
+            prospectos.rows.map(async (prospecto) => {
+                // Obtener productos del prospecto
+                const productosResult = await query(`
+                    SELECT
+                        pp.id,
+                        pp.producto_id,
+                        pp.descripcion_producto as descripcion,
+                        pp.cantidad_estimada,
+                        pp.valor_linea,
+                        pp.precio_sin_igv,
+                        prod.linea_producto,
+                        prod.sublinea_producto,
+                        pp.codigo_producto as producto_codigo
+                    FROM prospecto_productos_interes pp
+                    LEFT JOIN productos prod ON pp.producto_id = prod.id
+                    WHERE pp.prospecto_id = $1
+                    ORDER BY pp.valor_linea DESC
+                `, [prospecto.id]);
+
+                return {
+                    ...prospecto,
+                    productos: productosResult.rows || []
+                };
+            })
+        );
+
+        res.json({
+            success: true,
+            campana: campanaResult.rows[0],
+            prospectos: prospectosConProductos,
+            total: prospectos.rowCount,
+            convertidos: prospectos.rows.filter(p => p.convertido_venta).length,
+            pendientes: prospectos.rows.filter(p => !p.convertido_venta).length
+        });
+
+    } catch (error) {
+        console.error('Error obteniendo prospectos de campaña:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error al obtener prospectos de campaña',
+            error: process.env.NODE_ENV === 'development' ? error.message : undefined
+        });
+    }
+};
+
+// ============================================
+// DASHBOARD DE CAMPAÑA - ANALYTICS COMPLETO
+// ============================================
+const getDashboardCampana = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const userId = req.user.id;
+        const userRole = req.user.rol?.toUpperCase();
+
+        // Validar permisos
+        const esManager = ['SUPER_ADMIN', 'GERENTE', 'ADMIN', 'JEFE_VENTAS'].includes(userRole);
+
+        // Verificar que la campaña existe y pertenece al usuario
+        let campanaQuery = 'SELECT * FROM campanas_asesor WHERE id = $1';
+        let campanaParams = [id];
+
+        if (!esManager) {
+            campanaQuery += ' AND usuario_id = $2';
+            campanaParams.push(userId);
+        }
+
+        const campanaResult = await query(campanaQuery, campanaParams);
+
+        if (campanaResult.rows.length === 0) {
+            return res.status(404).json({
+                success: false,
+                message: 'Campaña no encontrada o sin permisos'
+            });
+        }
+
+        const campana = campanaResult.rows[0];
+
+        // Métricas de prospectos
+        const metricsProspectos = await query(`
+            SELECT
+                COUNT(*) as total_prospectos,
+                COUNT(CASE WHEN convertido_venta = true THEN 1 END) as prospectos_convertidos,
+                COUNT(CASE WHEN convertido_venta = false THEN 1 END) as prospectos_pendientes,
+                ROUND(AVG(CASE WHEN convertido_venta = true
+                    THEN EXTRACT(DAY FROM (fecha_cierre - created_at))
+                END), 1) as dias_promedio_conversion,
+                ROUND(AVG(valor_estimado), 2) as valor_promedio_estimado
+            FROM prospectos
+            WHERE campana_id = $1
+        `, [id]);
+
+        // Métricas de ventas generadas
+        const metricsVentas = await query(`
+            SELECT
+                COUNT(v.id) as total_ventas,
+                COALESCE(SUM(v.valor_total), 0) as monto_total_ventas,
+                ROUND(AVG(v.valor_total), 2) as ticket_promedio,
+                COUNT(CASE WHEN v.fecha_venta >= ca.fecha_inicio
+                    AND (ca.fecha_fin IS NULL OR v.fecha_venta <= ca.fecha_fin)
+                    THEN 1 END) as ventas_durante_campana,
+                COUNT(CASE WHEN v.fecha_venta > COALESCE(ca.fecha_fin, CURRENT_DATE)
+                    THEN 1 END) as ventas_post_campana
+            FROM ventas v
+            INNER JOIN campanas_asesor ca ON v.campana_origen_id = ca.id
+            WHERE v.campana_origen_id = $1
+        `, [id]);
+
+        // Distribución por estado de prospecto
+        const distribucionEstados = await query(`
+            SELECT
+                estado,
+                COUNT(*) as cantidad,
+                ROUND((COUNT(*) * 100.0 / NULLIF((SELECT COUNT(*) FROM prospectos WHERE campana_id = $1), 0)), 1) as porcentaje
+            FROM prospectos
+            WHERE campana_id = $1
+            GROUP BY estado
+            ORDER BY cantidad DESC
+        `, [id]);
+
+        // Timeline de conversiones (por semana)
+        const timelineConversiones = await query(`
+            SELECT
+                DATE_TRUNC('week', fecha_cierre)::DATE as semana,
+                COUNT(*) as conversiones,
+                ROUND(AVG(valor_estimado), 2) as valor_promedio
+            FROM prospectos
+            WHERE campana_id = $1
+              AND convertido_venta = true
+              AND fecha_cierre IS NOT NULL
+            GROUP BY DATE_TRUNC('week', fecha_cierre)
+            ORDER BY semana
+        `, [id]);
+
+        const metrics = metricsProspectos.rows[0];
+        const ventasData = metricsVentas.rows[0];
+
+        // Calcular tasa de conversión
+        const tasaConversion = metrics.total_prospectos > 0
+            ? ((metrics.prospectos_convertidos / metrics.total_prospectos) * 100).toFixed(2)
+            : 0;
+
+        // Calcular ROI estimado (si se tienen datos de costo)
+        const roiEstimado = ventasData.monto_total_ventas > 0
+            ? ((ventasData.monto_total_ventas / (campana.costo_campana || 1)) * 100).toFixed(2)
+            : null;
+
+        res.json({
+            success: true,
+            campana: {
+                id: campana.id,
+                nombre: campana.nombre_campana,
+                linea_producto: campana.linea_producto,
+                estado: campana.estado,
+                fecha_inicio: campana.fecha_inicio,
+                fecha_fin: campana.fecha_fin,
+                dias_activa: campana.fecha_fin
+                    ? Math.ceil((new Date(campana.fecha_fin) - new Date(campana.fecha_inicio)) / (1000 * 60 * 60 * 24))
+                    : Math.ceil((new Date() - new Date(campana.fecha_inicio)) / (1000 * 60 * 60 * 24))
+            },
+            metricas_prospectos: {
+                total: parseInt(metrics.total_prospectos),
+                convertidos: parseInt(metrics.prospectos_convertidos),
+                pendientes: parseInt(metrics.prospectos_pendientes),
+                tasa_conversion: parseFloat(tasaConversion),
+                dias_promedio_conversion: parseFloat(metrics.dias_promedio_conversion) || null,
+                valor_promedio_estimado: parseFloat(metrics.valor_promedio_estimado) || 0
+            },
+            metricas_ventas: {
+                total_ventas: parseInt(ventasData.total_ventas),
+                monto_total: parseFloat(ventasData.monto_total_ventas),
+                ticket_promedio: parseFloat(ventasData.ticket_promedio) || 0,
+                ventas_durante_campana: parseInt(ventasData.ventas_durante_campana),
+                ventas_post_campana: parseInt(ventasData.ventas_post_campana),
+                roi_estimado: roiEstimado
+            },
+            distribucion_estados: distribucionEstados.rows,
+            timeline_conversiones: timelineConversiones.rows
+        });
+
+    } catch (error) {
+        console.error('Error obteniendo dashboard de campaña:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error al obtener dashboard de campaña',
+            error: process.env.NODE_ENV === 'development' ? error.message : undefined
+        });
+    }
+};
+
 module.exports = {
     getMisCampanas,
     getVistaEquipo,
     iniciarCampana,
     finalizarCampana,
     getCampanaActiva,
-    getMisCampanasActivas,  // ← Nuevo
-    agregarLineaCampana      // ← Nuevo
+    getMisCampanasActivas,
+    agregarLineaCampana,
+    getProspectosCampana,     // ← Nuevo
+    getDashboardCampana        // ← Nuevo
 };
