@@ -736,6 +736,25 @@ class ProspectosController {
                         tipo: producto.tipo || 'catalogo'
                     });
                 }
+
+                // ✅ DETECTAR CAMPAÑA AUTOMÁTICAMENTE (si hay productos)
+                try {
+                    const campanaResult = await query(
+                        'SELECT detectar_campana_prospecto($1, $2) as campana_id',
+                        [data.id, asesorId]
+                    );
+
+                    const campanaId = campanaResult.rows[0]?.campana_id;
+
+                    if (campanaId) {
+                        logger.info(`✅ Campaña ${campanaId} asignada automáticamente al prospecto ${data.codigo}`);
+                    } else {
+                        logger.info(`ℹ️  Prospecto ${data.codigo} sin campaña activa que coincida`);
+                    }
+                } catch (errorCampana) {
+                    logger.error(`⚠️ Error detectando campaña para prospecto ${data.codigo}:`, errorCampana);
+                    // No fallar la creación si falla la detección de campaña
+                }
             }
 
             logger.info(`Prospecto creado (Peru timezone): ${data.codigo} - ${data.nombre_cliente} - Seguimiento: ${fechaSeguimiento}`);
@@ -3611,6 +3630,277 @@ static async obtenerPorId(req, res) {
             res.status(500).json({
                 success: false,
                 error: 'Error al obtener métricas de reasignaciones: ' + error.message
+            });
+        }
+    }
+
+    /**
+     * GET /api/prospectos/traspasos/consolidado
+     * Vista consolidada de todos los prospectos con traspasos (tabla ejecutiva)
+     */
+    static async obtenerTraspasosConsolidado(req, res) {
+        try {
+            const {
+                periodo = 'mes_actual',
+                asesor_origen = null,
+                asesor_actual = null,
+                min_rebotes = 0,
+                busqueda = '',
+                limit = 100
+            } = req.query;
+
+            // Calcular rango de fechas según período
+            let fechaDesde, fechaHasta;
+            const hoy = new Date();
+
+            switch (periodo) {
+                case 'semana_actual':
+                    fechaDesde = new Date(hoy.getTime() - (7 * 24 * 60 * 60 * 1000));
+                    fechaHasta = hoy;
+                    break;
+                case 'mes_pasado':
+                    fechaDesde = new Date(hoy.getFullYear(), hoy.getMonth() - 1, 1);
+                    fechaHasta = new Date(hoy.getFullYear(), hoy.getMonth(), 0);
+                    break;
+                case 'trimestre_actual':
+                    const mesActual = hoy.getMonth();
+                    const inicioTrimestre = Math.floor(mesActual / 3) * 3;
+                    fechaDesde = new Date(hoy.getFullYear(), inicioTrimestre, 1);
+                    fechaHasta = hoy;
+                    break;
+                case 'año_actual':
+                    fechaDesde = new Date(hoy.getFullYear(), 0, 1);
+                    fechaHasta = hoy;
+                    break;
+                default: // mes_actual o específico (mes_2024-10)
+                    if (periodo.startsWith('mes_') && periodo.length > 11) {
+                        const [_, yearMonth] = periodo.split('_');
+                        const [year, month] = yearMonth.split('-');
+                        fechaDesde = new Date(parseInt(year), parseInt(month) - 1, 1);
+                        fechaHasta = new Date(parseInt(year), parseInt(month), 0);
+                    } else {
+                        fechaDesde = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
+                        fechaHasta = hoy;
+                    }
+            }
+
+            // === KPIs GLOBALES ===
+            // 1. Total prospectos traspasados VIGENTES (solo los que actualmente tienen traspasos)
+            const kpisResult = await query(`
+                SELECT
+                    COUNT(DISTINCT p.id) as total_prospectos_traspasados,
+                    COUNT(*) FILTER (WHERE p.motivo_traspaso = 'seguimiento_vencido') as total_vencidos,
+                    COUNT(*) FILTER (WHERE p.modo_libre = true) as total_modo_libre
+                FROM prospectos p
+                WHERE p.numero_reasignaciones > 0
+                  AND p.activo = true
+                  AND p.fecha_traspaso >= $1
+                  AND p.fecha_traspaso <= $2
+            `, [fechaDesde, fechaHasta]);
+
+            // 2. Prospectos actualmente en modo libre
+            const modoLibreResult = await query(`
+                SELECT
+                    COUNT(*) as en_modo_libre,
+                    COALESCE(SUM(valor_estimado), 0) as valor_modo_libre
+                FROM prospectos
+                WHERE modo_libre = true AND activo = true
+            `);
+
+            // 3. Valor en riesgo (2+ rebotes o modo libre)
+            const valorRiesgoResult = await query(`
+                SELECT
+                    COUNT(*) as prospectos_riesgo,
+                    COALESCE(SUM(valor_estimado), 0) as valor_total_riesgo
+                FROM prospectos
+                WHERE activo = true
+                AND (numero_reasignaciones >= 2 OR modo_libre = true)
+            `);
+
+            // 4. Balance por asesores (solo traspasos VIGENTES)
+            const balanceAsesoresResult = await query(`
+                SELECT
+                    u.id as asesor_id,
+                    u.nombre || ' ' || u.apellido as asesor_nombre,
+                    COUNT(DISTINCT p_perdidos.id) as perdidos,
+                    COUNT(DISTINCT p_ganados.id) as ganados
+                FROM usuarios u
+                -- Prospectos que PERDIÓ y siguen traspasados (ya no los tiene)
+                LEFT JOIN prospectos p_perdidos ON
+                    p_perdidos.asesor_anterior_id = u.id
+                    AND p_perdidos.numero_reasignaciones > 0
+                    AND p_perdidos.asesor_id != u.id
+                    AND p_perdidos.fecha_traspaso >= $1
+                    AND p_perdidos.fecha_traspaso <= $2
+                    AND p_perdidos.activo = true
+                -- Prospectos que GANÓ y aún conserva
+                LEFT JOIN prospectos p_ganados ON
+                    p_ganados.asesor_id = u.id
+                    AND p_ganados.numero_reasignaciones > 0
+                    AND p_ganados.fecha_traspaso >= $1
+                    AND p_ganados.fecha_traspaso <= $2
+                    AND p_ganados.activo = true
+                    AND p_ganados.asesor_anterior_id IS NOT NULL
+                WHERE u.activo = true  -- Solo usuarios activos
+                GROUP BY u.id, u.nombre, u.apellido
+                HAVING COUNT(DISTINCT p_perdidos.id) > 0 OR COUNT(DISTINCT p_ganados.id) > 0
+                ORDER BY COUNT(DISTINCT p_perdidos.id) DESC
+                LIMIT 5
+            `, [fechaDesde, fechaHasta]);
+
+            // === TABLA CONSOLIDADA ===
+            let whereConditions = ['p.numero_reasignaciones > 0', 'p.activo = true'];
+            let queryParams = [];
+            let paramIndex = 1;
+
+            // Filtro por asesor origen (primer asesor que tuvo el prospecto)
+            if (asesor_origen && asesor_origen !== 'todos') {
+                whereConditions.push(`EXISTS (
+                    SELECT 1 FROM notificaciones_reasignacion nr_origen
+                    WHERE nr_origen.prospecto_id = p.id
+                    AND nr_origen.asesor_perdio_id = $${paramIndex}
+                    AND nr_origen.tipo = 'perdida'
+                )`);
+                queryParams.push(parseInt(asesor_origen));
+                paramIndex++;
+            }
+
+            // Filtro por asesor actual
+            if (asesor_actual) {
+                if (asesor_actual === 'modo_libre') {
+                    whereConditions.push('p.modo_libre = true');
+                } else if (asesor_actual !== 'todos') {
+                    whereConditions.push(`p.asesor_id = $${paramIndex}`);
+                    queryParams.push(parseInt(asesor_actual));
+                    paramIndex++;
+                }
+            }
+
+            // Filtro por número mínimo de rebotes
+            if (min_rebotes && parseInt(min_rebotes) > 0) {
+                whereConditions.push(`p.numero_reasignaciones >= $${paramIndex}`);
+                queryParams.push(parseInt(min_rebotes));
+                paramIndex++;
+            }
+
+            // Filtro por búsqueda
+            if (busqueda && busqueda.trim() !== '') {
+                whereConditions.push(`(
+                    p.codigo ILIKE $${paramIndex} OR
+                    p.nombre_cliente ILIKE $${paramIndex} OR
+                    p.empresa ILIKE $${paramIndex}
+                )`);
+                queryParams.push(`%${busqueda.trim()}%`);
+                paramIndex++;
+            }
+
+            const whereClause = whereConditions.length > 0 ? 'WHERE ' + whereConditions.join(' AND ') : '';
+
+            const prospectosResult = await query(`
+                SELECT
+                    p.id as prospecto_id,
+                    p.codigo,
+                    p.nombre_cliente,
+                    p.apellido_cliente,
+                    p.empresa,
+                    p.valor_estimado,
+                    p.probabilidad_cierre,
+                    p.numero_reasignaciones as rebotes,
+                    p.modo_libre,
+                    p.asesor_id as asesor_actual_id,
+                    p.asesor_nombre as asesor_actual,
+                    p.estado,
+                    p.created_at,
+
+                    -- Historial completo de traspasos como JSON array
+                    COALESCE(
+                        (SELECT json_agg(
+                            json_build_object(
+                                'id', nr.id,
+                                'fecha', nr.created_at,
+                                'tipo', nr.tipo,
+                                'motivo', nr.motivo,
+                                'asesor_perdio_id', nr.asesor_perdio_id,
+                                'asesor_perdio_nombre', u_perdio.nombre || ' ' || u_perdio.apellido,
+                                'asesor_gano_id', nr.asesor_gano_id,
+                                'asesor_gano_nombre', u_gano.nombre || ' ' || u_gano.apellido
+                            ) ORDER BY nr.created_at ASC
+                        )
+                        FROM notificaciones_reasignacion nr
+                        LEFT JOIN usuarios u_perdio ON nr.asesor_perdio_id = u_perdio.id
+                        LEFT JOIN usuarios u_gano ON nr.asesor_gano_id = u_gano.id
+                        WHERE nr.prospecto_id = p.id
+                        ),
+                        '[]'::json
+                    ) as historial_traspasos,
+
+                    -- Fecha del primer traspaso
+                    (SELECT MIN(created_at)
+                     FROM notificaciones_reasignacion
+                     WHERE prospecto_id = p.id) as fecha_primer_traspaso
+
+                FROM prospectos p
+                ${whereClause}
+                ORDER BY p.numero_reasignaciones DESC, p.valor_estimado DESC
+                LIMIT $${paramIndex}
+            `, [...queryParams, parseInt(limit)]);
+
+            // Formatear datos
+            const prospectos = prospectosResult.rows.map(p => ({
+                ...p,
+                valor_estimado: parseFloat(p.valor_estimado || 0),
+                probabilidad_cierre: parseInt(p.probabilidad_cierre || 50),
+                historial_traspasos: Array.isArray(p.historial_traspasos) ? p.historial_traspasos : [],
+                dias_en_transito: p.fecha_primer_traspaso
+                    ? Math.floor((new Date() - new Date(p.fecha_primer_traspaso)) / (1000 * 60 * 60 * 24))
+                    : 0
+            }));
+
+            const kpis = kpisResult.rows[0];
+            const modoLibre = modoLibreResult.rows[0];
+            const valorRiesgo = valorRiesgoResult.rows[0];
+            const balanceAsesores = balanceAsesoresResult.rows.map(a => ({
+                ...a,
+                perdidos: parseInt(a.perdidos),
+                ganados: parseInt(a.ganados),
+                neto: parseInt(a.ganados) - parseInt(a.perdidos)
+            }));
+
+            res.json({
+                success: true,
+                data: {
+                    // KPIs
+                    kpis: {
+                        total_prospectos_traspasados: parseInt(kpis.total_prospectos_traspasados),
+                        en_modo_libre: parseInt(modoLibre.en_modo_libre),
+                        valor_modo_libre: parseFloat(modoLibre.valor_modo_libre),
+                        prospectos_riesgo: parseInt(valorRiesgo.prospectos_riesgo),
+                        valor_total_riesgo: parseFloat(valorRiesgo.valor_total_riesgo),
+                        distribucion_motivo: {
+                            vencidos: parseInt(kpis.total_vencidos),
+                            modo_libre: parseInt(kpis.total_modo_libre)
+                        },
+                        balance_asesores: balanceAsesores
+                    },
+
+                    // Período
+                    periodo: {
+                        tipo: periodo,
+                        desde: fechaDesde,
+                        hasta: fechaHasta
+                    },
+
+                    // Tabla
+                    prospectos: prospectos,
+                    total_registros: prospectos.length
+                }
+            });
+
+        } catch (error) {
+            logger.error('Error en obtenerTraspasosConsolidado:', error);
+            res.status(500).json({
+                success: false,
+                error: 'Error al obtener traspasos consolidados: ' + error.message
             });
         }
     }

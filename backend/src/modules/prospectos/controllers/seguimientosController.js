@@ -644,8 +644,14 @@ class SeguimientosController {
                         continue;
                     }
 
-                    // Verificar si el seguimiento lleva más de 18 horas vencido
-                    const horasVencidas = (new Date() - new Date(seguimiento.fecha_limite)) / (1000 * 60 * 60);
+                    // ✅ Verificar si han pasado 2 DÍAS LABORALES desde el vencimiento
+                    const fechaLimiteVencimiento = new Date(seguimiento.fecha_limite);
+                    const fechaLimite2DiasLaborales = calcular2DiasLaborales(fechaLimiteVencimiento);
+                    const ahora_date = new Date();
+                    const haPasado2DiasLaborales = ahora_date >= fechaLimite2DiasLaborales;
+
+                    // Calcular horas vencidas solo para logging
+                    const horasVencidas = (ahora_date - fechaLimiteVencimiento) / (1000 * 60 * 60);
 
                     // ✅ FIX: Marcar seguimiento como completado automáticamente al procesar
                     // Esto previene que se vuelva a procesar en la siguiente ejecución del cron
@@ -658,8 +664,8 @@ class SeguimientosController {
 
                     // 🔔 NOTIFICACIÓN: seguimiento_vencido
                     try {
-                        const tipoNotificacion = horasVencidas < 6 ? 'seguimiento_urgente' :
-                                               horasVencidas >= 18 ? 'seguimiento_critico' : 'seguimiento_vencido';
+                        const tipoNotificacion = !haPasado2DiasLaborales ? 'seguimiento_urgente' :
+                                               haPasado2DiasLaborales ? 'seguimiento_critico' : 'seguimiento_vencido';
 
                         await NotificacionesController.crearNotificaciones({
                             tipo: tipoNotificacion,
@@ -680,18 +686,20 @@ class SeguimientosController {
                         logger.error('⚠️ Error creando notificación de seguimiento vencido:', errorNotif);
                     }
 
-                    // Si lleva más de 18 horas vencido, cambiar prospecto a "Perdido"
-                    if (horasVencidas >= 18) {
+                    // Si han pasado 2 días laborales completos desde el vencimiento, cambiar prospecto a "Perdido"
+                    if (haPasado2DiasLaborales) {
                         await query(`
                             UPDATE prospectos
                             SET estado = $1, tipo_cierre = $2, motivo_perdida = $3, fecha_cierre = $4
                             WHERE id = $5 AND estado NOT IN ('Cerrado', 'Perdido')
-                        `, ['Perdido', 'automatico', 'Sin respuesta - seguimiento vencido más de 18 horas', new Date(), seguimiento.prospecto_id]);
+                        `, ['Perdido', 'automatico', 'Sin respuesta - pasaron 2 días laborales desde vencimiento', new Date(), seguimiento.prospecto_id]);
 
-                        logger.info(`🔄 Prospecto ${seguimiento.codigo} cambiado a PERDIDO (vencido ${Math.round(horasVencidas)}h)`, {
+                        logger.info(`🔄 Prospecto ${seguimiento.codigo} cambiado a PERDIDO (pasaron 2 días laborales desde vencimiento, ${Math.round(horasVencidas)}h corridas)`, {
                             service: 'seguimientos-avanzado',
                             prospecto_id: seguimiento.prospecto_id,
-                            horas_vencidas: Math.round(horasVencidas)
+                            horas_corridas: Math.round(horasVencidas),
+                            fecha_limite_original: fechaLimiteVencimiento.toISOString(),
+                            fecha_limite_2_dias_laborales: fechaLimite2DiasLaborales.toISOString()
                         });
 
                         resultado.procesados++;
@@ -764,7 +772,38 @@ class SeguimientosController {
             }
 
             const prospecto = prospectoResult.rows[0];
-            
+
+            // ============================================
+            // DESVINCULACIÓN DE CAMPAÑA (si está asignado)
+            // ============================================
+            // Al traspasar un prospecto, se desvincula de la campaña original
+            // para mantener métricas limpias de efectividad del asesor
+            if (prospecto.campana_id && prospecto.campana_id !== null) {
+                try {
+                    logger.info(`🔗 Desvinculando prospecto ${prospecto.codigo} de campaña ${prospecto.campana_id} antes de traspaso`);
+
+                    // Registrar desvinculación en historial usando función SQL
+                    await query(
+                        `SELECT registrar_desvinculacion_campana($1, $2) as desvinculado`,
+                        [prospecto_id, `Traspaso por ${motivo}`]
+                    );
+
+                    // Limpiar campos de campaña en el prospecto
+                    await query(`
+                        UPDATE prospectos
+                        SET campana_id = NULL,
+                            campana_linea_detectada = NULL,
+                            campana_valor_producto = NULL
+                        WHERE id = $1
+                    `, [prospecto_id]);
+
+                    logger.info(`✅ Prospecto ${prospecto.codigo} desvinculado exitosamente de campaña`);
+                } catch (errorCampana) {
+                    logger.error('⚠️ Error desvinculando campaña (continuando con traspaso):', errorCampana);
+                    // No detener el traspaso si falla la desvinculación
+                }
+            }
+
             // ============================================
             // SISTEMA DE REASIGNACIÓN INTELIGENTE v2.0
             // ============================================
@@ -1434,7 +1473,7 @@ class SeguimientosController {
                 data: {
                     seguimientos_vencidos: seguimientosVencidos,
                     horario_laboral: 'L-V 8am-6pm, Sáb 9am-12pm',
-                    tiempo_vencimiento: '18 horas laborales',
+                    tiempo_vencimiento: '2 días laborales (L-V: 10h/día, Sáb: 3h)',
                     conversion_automatica: true,
                     resultados_conversion: RESULTADOS_QUE_CONVIERTEN,
                     funcionalidades: [

@@ -199,7 +199,7 @@ router.get('/seguimientos/info', (req, res) => {
                 'sabados': '9:00 AM - 12:00 PM',
                 'domingos': 'Cerrado'
             },
-            tiempo_vencimiento: '18 horas laborales',
+            tiempo_vencimiento: '2 días laborales (L-V: 10h/día, Sáb: 3h)',
             flujo_reasignacion: {
                 '1er_vencimiento': 'Reasignación automática a otro asesor',
                 '2do_vencimiento': 'Segunda reasignación automática',

@@ -175,33 +175,38 @@ const convertirProspectoAVenta = async (config) => {
                 activo: true
             };
 
+            // ✅ HEREDAR CAMPAÑA DEL PROSPECTO (si existe)
+            const campanaOrigenId = prospecto.campana_id || null;
+
             const insertVentaQuery = `
                 INSERT INTO ventas (
-                    codigo, prospecto_id, asesor_id, nombre_cliente, apellido_cliente, 
+                    codigo, prospecto_id, asesor_id, nombre_cliente, apellido_cliente,
                     cliente_empresa, cliente_email, cliente_telefono, valor_total, valor_final,
                     descuento_porcentaje, descuento_monto, moneda, canal_origen, canal_contacto,
                     fuente_conversion, seguimiento_id, estado_detallado, probabilidad_cierre,
                     fecha_creacion, fecha_venta, created_at, updated_at, created_by, updated_by,
-                    ciudad, departamento, distrito, notas_internas, tipo_venta, es_venta_presencial, activo
+                    ciudad, departamento, distrito, notas_internas, tipo_venta, es_venta_presencial, activo,
+                    campana_origen_id
                 ) VALUES (
                     $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
                     $11, $12, $13, $14, $15, $16, $17, $18, $19, $20,
-                    $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32
+                    $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33
                 ) RETURNING *
             `;
 
             const ventaValues = [
-                ventaData.codigo, ventaData.prospecto_id, ventaData.asesor_id, 
+                ventaData.codigo, ventaData.prospecto_id, ventaData.asesor_id,
                 ventaData.nombre_cliente, ventaData.apellido_cliente, ventaData.cliente_empresa,
                 ventaData.cliente_email, ventaData.cliente_telefono, ventaData.valor_total,
                 ventaData.valor_final, ventaData.descuento_porcentaje, ventaData.descuento_monto,
                 ventaData.moneda, ventaData.canal_origen, ventaData.canal_contacto,
                 ventaData.fuente_conversion, ventaData.seguimiento_id, ventaData.estado_detallado,
                 ventaData.probabilidad_cierre, ventaData.fecha_creacion, ventaData.fecha_venta,
-                ventaData.created_at, ventaData.updated_at, ventaData.created_by, 
-                ventaData.updated_by, ventaData.ciudad, ventaData.departamento, 
-                ventaData.distrito, ventaData.notas_internas, ventaData.tipo_venta, 
-                ventaData.es_venta_presencial, ventaData.activo
+                ventaData.created_at, ventaData.updated_at, ventaData.created_by,
+                ventaData.updated_by, ventaData.ciudad, ventaData.departamento,
+                ventaData.distrito, ventaData.notas_internas, ventaData.tipo_venta,
+                ventaData.es_venta_presencial, ventaData.activo,
+                campanaOrigenId  // ✅ Heredar campaña
             ];
 
             const nuevaVentaResult = await query(insertVentaQuery, ventaValues);

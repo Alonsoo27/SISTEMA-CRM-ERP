@@ -86,11 +86,18 @@ const obtenerDiaSemanaLima = () => {
 /**
  * Validar horario de check-in empresarial (LIMA)
  * Lunes-Viernes: 8:00 AM - 12:00 PM
- * Sábado: 9:15 AM - 12:10 PM
+ * Sábado: 9:00 AM - 10:00 AM
  * Domingo: No permitido
+ * @param {Object} user - Usuario actual (opcional, para bypass por rol)
  * @returns {boolean} - true si está en horario válido
  */
-const validarHorarioCheckin = () => {
+const validarHorarioCheckin = (user = null) => {
+    // Permitir bypass para SUPER_ADMIN (sin restricción de horarios)
+    if (user && user.rol?.toUpperCase() === 'SUPER_ADMIN') {
+        console.log('🔓 SUPER_ADMIN: Schedule validation bypassed for check-in');
+        return true;
+    }
+
     // Permitir bypass en desarrollo si está configurado
     if (process.env.NODE_ENV === 'development' && process.env.BYPASS_SCHEDULE_VALIDATION === 'true') {
         console.log('⚠️  DEVELOPMENT: Schedule validation bypassed for check-in');
@@ -107,10 +114,10 @@ const validarHorarioCheckin = () => {
         return false;
     }
 
-    // Sábado: 9:15 AM - 10:00 AM
+    // Sábado: 9:00 AM - 10:00 AM
     if (diaSemana === 6) {
-        // Después de 9:15 AM
-        if (hora > 9 || (hora === 9 && minutos >= 15)) {
+        // Después de 9:00 AM
+        if (hora >= 9) {
             // Antes de 10:00 AM
             if (hora < 10) {
                 return true;
@@ -128,9 +135,16 @@ const validarHorarioCheckin = () => {
  * Lunes-Viernes: 5:00 PM - 6:10 PM
  * Sábado: 11:00 AM - 12:00 PM (mediodía)
  * Domingo: No permitido
+ * @param {Object} user - Usuario actual (opcional, para bypass por rol)
  * @returns {boolean} - true si está en horario válido
  */
-const validarHorarioCheckout = () => {
+const validarHorarioCheckout = (user = null) => {
+    // Permitir bypass para SUPER_ADMIN (sin restricción de horarios)
+    if (user && user.rol?.toUpperCase() === 'SUPER_ADMIN') {
+        console.log('🔓 SUPER_ADMIN: Schedule validation bypassed for check-out');
+        return true;
+    }
+
     // Permitir bypass en desarrollo si está configurado
     if (process.env.NODE_ENV === 'development' && process.env.BYPASS_SCHEDULE_VALIDATION === 'true') {
         console.log('⚠️  DEVELOPMENT: Schedule validation bypassed for check-out');
@@ -182,7 +196,7 @@ const obtenerHorariosPermitidos = () => {
     // Sábado
     if (diaSemana === 6) {
         return {
-            check_in: '9:15 AM - 10:00 AM',
+            check_in: '9:00 AM - 10:00 AM',
             check_out: '11:00 AM - 12:00 PM'
         };
     }
@@ -343,9 +357,9 @@ exports.getEstadoHoy = async (req, res) => {
         const checkInRealizado = !!(actividad?.check_in_time);
         const checkOutRealizado = !!(actividad?.check_out_time);
         
-        // ✅ CORRECCIÓN 4: Usar funciones con hora Lima
-        const puedeCheckIn = !checkInRealizado && validarHorarioCheckin();
-        const puedeCheckOut = checkInRealizado && !checkOutRealizado && validarHorarioCheckout();
+        // ✅ CORRECCIÓN 4: Usar funciones con hora Lima (con bypass para SUPER_ADMIN)
+        const puedeCheckIn = !checkInRealizado && validarHorarioCheckin(req.user);
+        const puedeCheckOut = checkInRealizado && !checkOutRealizado && validarHorarioCheckout(req.user);
 
         // ✅ CORRECCIÓN 5: Determinar estado con lógica de reset
         let estadoActual = 'sin_iniciar';
@@ -491,9 +505,9 @@ exports.checkIn = async (req, res) => {
         // Validaciones de negocio
         const validaciones = [];
 
-        // ✅ CORRECCIÓN: Validar horario usando funciones Lima
+        // ✅ CORRECCIÓN: Validar horario usando funciones Lima (con bypass para SUPER_ADMIN)
         const horariosPermitidos = obtenerHorariosPermitidos();
-        if (!validarHorarioCheckin()) {
+        if (!validarHorarioCheckin(req.user)) {
             validaciones.push(`Check-in fuera de horario. Horario permitido: ${horariosPermitidos.check_in}`);
         }
 
@@ -720,9 +734,9 @@ exports.checkOut = async (req, res) => {
         // Validaciones de negocio
         const validaciones = [];
 
-        // ✅ CORRECCIÓN: Validar horario usando funciones Lima
+        // ✅ CORRECCIÓN: Validar horario usando funciones Lima (con bypass para SUPER_ADMIN)
         const horariosPermitidos = obtenerHorariosPermitidos();
-        if (!validarHorarioCheckout()) {
+        if (!validarHorarioCheckout(req.user)) {
             validaciones.push(`Check-out fuera de horario. Horario permitido: ${horariosPermitidos.check_out}`);
         }
 
@@ -2048,7 +2062,7 @@ if (process.env.NODE_ENV === 'development' && process.env.BYPASS_SCHEDULE_VALIDA
 } else {
     console.log('🕐 Business hours enforced (Lima time):');
     console.log('   Lunes-Viernes: Check-in 8AM-12PM, Check-out 5PM-6:10PM');
-    console.log('   Sábado: Check-in 9:15AM-10AM, Check-out 11AM-12PM');
+    console.log('   Sábado: Check-in 9AM-10AM, Check-out 11AM-12PM');
     console.log('   Domingo: No disponible');
 }
 

@@ -286,6 +286,7 @@ app.use('/api/prospectos', authenticateToken, require('./modules/prospectos/rout
 // Rutas de ventas (nuevo módulo - protegidas)
 app.use('/api/ventas', authenticateToken, require('./modules/ventas/routes/ventasRoutes'));
 app.use('/api/actividad', authenticateToken, require('./modules/ventas/routes/actividadRoutes'));
+app.use('/api/campanas', authenticateToken, require('./modules/ventas/routes/campanasAsesorRoutes'));
 // ✅ RUTAS DE NOTIFICACIONES (sistema superior unificado - protegidas con rate limiting específico)
 app.use('/api/notificaciones', notificacionesRateLimit, authenticateToken, require('./modules/notificaciones/routes/notificacionesRoutes'));
 // ✅ RUTAS DE SOPORTE TÉCNICO (protegidas)

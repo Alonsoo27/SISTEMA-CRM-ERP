@@ -804,6 +804,12 @@ router.get('/reasignaciones/metricas',
     ProspectosController.obtenerMetricasReasignaciones
 );
 
+// 🔄 Vista consolidada de traspasos (tabla ejecutiva completa)
+router.get('/traspasos/consolidado',
+    requireRole(GRUPOS_ROLES.JEFES_Y_EJECUTIVOS),
+    ProspectosController.obtenerTraspasosConsolidado
+);
+
 // 📉 Prospectos que un asesor perdió por reasignación
 router.get('/mis-perdidos/:asesor_id',
     requireRole(GRUPOS_ROLES.VENTAS_COMPLETO),

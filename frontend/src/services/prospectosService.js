@@ -637,6 +637,27 @@ class ProspectosService {
     });
     return await this.handleResponse(response);
   }
+
+  /**
+   * 🔄 Obtener vista consolidada de traspasos (tabla ejecutiva)
+   * @param {Object} filtros - Filtros de búsqueda
+   * @returns {Promise<Object>} Vista consolidada con KPIs y tabla de prospectos
+   */
+  async obtenerTraspasosConsolidado(filtros = {}) {
+    const queryParams = new URLSearchParams();
+
+    if (filtros.periodo) queryParams.append('periodo', filtros.periodo);
+    if (filtros.asesor_origen) queryParams.append('asesor_origen', filtros.asesor_origen);
+    if (filtros.asesor_actual) queryParams.append('asesor_actual', filtros.asesor_actual);
+    if (filtros.min_rebotes) queryParams.append('min_rebotes', filtros.min_rebotes);
+    if (filtros.busqueda) queryParams.append('busqueda', filtros.busqueda);
+    if (filtros.limit) queryParams.append('limit', filtros.limit);
+
+    const response = await fetch(`${API_BASE_URL}/traspasos/consolidado?${queryParams.toString()}`, {
+      headers: this.getAuthHeaders()
+    });
+    return await this.handleResponse(response);
+  }
 }
 
 // Crear instancia singleton

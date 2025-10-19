@@ -17,6 +17,7 @@ import Analytics from '../components/prospectos/Analytics/Analytics';
 import SeguimientosDashboardEnterprise from '../components/prospectos/SeguimientosDashboard/SeguimientosDashboardEnterprise';
 import BalanzaSeguimientos from '../components/prospectos/BalanzaSeguimientos/BalanzaSeguimientos';
 import ProspectosDisponibles from '../components/prospectos/ProspectosDisponibles/ProspectosDisponibles';
+import TraspasosDashboard from '../components/prospectos/TraspasosDashboard/TraspasosDashboard';
 
 import prospectosService from '../services/prospectosService';
 import { useModulePermissions } from '../hooks/useModulePermissions';
@@ -111,7 +112,7 @@ const ProspectosPage = () => {
     const action = searchParams.get('action');
 
     // 1. PRIMERO cambiar la vista si se especifica
-    if (view && ['kanban', 'lista', 'disponibles', 'seguimientos', 'analytics'].includes(view)) {
+    if (view && ['kanban', 'lista', 'disponibles', 'seguimientos', 'traspasos', 'analytics'].includes(view)) {
       console.log('📍 Cambiando a vista:', view);
       setVistaActual(view);
     }
@@ -256,6 +257,13 @@ const ProspectosPage = () => {
       nombre: 'Seguimientos',
       icono: Bell,
       descripcion: 'Gestión de seguimientos y alertas',
+      tieneRefreshAuto: true
+    },
+    {
+      id: 'traspasos',
+      nombre: 'Traspasos',
+      icono: RefreshCw,
+      descripcion: 'Historial y trazabilidad de traspasos',
       tieneRefreshAuto: true
     },
     {
@@ -518,6 +526,15 @@ const ProspectosPage = () => {
           <div className="h-full p-6 overflow-y-auto">
             <Analytics
               asesorId={filtros.asesor_id || usuarioActual?.id}
+            />
+          </div>
+        )}
+
+        {vistaActual === 'traspasos' && (
+          <div className="h-full p-6 overflow-y-auto">
+            <TraspasosDashboard
+              usuarioActual={usuarioActual}
+              refreshTrigger={refreshTrigger}
             />
           </div>
         )}
