@@ -8,6 +8,7 @@ import {
 import prospectosService from '../../../services/prospectosService';
 import PeriodSelectorAdvanced from '../../ventas/PeriodSelector/PeriodSelectorAdvanced';
 import ProspectoDetailsView from '../ProspectoDetailsView';
+import { API_CONFIG } from '../../../config/apiConfig';
 
 const TraspasosDashboard = ({ usuarioActual, refreshTrigger = 0 }) => {
   const [datos, setDatos] = useState(null);
@@ -40,7 +41,7 @@ const TraspasosDashboard = ({ usuarioActual, refreshTrigger = 0 }) => {
   useEffect(() => {
     const cargarAsesores = async () => {
       try {
-        const response = await fetch('/api/usuarios/vendedores', {
+        const response = await fetch(`${API_CONFIG.BASE_URL}/api/usuarios/vendedores`, {
           headers: {
             'Authorization': `Bearer ${localStorage.getItem('token')}`
           }
