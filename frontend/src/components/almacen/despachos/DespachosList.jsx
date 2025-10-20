@@ -20,7 +20,10 @@ import {
     FileText,
     Send,
     X,
-    Settings
+    Settings,
+    Check,
+    UserCheck,
+    History
 } from 'lucide-react';
 import almacenService from "../../../services/almacenService";
 import KardexModal from '../kardex/KardexModal';
@@ -37,6 +40,7 @@ const DespachosList = () => {
         busqueda: '',
         estado: '',
         almacen_id: '',
+        vendedor_id: '',
         fecha_desde: '',
         fecha_hasta: '',
         orden: 'fecha_programada',
@@ -70,6 +74,14 @@ const DespachosList = () => {
     const [nuevoEstado, setNuevoEstado] = useState('');
     const [observaciones, setObservaciones] = useState('');
     const [actualizandoEstado, setActualizandoEstado] = useState(false);
+
+    // Estados para multiselección
+    const [seleccionados, setSeleccionados] = useState([]);
+    const [showBulkActions, setShowBulkActions] = useState(false);
+    const [procesandoBulk, setProcesandoBulk] = useState(false);
+
+    // Estados para vendedores
+    const [vendedores, setVendedores] = useState([]);
 
     const estadosDespacho = [
         { value: 'PENDIENTE', label: 'Pendiente', color: 'yellow', icono: Clock, descripcion: 'Esperando preparación' },
@@ -129,6 +141,7 @@ const DespachosList = () => {
         cargarDatos();
         cargarAlmacenes();
         cargarMetricas();
+        cargarVendedores();
     }, []);
 
     useEffect(() => {
@@ -216,6 +229,7 @@ const DespachosList = () => {
             busqueda: '',
             estado: '',
             almacen_id: '',
+            vendedor_id: '',
             fecha_desde: '',
             fecha_hasta: '',
             orden: 'fecha_programada',
@@ -295,6 +309,60 @@ const DespachosList = () => {
         return estadosDespacho.find(e => e.value === estado) || estadosDespacho[0];
     };
 
+    // ===== FUNCIONES DE MULTISELECCIÓN =====
+    const toggleSeleccion = (despachoId) => {
+        setSeleccionados(prev => {
+            if (prev.includes(despachoId)) {
+                return prev.filter(id => id !== despachoId);
+            } else {
+                return [...prev, despachoId];
+            }
+        });
+    };
+
+    const toggleSeleccionTodos = () => {
+        if (seleccionados.length === despachos.length) {
+            setSeleccionados([]);
+        } else {
+            setSeleccionados(despachos.map(d => d.despacho_id || d.id));
+        }
+    };
+
+    const limpiarSeleccion = () => {
+        setSeleccionados([]);
+        setShowBulkActions(false);
+    };
+
+    const actualizarEstadosMultiples = async (estado) => {
+        if (seleccionados.length === 0) return;
+
+        try {
+            setProcesandoBulk(true);
+            console.log('🔍 IDs seleccionados:', seleccionados);
+            console.log('🔍 Tipo de IDs:', typeof seleccionados[0]);
+            const resultado = await almacenService.actualizarEstadoDespachosMultiples(
+                seleccionados,
+                estado,
+                observaciones || null
+            );
+
+            if (resultado.success) {
+                await cargarDespachos();
+                await cargarMetricas();
+                limpiarSeleccion();
+                setObservaciones('');
+                setError(null);
+            } else {
+                setError(resultado.error || 'Error al actualizar estados múltiples');
+            }
+        } catch (err) {
+            setError(err.response?.data?.error || err.message || 'Error al actualizar estados múltiples');
+            console.error('Error actualizando estados múltiples:', err);
+        } finally {
+            setProcesandoBulk(false);
+        }
+    };
+
     // Función para cargar almacenes
     const cargarAlmacenes = async () => {
         try {
@@ -307,30 +375,46 @@ const DespachosList = () => {
         }
     };
 
-    // Función para cargar métricas del dashboard
+    // Función para cargar métricas del dashboard (OPTIMIZADO)
     const cargarMetricas = async () => {
         try {
             setLoadingMetricas(true);
-            // Aquí usaríamos la vista vista_despachos_dashboard
-            // Por ahora calculamos básico desde los despachos cargados
-            const response = await almacenService.obtenerDespachos({ limit: 1000 });
+            const response = await almacenService.obtenerMetricasDespachosOptimizado();
             if (response.success) {
-                const data = response.data || [];
-                const metricas = {
-                    pendientes: data.filter(d => d.estado === 'PENDIENTE').length,
-                    preparando: data.filter(d => d.estado === 'PREPARANDO').length,
-                    listos: data.filter(d => d.estado === 'LISTO').length,
-                    enviados: data.filter(d => d.estado === 'ENVIADO').length,
-                    entregados: data.filter(d => d.estado === 'ENTREGADO').length,
-                    cancelados: data.filter(d => d.estado === 'CANCELADO').length,
-                    total: data.length
-                };
-                setMetricas(metricas);
+                // Mapear nombres de la vista a lo que espera el frontend
+                const data = response.data || {};
+                setMetricas({
+                    pendientes: data.total_pendientes || 0,
+                    preparando: data.total_preparando || 0,
+                    listos: data.total_listos || 0,
+                    enviados: data.total_enviados || 0,
+                    entregados: data.total_entregados || 0,
+                    cancelados: data.total_cancelados || 0,
+                    total: data.total_despachos || 0
+                });
             }
         } catch (error) {
             console.error('Error cargando métricas:', error);
         } finally {
             setLoadingMetricas(false);
+        }
+    };
+
+    // Función para cargar vendedores
+    const cargarVendedores = async () => {
+        try {
+            // Asumiendo que existe un endpoint para obtener vendedores
+            const response = await fetch(`${almacenService.apiClient.defaults.baseURL}/usuarios/vendedores`, {
+                headers: {
+                    'Authorization': `Bearer ${almacenService.getAuthToken()}`
+                }
+            });
+            if (response.ok) {
+                const data = await response.json();
+                setVendedores(data.data || data || []);
+            }
+        } catch (error) {
+            console.error('Error cargando vendedores:', error);
         }
     };
 
@@ -944,7 +1028,7 @@ const DespachosList = () => {
                                 <Filter className="h-4 w-4 mr-2" />
                                 Filtros
                             </button>
-                            {(filtros.busqueda || filtros.estado || filtros.almacen_id || filtros.fecha_desde || filtros.fecha_hasta) && (
+                            {(filtros.busqueda || filtros.estado || filtros.almacen_id || filtros.vendedor_id || filtros.fecha_desde || filtros.fecha_hasta) && (
                                 <button
                                     onClick={limpiarFiltros}
                                     className="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors"
@@ -957,7 +1041,7 @@ const DespachosList = () => {
                     </div>
 
                     {showFiltros && (
-                        <div className="mt-4 grid grid-cols-1 md:grid-cols-4 gap-4">
+                        <div className="mt-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
                             <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-1">
                                     Estado
@@ -971,6 +1055,23 @@ const DespachosList = () => {
                                     {estadosDespacho.map(estado => (
                                         <option key={estado.value} value={estado.value}>
                                             {estado.label}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                    Vendedor
+                                </label>
+                                <select
+                                    value={filtros.vendedor_id}
+                                    onChange={(e) => handleFiltroChange('vendedor_id', e.target.value)}
+                                    className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                >
+                                    <option value="">Todos los vendedores</option>
+                                    {vendedores.map(vendedor => (
+                                        <option key={vendedor.id} value={vendedor.id}>
+                                            {vendedor.nombre} {vendedor.apellido}
                                         </option>
                                     ))}
                                 </select>
@@ -1018,11 +1119,55 @@ const DespachosList = () => {
                     )}
                 </div>
 
+                {/* Barra de acciones bulk */}
+                {seleccionados.length > 0 && (
+                    <div className="px-6 py-3 bg-blue-50 border-t border-blue-200 flex items-center justify-between">
+                        <div className="flex items-center space-x-4">
+                            <span className="text-sm font-medium text-blue-900">
+                                {seleccionados.length} despacho{seleccionados.length > 1 ? 's' : ''} seleccionado{seleccionados.length > 1 ? 's' : ''}
+                            </span>
+                            <button
+                                onClick={limpiarSeleccion}
+                                className="text-sm text-blue-600 hover:text-blue-800 font-medium"
+                            >
+                                Limpiar selección
+                            </button>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                            {estadosDespacho.map(estado => (
+                                <button
+                                    key={estado.value}
+                                    onClick={() => actualizarEstadosMultiples(estado.value)}
+                                    disabled={procesandoBulk}
+                                    className={`inline-flex items-center px-3 py-1.5 text-xs font-medium rounded-md transition-colors
+                                        ${estado.color === 'yellow' ? 'bg-yellow-100 text-yellow-800 hover:bg-yellow-200' : ''}
+                                        ${estado.color === 'blue' ? 'bg-blue-100 text-blue-800 hover:bg-blue-200' : ''}
+                                        ${estado.color === 'purple' ? 'bg-purple-100 text-purple-800 hover:bg-purple-200' : ''}
+                                        ${estado.color === 'orange' ? 'bg-orange-100 text-orange-800 hover:bg-orange-200' : ''}
+                                        ${estado.color === 'green' ? 'bg-green-100 text-green-800 hover:bg-green-200' : ''}
+                                        ${estado.color === 'red' ? 'bg-red-100 text-red-800 hover:bg-red-200' : ''}
+                                        disabled:opacity-50 disabled:cursor-not-allowed`}
+                                >
+                                    {procesandoBulk ? 'Procesando...' : `→ ${estado.label}`}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
                 {/* Tabla */}
                 <div className="overflow-x-auto">
                     <table className="min-w-full divide-y divide-gray-200">
                         <thead className="bg-gray-50">
                             <tr>
+                                <th className="px-3 py-3 text-left">
+                                    <input
+                                        type="checkbox"
+                                        checked={despachos.length > 0 && seleccionados.length === despachos.length}
+                                        onChange={toggleSeleccionTodos}
+                                        className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded cursor-pointer"
+                                    />
+                                </th>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                                     Código
                                 </th>
@@ -1030,10 +1175,16 @@ const DespachosList = () => {
                                     Cliente
                                 </th>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    Vendedor
+                                </th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                                     Almacén
                                 </th>
                                 <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                    Fecha Programada
+                                    F. Solicitud
+                                </th>
+                                <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    F. Programada
                                 </th>
                                 <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
                                     Estado
@@ -1061,7 +1212,7 @@ const DespachosList = () => {
                                 ))
                             ) : error ? (
                                 <tr>
-                                    <td colSpan="7" className="px-6 py-12 text-center">
+                                    <td colSpan="10" className="px-6 py-12 text-center">
                                         <FileText className="h-12 w-12 text-red-300 mx-auto mb-4" />
                                         <p className="text-red-600 font-medium">{error}</p>
                                         <button
@@ -1074,7 +1225,7 @@ const DespachosList = () => {
                                 </tr>
                             ) : despachos.length === 0 ? (
                                 <tr>
-                                    <td colSpan="7" className="px-6 py-12 text-center">
+                                    <td colSpan="10" className="px-6 py-12 text-center">
                                         <Truck className="h-12 w-12 text-gray-300 mx-auto mb-4" />
                                         <p className="text-gray-500">No se encontraron despachos</p>
                                         <p className="text-gray-400 text-sm mt-2">
@@ -1086,33 +1237,66 @@ const DespachosList = () => {
                                     </td>
                                 </tr>
                             ) : (
-                                despachos.map((despacho) => (
-                                    <tr 
-                                        key={despacho.id} 
-                                        className={`hover:bg-gray-50 transition-colors ${esPrioridad(despacho) ? 'bg-red-50' : ''}`}
+                                despachos.map((despacho) => {
+                                    const despachoId = despacho.despacho_id || despacho.id;
+                                    const isSelected = seleccionados.includes(despachoId);
+
+                                    return (
+                                    <tr
+                                        key={despachoId}
+                                        className={`hover:bg-gray-50 transition-colors ${esPrioridad(despacho) ? 'bg-red-50' : ''} ${isSelected ? 'bg-blue-50' : ''}`}
                                     >
+                                        <td className="px-3 py-4">
+                                            <input
+                                                type="checkbox"
+                                                checked={isSelected}
+                                                onChange={() => toggleSeleccion(despachoId)}
+                                                className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded cursor-pointer"
+                                            />
+                                        </td>
                                         <td className="px-6 py-4 whitespace-nowrap">
                                             <div className="flex items-center">
                                                 {esPrioridad(despacho) && (
                                                     <AlertTriangle className="h-4 w-4 text-red-500 mr-2" title="Urgente - Vencido" />
                                                 )}
                                                 <span className="text-sm font-medium text-gray-900 font-mono">
-                                                    {despacho.codigo}
+                                                    {despacho.despacho_codigo || despacho.codigo}
                                                 </span>
                                             </div>
                                         </td>
                                         <td className="px-6 py-4 text-sm text-gray-900">
                                             <div>
                                                 <p className="font-medium">
-                                                    {despacho.nombre_cliente || 'Cliente'} {despacho.apellido_cliente ? despacho.apellido_cliente : ''}
+                                                    {despacho.cliente_nombre || despacho.nombre_cliente || 'Cliente'} {despacho.cliente_apellido || despacho.apellido_cliente || ''}
                                                 </p>
                                                 <p className="text-xs text-gray-500">
                                                     {despacho.cliente_telefono || '-'}
                                                 </p>
                                             </div>
                                         </td>
+                                        <td className="px-6 py-4 text-sm text-gray-900">
+                                            <div className="flex items-center">
+                                                <User className="h-4 w-4 mr-1 text-gray-400" />
+                                                <span className="text-sm">
+                                                    {despacho.vendedor_nombre || despacho.solicitado_por_nombre || '-'}
+                                                </span>
+                                            </div>
+                                        </td>
                                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                                             {despacho.almacen_nombre || '-'}
+                                        </td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 text-center">
+                                            <div className="flex flex-col items-center">
+                                                <div className="flex items-center">
+                                                    <Clock className="h-3 w-3 mr-1 text-gray-400" />
+                                                    {formatearFecha(despacho.fecha_solicitud)}
+                                                </div>
+                                                {despacho.fecha_solicitud && (
+                                                    <span className="text-xs text-gray-400">
+                                                        {formatearFechaHora(despacho.fecha_solicitud).split(' ')[1]}
+                                                    </span>
+                                                )}
+                                            </div>
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-center">
                                             <div className="flex items-center justify-center">
@@ -1124,7 +1308,7 @@ const DespachosList = () => {
                                             <EstadoDespachoBadge estado={despacho.estado} />
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right font-medium">
-                                            {formatearMoneda(despacho.valor_final)}
+                                            {formatearMoneda(despacho.venta_total || despacho.valor_final)}
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                                             <div className="flex items-center justify-end space-x-2">
@@ -1147,7 +1331,8 @@ const DespachosList = () => {
                                             </div>
                                         </td>
                                     </tr>
-                                ))
+                                    );
+                                })
                             )}
                         </tbody>
                     </table>

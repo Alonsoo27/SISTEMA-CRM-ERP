@@ -1259,6 +1259,161 @@ class AlmacenService {
       };
     }
   }
+
+  // ===============================
+  // BULK ACTIONS - DESPACHOS
+  // ===============================
+
+  async actualizarEstadoDespachosMultiples(despacho_ids, nuevo_estado, observaciones = null) {
+    try {
+      const response = await this.apiClient.put('/almacen/despachos/bulk/estado', {
+        despacho_ids,
+        nuevo_estado,
+        observaciones
+      });
+
+      return {
+        success: true,
+        data: response.data.data || response.data,
+        message: response.data.message || 'Despachos actualizados exitosamente'
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: error.response?.data?.error || 'Error actualizando despachos múltiples',
+        details: error.response?.data
+      };
+    }
+  }
+
+  async asignarDespachosMultiples(despacho_ids, asignado_a_id, asignado_a_nombre) {
+    try {
+      const response = await this.apiClient.put('/almacen/despachos/bulk/asignar', {
+        despacho_ids,
+        asignado_a_id,
+        asignado_a_nombre
+      });
+
+      return {
+        success: true,
+        data: response.data.data || response.data,
+        message: response.data.message || 'Despachos asignados exitosamente'
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: error.response?.data?.error || 'Error asignando despachos múltiples',
+        details: error.response?.data
+      };
+    }
+  }
+
+  // ===============================
+  // HISTORIAL Y TRAZABILIDAD
+  // ===============================
+
+  async obtenerHistorialDespacho(despacho_id) {
+    try {
+      const response = await this.apiClient.get(`/almacen/despachos/${despacho_id}/historial`);
+
+      return {
+        success: true,
+        data: response.data.data || response.data
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: error.response?.data?.error || 'Error obteniendo historial del despacho',
+        details: error.response?.data
+      };
+    }
+  }
+
+  // ===============================
+  // NOTIFICACIONES INTERNAS
+  // ===============================
+
+  async obtenerNotificacionesUsuario(solo_no_leidas = true, limit = 20, offset = 0) {
+    try {
+      const params = new URLSearchParams({
+        solo_no_leidas: solo_no_leidas.toString(),
+        limit: limit.toString(),
+        offset: offset.toString()
+      });
+
+      const response = await this.apiClient.get(`/almacen/notificaciones/usuario?${params}`);
+
+      return {
+        success: true,
+        data: response.data.data || response.data,
+        total: response.data.total || 0,
+        no_leidas: response.data.no_leidas || 0
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: error.response?.data?.error || 'Error obteniendo notificaciones',
+        details: error.response?.data
+      };
+    }
+  }
+
+  async marcarNotificacionLeida(notificacion_id) {
+    try {
+      const response = await this.apiClient.put(`/almacen/notificaciones/${notificacion_id}/leer`);
+
+      return {
+        success: true,
+        data: response.data.data || response.data,
+        message: response.data.message || 'Notificación marcada como leída'
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: error.response?.data?.error || 'Error marcando notificación como leída',
+        details: error.response?.data
+      };
+    }
+  }
+
+  async marcarTodasNotificacionesLeidas() {
+    try {
+      const response = await this.apiClient.put('/almacen/notificaciones/leer-todas');
+
+      return {
+        success: true,
+        data: response.data.data || response.data,
+        message: response.data.message || 'Todas las notificaciones marcadas como leídas'
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: error.response?.data?.error || 'Error marcando todas las notificaciones como leídas',
+        details: error.response?.data
+      };
+    }
+  }
+
+  // ===============================
+  // MÉTRICAS OPTIMIZADAS
+  // ===============================
+
+  async obtenerMetricasDespachosOptimizado() {
+    try {
+      const response = await this.apiClient.get('/almacen/despachos/metricas/optimizado');
+
+      return {
+        success: true,
+        data: response.data.data || response.data
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: error.response?.data?.error || 'Error obteniendo métricas optimizadas de despachos',
+        details: error.response?.data
+      };
+    }
+  }
 }
 
 // Instancia singleton del servicio

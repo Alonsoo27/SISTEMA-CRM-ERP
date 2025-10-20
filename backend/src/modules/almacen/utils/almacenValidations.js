@@ -443,18 +443,18 @@ const validarCambioEstadoDespacho = (req, res, next) => {
 const validarCreacionDespacho = (req, res, next) => {
     const errores = [];
     const { venta_id, almacen_id, fecha_programada, observaciones_preparacion } = req.body;
-    
+
     // Validar venta_id
     if (!venta_id || isNaN(venta_id) || Number(venta_id) < 1) {
         errores.push('El ID de venta debe ser un número válido');
     }
-    
+
     // Validar almacén_id
     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
     if (!almacen_id || !uuidRegex.test(almacen_id)) {
         errores.push('El ID del almacén debe ser un UUID válido');
     }
-    
+
     // Validar fecha programada
     const errorFecha = validarFecha(fecha_programada, 'fecha_programada', true);
     if (errorFecha) {
@@ -463,12 +463,12 @@ const validarCreacionDespacho = (req, res, next) => {
         const fechaProgramada = new Date(fecha_programada);
         const hoy = new Date();
         hoy.setHours(0, 0, 0, 0);
-        
+
         if (fechaProgramada < hoy) {
             errores.push('La fecha programada no puede ser anterior a hoy');
         }
     }
-    
+
     // Validar observaciones (opcionales)
     if (observaciones_preparacion !== undefined) {
         if (typeof observaciones_preparacion !== 'string') {
@@ -477,7 +477,7 @@ const validarCreacionDespacho = (req, res, next) => {
             errores.push('Las observaciones no pueden exceder 1000 caracteres');
         }
     }
-    
+
     if (errores.length > 0) {
         return res.status(400).json({
             success: false,
@@ -486,7 +486,72 @@ const validarCreacionDespacho = (req, res, next) => {
             codigo: 'INVALID_DISPATCH_DATA'
         });
     }
-    
+
+    next();
+};
+
+const validarBulkActionsDespachos = (req, res, next) => {
+    const errores = [];
+    const { despacho_ids } = req.body;
+
+    if (!Array.isArray(despacho_ids)) {
+        errores.push('despacho_ids debe ser un array');
+    } else if (despacho_ids.length === 0) {
+        errores.push('Se requiere al menos un ID de despacho');
+    } else if (despacho_ids.length > 100) {
+        errores.push('No se pueden procesar más de 100 despachos a la vez');
+    } else {
+        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+        despacho_ids.forEach((id, index) => {
+            if (!uuidRegex.test(id)) {
+                errores.push(`El ID en posición ${index + 1} no es un UUID válido: ${id}`);
+            }
+        });
+    }
+
+    if (errores.length > 0) {
+        return res.status(400).json({
+            success: false,
+            error: 'Datos de bulk action inválidos',
+            details: errores,
+            codigo: 'INVALID_BULK_ACTION'
+        });
+    }
+
+    next();
+};
+
+const validarAsignacionDespachos = (req, res, next) => {
+    const errores = [];
+    const { despacho_ids, asignado_a_id, asignado_a_nombre } = req.body;
+
+    if (!Array.isArray(despacho_ids) || despacho_ids.length === 0) {
+        errores.push('Se requiere un array válido de IDs de despachos');
+    }
+
+    if (!asignado_a_id || isNaN(asignado_a_id) || Number(asignado_a_id) < 1) {
+        errores.push('El ID del usuario asignado debe ser un número válido');
+    }
+
+    if (asignado_a_nombre !== undefined) {
+        if (typeof asignado_a_nombre !== 'string') {
+            errores.push('El nombre del usuario asignado debe ser texto');
+        } else if (asignado_a_nombre.length < 3) {
+            errores.push('El nombre del usuario asignado debe tener al menos 3 caracteres');
+        } else if (asignado_a_nombre.length > 200) {
+            errores.push('El nombre del usuario asignado no puede exceder 200 caracteres');
+        }
+    }
+
+    if (errores.length > 0) {
+        return res.status(400).json({
+            success: false,
+            error: 'Datos de asignación inválidos',
+            details: errores,
+            codigo: 'INVALID_ASSIGNMENT'
+        });
+    }
+
     next();
 };
 
@@ -843,6 +908,8 @@ module.exports = {
     validarFiltrosDespachos,
     validarCambioEstadoDespacho,
     validarCreacionDespacho,
+    validarBulkActionsDespachos,
+    validarAsignacionDespachos,
     
     // Validaciones de reportes
     validarParametrosKardex,

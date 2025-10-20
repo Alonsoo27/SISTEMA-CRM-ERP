@@ -205,6 +205,7 @@ const VentaForm = ({
     es_venta_presencial: false,
     recibio_capacitacion_inmediata: false,
     se_lo_llevo_directamente: false,
+    es_cliente_frecuente_manual: false, // Checkbox manual para cliente frecuente
     observaciones_almacen: '',
     observaciones_soporte: '',
     
@@ -340,6 +341,7 @@ useEffect(() => {
       es_venta_presencial: venta.es_venta_presencial || false,
       recibio_capacitacion_inmediata: venta.recibio_capacitacion_inmediata || false,
       se_lo_llevo_directamente: venta.se_lo_llevo_directamente || false,
+      es_cliente_frecuente_manual: venta.es_cliente_frecuente_manual || false,
       observaciones_almacen: venta.observaciones_almacen || '',
       observaciones_soporte: venta.observaciones_soporte || '',
       
@@ -383,6 +385,7 @@ useEffect(() => {
     es_venta_presencial: false,
     recibio_capacitacion_inmediata: false,
     se_lo_llevo_directamente: false,
+    es_cliente_frecuente_manual: false,
     notas_internas: `Conversión automática desde prospecto ${datosIniciales.prospecto_id || ''}`,
     observaciones_almacen: '',
     observaciones_soporte: '',
@@ -936,6 +939,7 @@ const cargarProductosProspecto = async (prospectoId) => {
       es_venta_presencial: false,
       recibio_capacitacion_inmediata: false,
       se_lo_llevo_directamente: false,
+      es_cliente_frecuente_manual: false,
       observaciones_almacen: '',
       observaciones_soporte: '',
       productos: []
@@ -1091,7 +1095,8 @@ const cargarProductosProspecto = async (prospectoId) => {
           es_venta_presencial: formData.es_venta_presencial || false,
           recibio_capacitacion_inmediata: formData.recibio_capacitacion_inmediata || false,
           se_lo_llevo_directamente: formData.se_lo_llevo_directamente || false,
-          
+          es_cliente_frecuente_manual: formData.es_cliente_frecuente_manual || false,
+
           notas_internas: formData.notas_internas?.trim() || '',
           observaciones_almacen: formData.observaciones_almacen?.trim() || '',
           observaciones_soporte: formData.observaciones_soporte?.trim() || '',
@@ -1619,6 +1624,24 @@ const response = await ventasService.crearVentaCompleta(datosVenta);
                   </label>
                 </div>
               )}
+            </div>
+
+            {/* Cliente Frecuente Manual */}
+            <div className="mt-4">
+              <label className="flex items-center">
+                <input
+                  type="checkbox"
+                  checked={formData.es_cliente_frecuente_manual}
+                  onChange={(e) => handleInputChange('es_cliente_frecuente_manual', e.target.checked)}
+                  className="h-4 w-4 text-orange-600 focus:ring-orange-500 border-gray-300 rounded"
+                />
+                <span className="ml-2 text-sm font-medium text-gray-700">
+                  Cliente Frecuente (asignar venta a EMPRESA)
+                </span>
+              </label>
+              <p className="ml-6 mt-1 text-xs text-gray-500">
+                Marcar si este cliente compra frecuentemente productos de plástico y la venta debe asignarse a la empresa en lugar del asesor.
+              </p>
             </div>
           </div>
 

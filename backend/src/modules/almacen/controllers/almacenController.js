@@ -497,6 +497,246 @@ const crearDespachoDesdeVenta = async (req, res) => {
     }
 };
 
+const actualizarEstadoDespachosMultiples = async (req, res) => {
+    try {
+        const { despacho_ids, nuevo_estado, observaciones } = req.body;
+
+        if (!Array.isArray(despacho_ids) || despacho_ids.length === 0) {
+            return res.status(400).json({
+                success: false,
+                error: 'Se requiere un array de IDs de despachos'
+            });
+        }
+
+        if (!nuevo_estado) {
+            return res.status(400).json({
+                success: false,
+                error: 'El nuevo estado es requerido'
+            });
+        }
+
+        const resultado = await almacenService.actualizarEstadoDespachosMultiples(
+            despacho_ids,
+            nuevo_estado,
+            req.user?.id,
+            observaciones
+        );
+
+        if (!resultado.success) {
+            return res.status(400).json(resultado);
+        }
+
+        logger.info('Despachos actualizados múltiples exitosamente', {
+            cantidad: despacho_ids.length,
+            nuevo_estado,
+            usuario: req.user?.id
+        });
+
+        res.json(resultado);
+
+    } catch (error) {
+        logger.error('Error en actualizarEstadoDespachosMultiples:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Error interno del servidor',
+            details: error.message
+        });
+    }
+};
+
+const asignarDespachosMultiples = async (req, res) => {
+    try {
+        const { despacho_ids, asignado_a_id, asignado_a_nombre } = req.body;
+
+        if (!Array.isArray(despacho_ids) || despacho_ids.length === 0) {
+            return res.status(400).json({
+                success: false,
+                error: 'Se requiere un array de IDs de despachos'
+            });
+        }
+
+        if (!asignado_a_id) {
+            return res.status(400).json({
+                success: false,
+                error: 'El ID del usuario asignado es requerido'
+            });
+        }
+
+        const resultado = await almacenService.asignarDespachosMultiples(
+            despacho_ids,
+            asignado_a_id,
+            asignado_a_nombre,
+            req.user?.id
+        );
+
+        if (!resultado.success) {
+            return res.status(400).json(resultado);
+        }
+
+        logger.info('Despachos asignados múltiples exitosamente', {
+            cantidad: despacho_ids.length,
+            asignado_a_id,
+            usuario: req.user?.id
+        });
+
+        res.json(resultado);
+
+    } catch (error) {
+        logger.error('Error en asignarDespachosMultiples:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Error interno del servidor',
+            details: error.message
+        });
+    }
+};
+
+const obtenerHistorialDespacho = async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        if (!id) {
+            return res.status(400).json({
+                success: false,
+                error: 'El ID del despacho es requerido'
+            });
+        }
+
+        const resultado = await almacenService.obtenerHistorialDespacho(id);
+
+        if (!resultado.success) {
+            return res.status(404).json(resultado);
+        }
+
+        res.json(resultado);
+
+    } catch (error) {
+        logger.error('Error en obtenerHistorialDespacho:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Error interno del servidor',
+            details: error.message
+        });
+    }
+};
+
+const obtenerNotificacionesUsuario = async (req, res) => {
+    try {
+        const usuario_id = req.user?.id;
+        const { solo_no_leidas = 'true', limit = 20, offset = 0 } = req.query;
+
+        if (!usuario_id) {
+            return res.status(401).json({
+                success: false,
+                error: 'Usuario no autenticado'
+            });
+        }
+
+        const resultado = await almacenService.obtenerNotificacionesUsuario(
+            usuario_id,
+            solo_no_leidas === 'true',
+            Number(limit),
+            Number(offset)
+        );
+
+        if (!resultado.success) {
+            return res.status(500).json(resultado);
+        }
+
+        res.json(resultado);
+
+    } catch (error) {
+        logger.error('Error en obtenerNotificacionesUsuario:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Error interno del servidor',
+            details: error.message
+        });
+    }
+};
+
+const marcarNotificacionLeida = async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        if (!id) {
+            return res.status(400).json({
+                success: false,
+                error: 'El ID de la notificación es requerido'
+            });
+        }
+
+        const resultado = await almacenService.marcarNotificacionLeida(id);
+
+        if (!resultado.success) {
+            return res.status(404).json(resultado);
+        }
+
+        res.json(resultado);
+
+    } catch (error) {
+        logger.error('Error en marcarNotificacionLeida:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Error interno del servidor',
+            details: error.message
+        });
+    }
+};
+
+const marcarTodasNotificacionesLeidas = async (req, res) => {
+    try {
+        const usuario_id = req.user?.id;
+
+        if (!usuario_id) {
+            return res.status(401).json({
+                success: false,
+                error: 'Usuario no autenticado'
+            });
+        }
+
+        const resultado = await almacenService.marcarTodasNotificacionesLeidas(usuario_id);
+
+        if (!resultado.success) {
+            return res.status(500).json(resultado);
+        }
+
+        logger.info('Todas las notificaciones marcadas como leídas', {
+            usuario: usuario_id
+        });
+
+        res.json(resultado);
+
+    } catch (error) {
+        logger.error('Error en marcarTodasNotificacionesLeidas:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Error interno del servidor',
+            details: error.message
+        });
+    }
+};
+
+const obtenerMetricasDespachosOptimizado = async (req, res) => {
+    try {
+        const resultado = await almacenService.obtenerMetricasDespachosOptimizado();
+
+        if (!resultado.success) {
+            return res.status(500).json(resultado);
+        }
+
+        res.json(resultado);
+
+    } catch (error) {
+        logger.error('Error en obtenerMetricasDespachosOptimizado:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Error interno del servidor',
+            details: error.message
+        });
+    }
+};
+
 // ==================== REPORTES ====================
 
 const generarKardex = async (req, res) => {
@@ -1129,6 +1369,13 @@ module.exports = {
     obtenerDespachoPorId,
     actualizarEstadoDespacho,
     crearDespachoDesdeVenta,
+    actualizarEstadoDespachosMultiples,
+    asignarDespachosMultiples,
+    obtenerHistorialDespacho,
+    obtenerNotificacionesUsuario,
+    marcarNotificacionLeida,
+    marcarTodasNotificacionesLeidas,
+    obtenerMetricasDespachosOptimizado,
     
     // Reportes
     generarKardex,

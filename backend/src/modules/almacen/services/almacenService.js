@@ -6,7 +6,7 @@ const winston = require('winston');
 // Configuración de Supabase
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_ANON_KEY;
-const { query } = require('../../../config/database');
+const { query, pool } = require('../../../config/database');
 
 // Logger
 const logger = winston.createLogger({
@@ -1727,66 +1727,67 @@ const obtenerDespachos = async (filtros) => {
             fecha_desde,
             fecha_hasta,
             almacen_id,
-            venta_id
+            venta_id,
+            vendedor_id,
+            busqueda
         } = filtros;
 
-        // Construir query con filtros dinámicos
-        let whereConditions = ['d.activo = true'];
+        // Construir query con filtros dinámicos usando la VISTA COMPLETA
+        let whereConditions = ['1=1']; // Sin filtro de activo, la vista ya filtra
         let queryParams = [];
         let paramIndex = 1;
 
         if (estado) {
-            whereConditions.push(`d.estado = $${paramIndex++}`);
+            whereConditions.push(`estado = $${paramIndex++}`);
             queryParams.push(estado);
         }
 
         if (fecha_desde) {
-            whereConditions.push(`d.fecha_programada >= $${paramIndex++}`);
+            whereConditions.push(`fecha_programada >= $${paramIndex++}`);
             queryParams.push(fecha_desde);
         }
 
         if (fecha_hasta) {
-            whereConditions.push(`d.fecha_programada <= $${paramIndex++}`);
+            whereConditions.push(`fecha_programada <= $${paramIndex++}`);
             queryParams.push(fecha_hasta);
         }
 
         if (almacen_id) {
-            whereConditions.push(`d.almacen_id = $${paramIndex++}`);
+            whereConditions.push(`almacen_id = $${paramIndex++}`);
             queryParams.push(almacen_id);
         }
 
         if (venta_id) {
-            whereConditions.push(`d.venta_id = $${paramIndex++}`);
+            whereConditions.push(`venta_id = $${paramIndex++}`);
             queryParams.push(venta_id);
+        }
+
+        if (vendedor_id) {
+            whereConditions.push(`vendedor_id = $${paramIndex++}`);
+            queryParams.push(vendedor_id);
+        }
+
+        if (busqueda) {
+            whereConditions.push(`(
+                despacho_codigo ILIKE $${paramIndex} OR
+                venta_codigo ILIKE $${paramIndex} OR
+                nombre_cliente ILIKE $${paramIndex} OR
+                apellido_cliente ILIKE $${paramIndex} OR
+                vendedor_nombre ILIKE $${paramIndex}
+            )`);
+            queryParams.push(`%${busqueda}%`);
+            paramIndex++;
         }
 
         // Calcular paginación
         const offset = (Number(page) - 1) * Number(limit);
 
+        // USAR LA VISTA COMPLETA CON TRAZABILIDAD
         const sqlQuery = `
-            SELECT
-                d.*,
-                v.codigo as venta_codigo,
-                v.nombre_cliente,
-                v.apellido_cliente,
-                v.cliente_telefono,
-                v.valor_final,
-                v.ciudad,
-                v.distrito,
-                a.codigo as almacen_codigo,
-                a.nombre as almacen_nombre,
-                a.tipo as almacen_tipo,
-                up.nombre as preparado_nombre,
-                up.apellido as preparado_apellido,
-                ue.nombre as enviado_nombre,
-                ue.apellido as enviado_apellido
-            FROM despachos d
-            LEFT JOIN ventas v ON d.venta_id = v.id
-            LEFT JOIN almacenes a ON d.almacen_id = a.id
-            LEFT JOIN usuarios up ON d.preparado_por = up.id
-            LEFT JOIN usuarios ue ON d.enviado_por = ue.id
+            SELECT *
+            FROM vista_despachos_completos
             WHERE ${whereConditions.join(' AND ')}
-            ORDER BY d.fecha_programada ASC, d.created_at DESC
+            ORDER BY fecha_solicitud DESC, fecha_programada ASC
             LIMIT $${paramIndex++} OFFSET $${paramIndex++}
         `;
 
@@ -1795,9 +1796,25 @@ const obtenerDespachos = async (filtros) => {
 
         const result = await query(sqlQuery, queryParams);
 
+        // Contar total de registros (sin limit/offset)
+        const countQuery = `
+            SELECT COUNT(*) as total
+            FROM vista_despachos_completos
+            WHERE ${whereConditions.join(' AND ')}
+        `;
+        const countParams = queryParams.slice(0, -2); // Remover limit y offset
+        const countResult = await query(countQuery, countParams);
+        const totalRegistros = countResult.rows[0]?.total || 0;
+
         return {
             success: true,
-            data: result.rows || []
+            data: result.rows || [],
+            pagination: {
+                page: Number(page),
+                limit: Number(limit),
+                total: Number(totalRegistros),
+                totalPages: Math.ceil(Number(totalRegistros) / Number(limit))
+            }
         };
 
     } catch (error) {
@@ -1810,48 +1827,30 @@ const obtenerDespachos = async (filtros) => {
 };
 
 /**
- * Obtener despacho por ID
+ * Obtener despacho por ID usando vista completa
  */
 const obtenerDespachoPorId = async (despacho_id) => {
     try {
-        const result = await query(`
-            SELECT 
-                d.*,
-                v.codigo as venta_codigo,
-                v.nombre_cliente,
-                v.apellido_cliente,
-                v.cliente_empresa,
-                v.cliente_telefono,
-                v.cliente_email,
-                v.valor_final,
-                v.ciudad,
-                v.departamento,
-                v.distrito,
-                a.codigo as almacen_codigo,
-                a.nombre as almacen_nombre,
-                a.tipo as almacen_tipo,
-                a.direccion as almacen_direccion,
-                up.nombre as preparado_nombre,
-                up.apellido as preparado_apellido,
-                ue.nombre as enviado_nombre,
-                ue.apellido as enviado_apellido
-            FROM despachos d
-            LEFT JOIN ventas v ON d.venta_id = v.id
-            LEFT JOIN almacenes a ON d.almacen_id = a.id
-            LEFT JOIN usuarios up ON d.preparado_por = up.id
-            LEFT JOIN usuarios ue ON d.enviado_por = ue.id
-            WHERE d.id = $1
+        // Obtener datos principales desde la vista
+        const despachoResult = await query(`
+            SELECT *
+            FROM vista_despachos_completos
+            WHERE despacho_id = $1
         `, [despacho_id]);
-        
-        if (result.rows.length === 0) {
-            throw new Error('Despacho no encontrado');
+
+        if (despachoResult.rows.length === 0) {
+            return {
+                success: false,
+                error: 'Despacho no encontrado'
+            };
         }
-        
-        // Obtener detalles de la venta si existe
-        const despacho = result.rows[0];
+
+        const despacho = despachoResult.rows[0];
+
+        // Obtener detalles de la venta (productos)
         if (despacho.venta_id) {
             const detallesResult = await query(`
-                SELECT 
+                SELECT
                     vd.cantidad,
                     vd.precio_unitario,
                     vd.subtotal,
@@ -1863,10 +1862,10 @@ const obtenerDespachoPorId = async (despacho_id) => {
                 LEFT JOIN productos p ON vd.producto_id = p.id
                 WHERE vd.venta_id = $1
             `, [despacho.venta_id]);
-            
+
             despacho.venta_detalles = detallesResult.rows;
         }
-        
+
         return {
             success: true,
             data: despacho
@@ -3198,6 +3197,364 @@ const getReportesConsolidado = async (tipo_reporte, periodo = '30d') => {
 };
 
 
+// ==================== BULK ACTIONS (OPERACIONES MASIVAS) ====================
+
+const actualizarEstadoDespachosMultiples = async (despacho_ids, nuevo_estado, usuario_id, observaciones = null) => {
+    const client = await pool.connect();
+
+    try {
+        await client.query('BEGIN');
+
+        if (despacho_ids.length > 100) {
+            throw new Error('No se pueden actualizar más de 100 despachos a la vez');
+        }
+
+        const estadosValidos = ['PENDIENTE', 'PREPARANDO', 'LISTO', 'ENVIADO', 'ENTREGADO', 'CANCELADO'];
+        if (!estadosValidos.includes(nuevo_estado)) {
+            throw new Error(`Estado inválido: ${nuevo_estado}`);
+        }
+
+        const updateResult = await client.query(`
+            UPDATE despachos
+            SET
+                estado = $1::varchar,
+                observaciones_envio = CASE
+                    WHEN $2::text IS NOT NULL AND $2::text != '' THEN $2::text
+                    ELSE observaciones_envio
+                END,
+                fecha_preparacion = CASE
+                    WHEN $1::varchar = 'PREPARANDO' AND fecha_preparacion IS NULL THEN NOW()
+                    ELSE fecha_preparacion
+                END,
+                fecha_envio = CASE
+                    WHEN $1::varchar = 'ENVIADO' AND fecha_envio IS NULL THEN NOW()
+                    ELSE fecha_envio
+                END,
+                fecha_entrega = CASE
+                    WHEN $1::varchar = 'ENTREGADO' AND fecha_entrega IS NULL THEN NOW()
+                    ELSE fecha_entrega
+                END,
+                preparado_por = CASE
+                    WHEN $1::varchar = 'PREPARANDO' AND preparado_por IS NULL THEN $3::integer
+                    ELSE preparado_por
+                END,
+                enviado_por = CASE
+                    WHEN $1::varchar = 'ENVIADO' AND enviado_por IS NULL THEN $3::integer
+                    ELSE enviado_por
+                END,
+                updated_at = NOW(),
+                updated_by = $3::integer
+            WHERE id = ANY($4::uuid[])
+            AND activo = true
+            AND estado != 'ENTREGADO'
+            AND estado != 'CANCELADO'
+            RETURNING id, codigo, estado
+        `, [nuevo_estado, observaciones, usuario_id, despacho_ids]);
+
+        await client.query('COMMIT');
+
+        return {
+            success: true,
+            data: {
+                total_solicitados: despacho_ids.length,
+                total_actualizados: updateResult.rows.length,
+                total_no_actualizados: despacho_ids.length - updateResult.rows.length,
+                despachos_actualizados: updateResult.rows
+            },
+            message: `${updateResult.rows.length} de ${despacho_ids.length} despachos actualizados exitosamente`
+        };
+
+    } catch (error) {
+        await client.query('ROLLBACK');
+        logger.error('Error en actualizarEstadoDespachosMultiples:', error);
+        return {
+            success: false,
+            error: error.message
+        };
+    } finally {
+        client.release();
+    }
+};
+
+const asignarDespachosMultiples = async (despacho_ids, asignado_a_id, usuario_id) => {
+    const client = await pool.connect();
+
+    try {
+        await client.query('BEGIN');
+
+        if (despacho_ids.length > 100) {
+            throw new Error('No se pueden asignar más de 100 despachos a la vez');
+        }
+
+        const usuarioResult = await client.query(
+            'SELECT nombre, apellido FROM usuarios WHERE id = $1',
+            [asignado_a_id]
+        );
+
+        if (usuarioResult.rows.length === 0) {
+            throw new Error('Usuario asignado no encontrado');
+        }
+
+        const asignado_nombre = `${usuarioResult.rows[0].nombre} ${usuarioResult.rows[0].apellido}`;
+
+        const updateResult = await client.query(`
+            UPDATE despachos
+            SET
+                asignado_a_id = $1,
+                asignado_a_nombre = $2,
+                fecha_asignacion = NOW(),
+                updated_at = NOW(),
+                updated_by = $3
+            WHERE id = ANY($4::uuid[])
+            AND activo = true
+            AND estado NOT IN ('ENTREGADO', 'CANCELADO')
+            RETURNING id, codigo
+        `, [asignado_a_id, asignado_nombre, usuario_id, despacho_ids]);
+
+        await client.query('COMMIT');
+
+        return {
+            success: true,
+            data: {
+                total_solicitados: despacho_ids.length,
+                total_asignados: updateResult.rows.length,
+                asignado_a: asignado_nombre,
+                despachos_asignados: updateResult.rows
+            },
+            message: `${updateResult.rows.length} despachos asignados a ${asignado_nombre}`
+        };
+
+    } catch (error) {
+        await client.query('ROLLBACK');
+        logger.error('Error en asignarDespachosMultiples:', error);
+        return {
+            success: false,
+            error: error.message
+        };
+    } finally {
+        client.release();
+    }
+};
+
+// ==================== HISTORIAL ====================
+
+const obtenerHistorialDespacho = async (despacho_id) => {
+    try {
+        const result = await query(`
+            SELECT
+                h.id,
+                h.accion,
+                h.campo_modificado,
+                h.valor_anterior,
+                h.valor_nuevo,
+                h.estado_anterior,
+                h.estado_nuevo,
+                h.observaciones,
+                h.usuario_id,
+                h.usuario_nombre,
+                h.usuario_email,
+                h.created_at,
+                h.metadata
+            FROM despachos_historial h
+            WHERE h.despacho_id = $1
+            ORDER BY h.created_at DESC
+        `, [despacho_id]);
+
+        return {
+            success: true,
+            data: result.rows || []
+        };
+
+    } catch (error) {
+        logger.error('Error en obtenerHistorialDespacho:', error);
+        return {
+            success: false,
+            error: error.message
+        };
+    }
+};
+
+// ==================== NOTIFICACIONES ====================
+
+const obtenerNotificacionesUsuario = async (usuario_id, filtros = {}) => {
+    try {
+        const {
+            solo_no_leidas = false,
+            limit = 50,
+            offset = 0
+        } = filtros;
+
+        let whereConditions = ['n.usuario_id = $1', 'n.activa = true'];
+        let params = [usuario_id];
+        let paramIndex = 2;
+
+        if (solo_no_leidas) {
+            whereConditions.push('n.leida = false');
+        }
+
+        const whereClause = whereConditions.join(' AND ');
+
+        const result = await query(`
+            SELECT
+                n.id,
+                n.tipo,
+                n.prioridad,
+                n.titulo,
+                n.mensaje,
+                n.leida,
+                n.fecha_leida,
+                n.url_accion,
+                n.created_at,
+                n.despacho_id,
+                d.codigo as despacho_codigo,
+                d.estado as despacho_estado
+            FROM notificaciones_despachos n
+            LEFT JOIN despachos d ON n.despacho_id = d.id
+            WHERE ${whereClause}
+            ORDER BY
+                n.leida ASC,
+                CASE n.prioridad
+                    WHEN 'URGENTE' THEN 1
+                    WHEN 'ALTA' THEN 2
+                    WHEN 'NORMAL' THEN 3
+                    WHEN 'BAJA' THEN 4
+                END,
+                n.created_at DESC
+            LIMIT $${paramIndex} OFFSET $${paramIndex + 1}
+        `, [...params, limit, offset]);
+
+        const countResult = await query(`
+            SELECT COUNT(*) as total_no_leidas
+            FROM notificaciones_despachos
+            WHERE usuario_id = $1
+            AND activa = true
+            AND leida = false
+        `, [usuario_id]);
+
+        return {
+            success: true,
+            data: result.rows || [],
+            metadata: {
+                total_no_leidas: parseInt(countResult.rows[0]?.total_no_leidas || 0),
+                limit,
+                offset
+            }
+        };
+
+    } catch (error) {
+        logger.error('Error en obtenerNotificacionesUsuario:', error);
+        return {
+            success: false,
+            error: error.message
+        };
+    }
+};
+
+const marcarNotificacionLeida = async (notificacion_id, usuario_id) => {
+    try {
+        const result = await query(`
+            UPDATE notificaciones_despachos
+            SET
+                leida = true,
+                fecha_leida = NOW()
+            WHERE id = $1
+            AND usuario_id = $2
+            AND leida = false
+            RETURNING id
+        `, [notificacion_id, usuario_id]);
+
+        if (result.rows.length === 0) {
+            return {
+                success: false,
+                error: 'Notificación no encontrada o ya estaba leída'
+            };
+        }
+
+        return {
+            success: true,
+            message: 'Notificación marcada como leída'
+        };
+
+    } catch (error) {
+        logger.error('Error en marcarNotificacionLeida:', error);
+        return {
+            success: false,
+            error: error.message
+        };
+    }
+};
+
+const marcarTodasNotificacionesLeidas = async (usuario_id) => {
+    try {
+        const result = await query(`
+            UPDATE notificaciones_despachos
+            SET
+                leida = true,
+                fecha_leida = NOW()
+            WHERE usuario_id = $1
+            AND activa = true
+            AND leida = false
+            RETURNING id
+        `, [usuario_id]);
+
+        return {
+            success: true,
+            data: {
+                total_marcadas: result.rows.length
+            },
+            message: `${result.rows.length} notificaciones marcadas como leídas`
+        };
+
+    } catch (error) {
+        logger.error('Error en marcarTodasNotificacionesLeidas:', error);
+        return {
+            success: false,
+            error: error.message
+        };
+    }
+};
+
+// ==================== DASHBOARD OPTIMIZADO ====================
+
+const obtenerMetricasDespachosOptimizado = async () => {
+    try {
+        const result = await query(`
+            SELECT * FROM vista_metricas_despachos_dashboard
+        `);
+
+        if (result.rows.length === 0) {
+            return {
+                success: true,
+                data: {
+                    total_pendientes: 0,
+                    total_preparando: 0,
+                    total_listos: 0,
+                    total_enviados: 0,
+                    total_entregados: 0,
+                    total_cancelados: 0,
+                    despachos_vencidos: 0,
+                    despachos_hoy: 0,
+                    despachos_manana: 0,
+                    urgentes_pendientes: 0,
+                    total_despachos: 0
+                }
+            };
+        }
+
+        return {
+            success: true,
+            data: result.rows[0]
+        };
+
+    } catch (error) {
+        logger.error('Error en obtenerMetricasDespachosOptimizado:', error);
+        return {
+            success: false,
+            error: error.message
+        };
+    }
+};
+
 module.exports = {
     // Funciones para controlador (NUEVAS - agregar estas 9)
     obtenerDashboardMetricas,
@@ -3217,32 +3574,47 @@ module.exports = {
     getAnalisisStockSeguridad,
     getMapaCalorAlmacenes,
     getTendenciasInventario,
-    
+
     // Stock
     verificarStockDisponible,
     descontarStockVenta,
     transferirStock,
     verificarYCrearAlertas,
-    
+
     // Despachos
     obtenerDespachos,
     obtenerDespachoPorId,
     crearDespachoDesdeVenta,
     actualizarEstadoDespacho,
     actualizarEstadoVentaDesdeDespacho,
-    
+
     // Reportes
-    generarKardex, // Renombrado para consistencia
+    generarKardex,
     generarReporteValorizacion,
     obtenerStockConsolidado,
-    
+
     // Upload masivo
     generarPlantillaStock,
     previewUploadStock,
     ejecutarUploadStock,
-    
+
     // Alertas
     generarAlertasStockBajo,
-    limpiarAlertasAntiguas
-}; 
+    limpiarAlertasAntiguas,
+
+    // NUEVOS - Bulk Actions
+    actualizarEstadoDespachosMultiples,
+    asignarDespachosMultiples,
+
+    // NUEVOS - Historial
+    obtenerHistorialDespacho,
+
+    // NUEVOS - Notificaciones
+    obtenerNotificacionesUsuario,
+    marcarNotificacionLeida,
+    marcarTodasNotificacionesLeidas,
+
+    // NUEVOS - Dashboard optimizado
+    obtenerMetricasDespachosOptimizado
+};
 console.log('✅ almacenService cargado con funciones:', Object.keys(module.exports).length);

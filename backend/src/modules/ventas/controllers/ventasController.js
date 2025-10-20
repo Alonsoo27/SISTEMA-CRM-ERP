@@ -7,6 +7,7 @@ const { query } = require('../../../config/database');
 const VentasService = require('../services/ventasService');
 const ConversionService = require('../services/ConversionService');
 const almacenService = require('../../almacen/services/almacenService');
+const ClientesFrecuentesService = require('../services/ClientesFrecuentesService');
 // Funciones para manejar timezone de Lima
 const convertirLimaAUTC = (fechaLima) => {
     if (!fechaLima) return null;
@@ -469,7 +470,8 @@ exports.crearVenta = async (req, res) => {
         fecha_entrega_estimada, fecha_venta, notas_internas,
         condiciones_especiales, detalles = [], productos = [],
         es_venta_presencial = false, se_lo_llevo_directamente = false,
-        recibio_capacitacion_inmediata = false, observaciones_almacen
+        recibio_capacitacion_inmediata = false, observaciones_almacen,
+        es_cliente_frecuente_manual = false
     } = req.body;
 
 
@@ -656,6 +658,32 @@ exports.crearVenta = async (req, res) => {
 
             console.log(`💰 IGV Calculado - Tipo: ${tipo_venta}, Incluye IGV: ${incluyeIgv}, Base: ${baseImponible}, IGV: ${igvMonto}, Total: ${valorFinal}`);
 
+            // 🔍 VERIFICAR SI CLIENTE ES FRECUENTE (MANUAL O AUTOMÁTICO)
+            let asesorIdFinal = req.user.id;
+
+            // ⚡ PRIORIDAD 1: Checkbox manual marcado
+            if (es_cliente_frecuente_manual === true) {
+                asesorIdFinal = 19; // Usuario EMPRESA
+                console.log('✅ [ClienteFrecuente-MANUAL] Checkbox marcado → Asignando a EMPRESA (ID: 19)');
+            }
+            // ⚡ PRIORIDAD 2: Verificación automática en base de datos
+            else if (clienteId && productosArray && productosArray.length > 0) {
+                const verificacion = await ClientesFrecuentesService.verificarTodasLineasFrecuentes(
+                    clienteId,
+                    productosArray
+                );
+
+                console.log('🔍 [ClienteFrecuente-AUTO] Resultado verificación:', verificacion);
+
+                if (verificacion.todasFrecuentes) {
+                    asesorIdFinal = 19; // Usuario EMPRESA
+                    console.log('✅ [ClienteFrecuente-AUTO] TODAS las líneas son frecuentes → Asignando a EMPRESA (ID: 19)');
+                } else {
+                    console.log(`✅ [ClienteFrecuente-AUTO] Al menos una línea NO frecuente → Asignando a asesor (ID: ${req.user.id})`);
+                    console.log('📊 [ClienteFrecuente-AUTO] Detalles:', verificacion.detalles);
+                }
+            }
+
             const ventaQuery = `
     INSERT INTO ventas (
         codigo, correlativo_asesor, prospecto_id, asesor_id, cliente_id,
@@ -675,7 +703,7 @@ exports.crearVenta = async (req, res) => {
 `;
 
             const ventaResult = await query(ventaQuery, [
-                codigoVenta, correlativoAsesor, prospecto_id, req.user.id, clienteId,
+                codigoVenta, correlativoAsesor, prospecto_id, asesorIdFinal, clienteId,
                 nombre_cliente.trim(), apellido_cliente?.trim() || null, cliente_empresa,
                 cliente_email, cliente_telefono, canal_contacto || 'WhatsApp',
                 ciudad?.trim() || '', departamento?.trim() || '', distrito?.trim() || '',
@@ -730,6 +758,17 @@ exports.crearVenta = async (req, res) => {
                         precioUnitario, subtotal, descuentoLinea, totalLinea,
                         producto.descripcion_personalizada, i + 1, req.user.id
                     ]);
+                }
+            }
+
+            // 🔄 ACTUALIZAR TABLA DE CLIENTES FRECUENTES
+            if (clienteId && nuevaVenta.id) {
+                try {
+                    const actualizacion = await ClientesFrecuentesService.actualizarLineasFrecuentes(nuevaVenta.id);
+                    console.log('✅ [ClienteFrecuente] Tabla actualizada:', actualizacion);
+                } catch (errorFrecuente) {
+                    // No es crítico, solo loguear
+                    console.log('⚠️ [ClienteFrecuente] Error al actualizar (no crítico):', errorFrecuente.message);
                 }
             }
 

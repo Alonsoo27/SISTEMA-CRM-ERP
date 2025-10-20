@@ -128,9 +128,30 @@ router.get('/despachos',
     almacenController.obtenerDespachos
 );
 
-// Actualizar estado de despacho
-router.put('/despachos/:id/estado', 
-    authenticateToken, 
+// ==================== RUTAS BULK (DEBEN IR ANTES DE RUTAS CON :id) ====================
+
+// Actualizar estado de múltiples despachos (bulk action)
+router.put('/despachos/bulk/estado',
+    authenticateToken,
+    requireAlmacenAccess,
+    almacenValidations.validarBulkActionsDespachos,
+    almacenController.actualizarEstadoDespachosMultiples
+);
+
+// Asignar múltiples despachos a un usuario (bulk action)
+router.put('/despachos/bulk/asignar',
+    authenticateToken,
+    requireAlmacenOperations,
+    almacenValidations.validarBulkActionsDespachos,
+    almacenValidations.validarAsignacionDespachos,
+    almacenController.asignarDespachosMultiples
+);
+
+// ==================== RUTAS CON PARÁMETROS :id ====================
+
+// Actualizar estado de despacho individual
+router.put('/despachos/:id/estado',
+    authenticateToken,
     requireAlmacenAccess, // Almaceneros pueden cambiar estados
     almacenValidations.validarUUID('id'),
     almacenValidations.validarCambioEstadoDespacho,
@@ -138,11 +159,48 @@ router.put('/despachos/:id/estado',
 );
 
 // Obtener despacho específico con detalles
-router.get('/despachos/:id', 
-    authenticateToken, 
+router.get('/despachos/:id',
+    authenticateToken,
     requireAlmacenAccess,
     almacenValidations.validarUUID('id'),
     almacenController.obtenerDespachoPorId
+);
+
+// Obtener historial de cambios de un despacho
+router.get('/despachos/:id/historial',
+    authenticateToken,
+    requireAlmacenAccess,
+    almacenValidations.validarUUID('id'),
+    almacenController.obtenerHistorialDespacho
+);
+
+// Obtener métricas optimizadas de despachos (dashboard)
+router.get('/despachos/metricas/optimizado',
+    authenticateToken,
+    requireAlmacenAccess,
+    almacenController.obtenerMetricasDespachosOptimizado
+);
+
+// Obtener notificaciones del usuario autenticado
+router.get('/notificaciones/usuario',
+    authenticateToken,
+    requireAlmacenAccess,
+    almacenController.obtenerNotificacionesUsuario
+);
+
+// Marcar notificación como leída
+router.put('/notificaciones/:id/leer',
+    authenticateToken,
+    requireAlmacenAccess,
+    almacenValidations.validarUUID('id'),
+    almacenController.marcarNotificacionLeida
+);
+
+// Marcar todas las notificaciones como leídas
+router.put('/notificaciones/leer-todas',
+    authenticateToken,
+    requireAlmacenAccess,
+    almacenController.marcarTodasNotificacionesLeidas
 );
 
 // ==================== ANÁLISIS AVANZADOS (CON VALIDACIÓN DE PERÍODO) ====================

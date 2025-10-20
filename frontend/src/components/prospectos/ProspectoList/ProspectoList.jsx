@@ -1,5 +1,5 @@
 // src/components/prospectos/ProspectoList/ProspectoList.jsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Search, Filter, Download, Edit, Trash2, Phone, Mail, 
   Building, Calendar, DollarSign, User, Eye, MoreVertical,
@@ -8,11 +8,11 @@ import {
 import prospectosService from '../../../services/prospectosService';
 
 const ProspectoList = ({ refreshTrigger = 0, onEdit, onView }) => {
-  const [prospectos, setProspectos] = useState([]);
+  const [prospectosCache, setProspectosCache] = useState([]); // Todos los prospectos
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  
-  // Estados para filtros y búsqueda
+
+  // Estados para filtros y búsqueda (sin debounce, filtrado inmediato)
   const [filtros, setFiltros] = useState({
     busqueda: '',
     estado: '',
@@ -21,14 +21,13 @@ const ProspectoList = ({ refreshTrigger = 0, onEdit, onView }) => {
     fecha_desde: '',
     fecha_hasta: ''
   });
-  
-  // Estados para paginación
+
+  // Estados para paginación client-side
   const [paginacion, setPaginacion] = useState({
     pagina: 1,
-    por_pagina: 10,
-    total: 0
+    por_pagina: 10
   });
-  
+
   // Estados para ordenamiento
   const [ordenamiento, setOrdenamiento] = useState({
     campo: 'fecha_contacto',
@@ -37,35 +36,29 @@ const ProspectoList = ({ refreshTrigger = 0, onEdit, onView }) => {
 
   // Estados disponibles
   const estados = ['Prospecto', 'Cotizado', 'Negociacion', 'Cerrado', 'Perdido'];
-  
+
   // Canales de contacto
   const canales = ['WhatsApp', 'Facebook', 'TikTok', 'Llamada', 'Email', 'Presencial'];
 
+  // Cargar todos los prospectos una sola vez
   useEffect(() => {
     cargarProspectos();
-  }, [filtros, paginacion.pagina, ordenamiento, refreshTrigger]);
+  }, [refreshTrigger]);
 
   const cargarProspectos = async () => {
     try {
       setLoading(true);
       setError(null);
-      
+
+      // Cargar TODOS los prospectos sin filtros ni paginación
       const parametros = {
-        ...filtros,
-        pagina: paginacion.pagina,
-        por_pagina: paginacion.por_pagina,
-        orden_campo: ordenamiento.campo,
-        orden_direccion: ordenamiento.direccion
+        exportar: true // Esto debería traer todos los registros
       };
-      
+
       const response = await prospectosService.obtenerTodos(parametros);
-      
-      setProspectos(response.data || []);
-      setPaginacion(prev => ({
-        ...prev,
-        total: response.meta?.total || 0
-      }));
-      
+
+      setProspectosCache(response.data || []);
+
     } catch (err) {
       setError(err.message);
       console.error('Error cargando prospectos:', err);
@@ -73,6 +66,81 @@ const ProspectoList = ({ refreshTrigger = 0, onEdit, onView }) => {
       setLoading(false);
     }
   };
+
+  // Filtrar y ordenar prospectos en memoria (client-side)
+  const prospectosFiltrados = useMemo(() => {
+    let resultado = [...prospectosCache];
+
+    // Filtro de búsqueda
+    if (filtros.busqueda) {
+      const termino = filtros.busqueda.toLowerCase();
+      resultado = resultado.filter(p =>
+        p.nombre_cliente?.toLowerCase().includes(termino) ||
+        p.apellido_cliente?.toLowerCase().includes(termino) ||
+        p.empresa?.toLowerCase().includes(termino) ||
+        p.telefono?.toLowerCase().includes(termino) ||
+        p.email?.toLowerCase().includes(termino) ||
+        p.codigo?.toLowerCase().includes(termino)
+      );
+    }
+
+    // Filtro por estado
+    if (filtros.estado) {
+      resultado = resultado.filter(p => p.estado === filtros.estado);
+    }
+
+    // Filtro por canal de contacto
+    if (filtros.canal_contacto) {
+      resultado = resultado.filter(p => p.canal_contacto === filtros.canal_contacto);
+    }
+
+    // Filtro por asesor
+    if (filtros.asesor_id) {
+      resultado = resultado.filter(p => p.asesor_id === filtros.asesor_id);
+    }
+
+    // Filtro por fecha desde
+    if (filtros.fecha_desde) {
+      resultado = resultado.filter(p => new Date(p.fecha_contacto) >= new Date(filtros.fecha_desde));
+    }
+
+    // Filtro por fecha hasta
+    if (filtros.fecha_hasta) {
+      resultado = resultado.filter(p => new Date(p.fecha_contacto) <= new Date(filtros.fecha_hasta));
+    }
+
+    // Ordenamiento
+    resultado.sort((a, b) => {
+      let valorA = a[ordenamiento.campo];
+      let valorB = b[ordenamiento.campo];
+
+      // Manejar valores null/undefined
+      if (valorA === null || valorA === undefined) valorA = '';
+      if (valorB === null || valorB === undefined) valorB = '';
+
+      // Convertir a string para comparación
+      if (typeof valorA === 'string') valorA = valorA.toLowerCase();
+      if (typeof valorB === 'string') valorB = valorB.toLowerCase();
+
+      if (ordenamiento.direccion === 'asc') {
+        return valorA > valorB ? 1 : -1;
+      } else {
+        return valorA < valorB ? 1 : -1;
+      }
+    });
+
+    return resultado;
+  }, [prospectosCache, filtros, ordenamiento]);
+
+  // Paginación client-side
+  const prospectosPaginados = useMemo(() => {
+    const inicio = (paginacion.pagina - 1) * paginacion.por_pagina;
+    const fin = inicio + paginacion.por_pagina;
+    return prospectosFiltrados.slice(inicio, fin);
+  }, [prospectosFiltrados, paginacion.pagina, paginacion.por_pagina]);
+
+  const totalPaginas = Math.ceil(prospectosFiltrados.length / paginacion.por_pagina);
+  const totalResultados = prospectosFiltrados.length;
 
   const handleFiltroChange = (campo, valor) => {
     setFiltros(prev => ({ ...prev, [campo]: valor }));
@@ -95,6 +163,7 @@ const ProspectoList = ({ refreshTrigger = 0, onEdit, onView }) => {
       fecha_desde: '',
       fecha_hasta: ''
     });
+    setPaginacion(prev => ({ ...prev, pagina: 1 }));
   };
 
   const exportarDatos = async () => {
@@ -164,8 +233,6 @@ const ProspectoList = ({ refreshTrigger = 0, onEdit, onView }) => {
       </span>
     );
   };
-
-  const totalPaginas = Math.ceil(paginacion.total / paginacion.por_pagina);
 
   if (loading) {
     return (
@@ -282,7 +349,7 @@ const ProspectoList = ({ refreshTrigger = 0, onEdit, onView }) => {
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
-            {prospectos.map((prospecto) => (
+            {prospectosPaginados.map((prospecto) => (
               <tr key={prospecto.id} className="hover:bg-gray-50">
                 <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                   {prospecto.codigo}
@@ -348,8 +415,8 @@ const ProspectoList = ({ refreshTrigger = 0, onEdit, onView }) => {
           <div className="flex items-center justify-between">
             <div className="text-sm text-gray-700">
               Mostrando {((paginacion.pagina - 1) * paginacion.por_pagina) + 1} a{' '}
-              {Math.min(paginacion.pagina * paginacion.por_pagina, paginacion.total)} de{' '}
-              {paginacion.total} resultados
+              {Math.min(paginacion.pagina * paginacion.por_pagina, totalResultados)} de{' '}
+              {totalResultados} resultados
             </div>
             
             <div className="flex items-center space-x-2">
@@ -388,11 +455,15 @@ const ProspectoList = ({ refreshTrigger = 0, onEdit, onView }) => {
       )}
 
       {/* Estado vacío */}
-      {!loading && prospectos.length === 0 && (
+      {!loading && prospectosPaginados.length === 0 && (
         <div className="p-12 text-center">
           <div className="text-gray-400 text-4xl mb-4">📋</div>
           <h3 className="text-lg font-medium text-gray-900 mb-2">No hay prospectos</h3>
-          <p className="text-gray-600">No se encontraron prospectos con los filtros aplicados.</p>
+          <p className="text-gray-600">
+            {prospectosCache.length === 0
+              ? 'No hay prospectos registrados.'
+              : 'No se encontraron prospectos con los filtros aplicados.'}
+          </p>
         </div>
       )}
     </div>

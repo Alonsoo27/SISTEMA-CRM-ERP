@@ -1,4 +1,4 @@
-// src/components/ventas/VentasList/VentasList.jsx - CORREGIDO
+// src/components/ventas/VentasList/VentasList.jsx - FILTRADO CLIENT-SIDE
 import React, { useState, useEffect, useCallback, useMemo, memo } from 'react';
 import {
   Eye, Edit, Trash2, MoreVertical, DollarSign, User,
@@ -244,15 +244,15 @@ const VentasList = ({
   onFiltrosChange,
   usuarioActual
 }) => {
-  const [ventas, setVentas] = useState([]);
+  const [ventasCache, setVentasCache] = useState([]); // Todas las ventas cargadas
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [menuAbierto, setMenuAbierto] = useState(null);
   const [showConfirmDelete, setShowConfirmDelete] = useState(false);
   const [ventaAEliminar, setVentaAEliminar] = useState(null);
-  const [busquedaLocal, setBusquedaLocal] = useState('');
+  const [busquedaLocal, setBusquedaLocal] = useState(''); // Filtrado inmediato, sin debounce
   const [ordenamiento, setOrdenamiento] = useState({ campo: 'fecha_creacion', direccion: 'desc' });
-  const [paginacion, setPaginacion] = useState({ pagina: 1, porPagina: 10, total: 0 });
+  const [paginacion, setPaginacion] = useState({ pagina: 1, porPagina: 10 }); // Sin total, se calcula client-side
   const [notification, setNotification] = useState(null);
   const [showConfirmRecepcion, setShowConfirmRecepcion] = useState(false);
   const [ventaParaRecepcion, setVentaParaRecepcion] = useState(null);
@@ -382,19 +382,16 @@ const VentasList = ({
     setModalProductos(prev => ({ ...prev, productos }));
   }, [cargarProductosVenta]);
 
-  // Cargar ventas con control por roles
+  // Cargar TODAS las ventas una sola vez (con filtros de rol aplicados en backend)
   const cargarVentas = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
 
-      // 🔐 APLICAR FILTROS POR ROL
+      // 🔐 APLICAR FILTROS POR ROL (solo estos se envían al backend)
       let filtrosCompletos = {
         ...filtros,
-        busqueda: busquedaLocal,
-        orden: `${ordenamiento.campo}_${ordenamiento.direccion}`,
-        pagina: paginacion.pagina,
-        limite: paginacion.porPagina
+        limite: 10000 // Cargar todas las ventas permitidas según rol
       };
 
       // Aplicar filtros según el rol y la vista actual
@@ -426,21 +423,14 @@ const VentasList = ({
       }
 
       const response = await ventasService.obtenerVentas(filtrosCompletos);
-      
+
       if (response.success) {
         const ventasArray = response.data.ventas || [];
-        setVentas(ventasArray);
-        
-        const paginationData = response.data.pagination || {};
-        setPaginacion(prev => ({
-          ...prev,
-          total: paginationData.total_records || 0
-        }));
-        
+        setVentasCache(ventasArray); // Guardar todas las ventas en cache
       } else {
         setError(response.error);
       }
-      
+
     } catch (err) {
       setError('Error cargando ventas');
       console.error('Error:', err);
@@ -448,8 +438,7 @@ const VentasList = ({
       setLoading(false);
     }
   }, [
-    filtros, busquedaLocal, ordenamiento, paginacion.pagina, paginacion.porPagina,
-    usuarioActual, vistaActual, asesorSeleccionado, puedeVerTodasLasVentas
+    filtros, usuarioActual, vistaActual, asesorSeleccionado, puedeVerTodasLasVentas
   ]);
 
   // 🔐 FUNCIÓN PARA CARGAR ASESORES DISPONIBLES
@@ -466,6 +455,59 @@ const VentasList = ({
       setAsesoresDisponibles([]);
     }
   }, [puedeVerVentasDeOtros]);
+
+  // Filtrar y ordenar ventas en memoria (client-side)
+  const ventasFiltradas = useMemo(() => {
+    let resultado = [...ventasCache];
+
+    // Filtro de búsqueda
+    if (busquedaLocal) {
+      const termino = busquedaLocal.toLowerCase();
+      resultado = resultado.filter(v =>
+        v.nombre_cliente?.toLowerCase().includes(termino) ||
+        v.apellido_cliente?.toLowerCase().includes(termino) ||
+        v.cliente_email?.toLowerCase().includes(termino) ||
+        v.cliente_telefono?.toLowerCase().includes(termino) ||
+        v.codigo?.toLowerCase().includes(termino) ||
+        `${v.nombre_cliente} ${v.apellido_cliente}`.toLowerCase().includes(termino)
+      );
+    }
+
+    // Aplicar otros filtros si existen
+    // (podrías agregar más filtros aquí si los necesitas)
+
+    // Ordenamiento
+    resultado.sort((a, b) => {
+      let valorA = a[ordenamiento.campo];
+      let valorB = b[ordenamiento.campo];
+
+      // Manejar valores null/undefined
+      if (valorA === null || valorA === undefined) valorA = '';
+      if (valorB === null || valorB === undefined) valorB = '';
+
+      // Convertir a string para comparación
+      if (typeof valorA === 'string') valorA = valorA.toLowerCase();
+      if (typeof valorB === 'string') valorB = valorB.toLowerCase();
+
+      if (ordenamiento.direccion === 'asc') {
+        return valorA > valorB ? 1 : -1;
+      } else {
+        return valorA < valorB ? 1 : -1;
+      }
+    });
+
+    return resultado;
+  }, [ventasCache, busquedaLocal, ordenamiento]);
+
+  // Paginación client-side
+  const ventasPaginadas = useMemo(() => {
+    const inicio = (paginacion.pagina - 1) * paginacion.porPagina;
+    const fin = inicio + paginacion.porPagina;
+    return ventasFiltradas.slice(inicio, fin);
+  }, [ventasFiltradas, paginacion.pagina, paginacion.porPagina]);
+
+  const totalPaginas = Math.ceil(ventasFiltradas.length / paginacion.porPagina);
+  const totalResultados = ventasFiltradas.length;
 
   // Effects
   // Establecer vista por defecto según rol del usuario
@@ -484,17 +526,17 @@ const VentasList = ({
     }
   }, [cargarAsesores, usuarioActual]);
 
-  // Effect para cargar/recargar ventas cuando cambien los filtros
+  // Effect para cargar/recargar ventas cuando cambien los filtros de rol
   useEffect(() => {
     if (usuarioActual) {
       cargarVentas();
     }
-  }, [cargarVentas, refreshTrigger, usuarioActual, busquedaLocal, vistaActual, asesorSeleccionado]);
+  }, [cargarVentas, refreshTrigger, usuarioActual, vistaActual, asesorSeleccionado]);
 
   // Event handlers
   const handleBusqueda = useCallback((valor) => {
     setBusquedaLocal(valor);
-    setPaginacion(prev => ({ ...prev, pagina: 1 }));
+    setPaginacion(prev => ({ ...prev, pagina: 1 })); // Reset a página 1
   }, []);
 
   const handleOrdenamiento = useCallback((campo) => {
@@ -676,13 +718,6 @@ const VentasList = ({
     setTimeout(() => setNotification(null), 3000);
   }, []);
 
-  // Cálculos de paginación
-  const totalPaginas = Math.ceil(paginacion.total / paginacion.porPagina);
-  const ventasMostradas = useMemo(() => {
-    const inicio = (paginacion.pagina - 1) * paginacion.porPagina + 1;
-    const fin = Math.min(paginacion.pagina * paginacion.porPagina, paginacion.total);
-    return { inicio, fin };
-  }, [paginacion]);
 
   // ✅ FUNCIÓN PARA OBTENER PRÓXIMOS ESTADOS VÁLIDOS
   const obtenerEstadosSiguientes = useCallback((estadoActual) => {
@@ -702,7 +737,7 @@ const VentasList = ({
 
 
 
-  if (loading && ventas.length === 0) {
+  if (loading && ventasCache.length === 0) {
     return (
       <div className="bg-white rounded-lg shadow">
         <div className="p-6">
@@ -746,7 +781,7 @@ const VentasList = ({
           <div>
             <h2 className="text-lg font-semibold text-gray-900">Lista de Ventas</h2>
             <p className="text-sm text-gray-600">
-              {paginacion.total} venta{paginacion.total !== 1 ? 's' : ''} encontrada{paginacion.total !== 1 ? 's' : ''}
+              {totalResultados} venta{totalResultados !== 1 ? 's' : ''} encontrada{totalResultados !== 1 ? 's' : ''}
             </p>
           </div>
 
@@ -876,7 +911,7 @@ const VentasList = ({
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
-            {ventas.map((venta) => (
+            {ventasPaginadas.map((venta) => (
               <tr key={venta.id} className="hover:bg-gray-50 transition-colors">
                 {/* ✅ CORREGIDO: CLIENTE - Usar nombre_cliente + apellido_cliente */}
                 <td className="px-6 py-4">
@@ -1109,11 +1144,15 @@ const VentasList = ({
         </table>
       </div>
 
-      {ventas.length === 0 && !loading && (
+      {ventasPaginadas.length === 0 && !loading && (
         <div className="text-center py-12">
           <DollarSign className="h-12 w-12 text-gray-400 mx-auto mb-4" />
           <h3 className="text-lg font-semibold text-gray-900 mb-2">No hay ventas</h3>
-          <p className="text-gray-600">No se encontraron ventas con los filtros aplicados.</p>
+          <p className="text-gray-600">
+            {ventasCache.length === 0
+              ? 'No hay ventas registradas.'
+              : 'No se encontraron ventas con los filtros aplicados.'}
+          </p>
         </div>
       )}
 
@@ -1122,7 +1161,7 @@ const VentasList = ({
         <div className="px-6 py-4 border-t border-gray-200">
           <div className="flex items-center justify-between">
             <div className="text-sm text-gray-700">
-              Mostrando {ventasMostradas.inicio} a {ventasMostradas.fin} de {paginacion.total} ventas
+              Mostrando {((paginacion.pagina - 1) * paginacion.porPagina) + 1} a {Math.min(paginacion.pagina * paginacion.porPagina, totalResultados)} de {totalResultados} ventas
             </div>
             <div className="flex items-center space-x-2">
               <button

@@ -20,6 +20,16 @@ class ComisionesService {
                 throw new Error('Venta no encontrada para cálculo de comisión');
             }
 
+            // ⚠️ NO CALCULAR COMISIÓN PARA VENTAS DE CLIENTES FRECUENTES (EMPRESA)
+            if (ventaData.asesor_id === 19) {
+                console.log(`⚠️ Venta ${ventaId} asignada a EMPRESA (cliente frecuente) - No se calcula comisión`);
+                return {
+                    success: false,
+                    comision_calculada: false,
+                    mensaje: 'Venta de cliente frecuente - No genera comisión para asesor'
+                };
+            }
+
             // Verificar si ya existe comisión calculada
             const comisionExistente = await query(`
                 SELECT id, estado FROM comisiones 
