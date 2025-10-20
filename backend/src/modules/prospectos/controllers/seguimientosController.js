@@ -85,9 +85,9 @@ class SeguimientosController {
             
             const asesor_id = req.user?.id || 1;
 
-            // 🕐 CORRECCIÓN: Usar 2 días laborales en lugar de 18 horas corridas
-            const fecha_limite = calcular2DiasLaborales(fecha_programada);
-            
+            // 🕐 fecha_limite: Alerta al asesor (4h para Llamada según tipo)
+            const fecha_limite = calcularFechaLimite(fecha_programada, tipo);
+
             // Crear seguimiento
             const insertQuery = `
                 INSERT INTO seguimientos (
@@ -612,6 +612,7 @@ class SeguimientosController {
             const ahora = new Date().toISOString();
             
             // Obtener seguimientos vencidos
+            // ✅ INCLUYE prospectos tomados de modo libre (numero_reasignaciones >= 3 pero modo_libre = false)
             const result = await query(`
                 SELECT s.*,
                        p.id as prospecto_id, p.codigo, p.nombre_cliente, p.estado,
@@ -621,7 +622,7 @@ class SeguimientosController {
                 INNER JOIN prospectos p ON s.prospecto_id = p.id
                 WHERE s.completado = $1 AND s.fecha_limite < $2
                 AND p.activo = $3 AND p.estado NOT IN ('Cerrado', 'Perdido')
-                AND p.modo_libre = $4 AND p.numero_reasignaciones < 3
+                AND p.modo_libre = $4
             `, [false, ahora, true, false]);
             
             const vencidos = result.rows;
@@ -662,48 +663,58 @@ class SeguimientosController {
                         WHERE id = $6
                     `, [true, false, true, new Date(), 'Procesado automáticamente - seguimiento vencido', seguimiento.id]);
 
-                    // 🔔 NOTIFICACIÓN: seguimiento_vencido
-                    try {
-                        const tipoNotificacion = !haPasado2DiasLaborales ? 'seguimiento_urgente' :
-                                               haPasado2DiasLaborales ? 'seguimiento_critico' : 'seguimiento_vencido';
+                    // ⏰ LÓGICA CORRECTA: Esperar 2 días laborales ANTES de traspasar
+                    // Si NO han pasado 2 días laborales → Solo notificar y esperar
+                    if (!haPasado2DiasLaborales) {
+                        // 🔔 NOTIFICACIÓN: seguimiento_vencido (aún en período de espera)
+                        try {
+                            await NotificacionesController.crearNotificaciones({
+                                tipo: 'seguimiento_urgente',
+                                modo: 'basico',
+                                data: {
+                                    usuario_id: seguimiento.prospecto_asesor_id,
+                                    prospecto_id: seguimiento.prospecto_id,
+                                    prospecto_codigo: seguimiento.codigo,
+                                    prospecto_nombre: seguimiento.nombre_cliente,
+                                    seguimiento_id: seguimiento.id,
+                                    horas_vencidas: Math.round(horasVencidas),
+                                    valor_estimado: seguimiento.valor_estimado || 0
+                                },
+                                auto_prioridad: true
+                            });
+                            logger.info(`⏰ Seguimiento vencido pero en período de gracia (faltan ${Math.round((fechaLimite2DiasLaborales - ahora_date) / (1000 * 60 * 60))}h para traspaso)`);
+                        } catch (errorNotif) {
+                            logger.error('⚠️ Error creando notificación:', errorNotif);
+                        }
 
-                        await NotificacionesController.crearNotificaciones({
-                            tipo: tipoNotificacion,
-                            modo: 'basico',
-                            data: {
-                                usuario_id: seguimiento.prospecto_asesor_id, // ✅ CORREGIDO: Usar asesor ACTUAL del prospecto
-                                prospecto_id: seguimiento.prospecto_id,
-                                prospecto_codigo: seguimiento.codigo,
-                                prospecto_nombre: seguimiento.nombre_cliente,
-                                seguimiento_id: seguimiento.id,
-                                horas_vencidas: Math.round(horasVencidas),
-                                valor_estimado: seguimiento.valor_estimado || 0
-                            },
-                            auto_prioridad: true
-                        });
-                        logger.info(`✅ Notificación ${tipoNotificacion} enviada a asesor ${seguimiento.prospecto_asesor_id} para seguimiento ${seguimiento.id}`);
-                    } catch (errorNotif) {
-                        logger.error('⚠️ Error creando notificación de seguimiento vencido:', errorNotif);
+                        resultado.procesados++;
+                        continue; // ✅ ESPERAR - No traspasar aún
                     }
 
-                    // Si han pasado 2 días laborales completos desde el vencimiento, cambiar prospecto a "Perdido"
-                    if (haPasado2DiasLaborales) {
+                    // ✅ HAN PASADO 2 DÍAS LABORALES → DECIDIR ACCIÓN
+                    logger.info(`🔄 Procesando ${seguimiento.codigo} (pasaron 2 días laborales desde vencimiento)`, {
+                        fecha_limite_original: fechaLimiteVencimiento.toISOString(),
+                        fecha_limite_traspaso: fechaLimite2DiasLaborales.toISOString(),
+                        horas_transcurridas: Math.round(horasVencidas),
+                        numero_reasignaciones: seguimiento.numero_reasignaciones
+                    });
+
+                    // 🚨 CASO ESPECIAL: Prospecto tomado de modo libre (numero_reasignaciones >= 3)
+                    // Si falla después de ser tomado de modo libre → PERDIDO (última oportunidad)
+                    if (seguimiento.numero_reasignaciones >= 3) {
                         await query(`
                             UPDATE prospectos
                             SET estado = $1, tipo_cierre = $2, motivo_perdida = $3, fecha_cierre = $4
                             WHERE id = $5 AND estado NOT IN ('Cerrado', 'Perdido')
-                        `, ['Perdido', 'automatico', 'Sin respuesta - pasaron 2 días laborales desde vencimiento', new Date(), seguimiento.prospecto_id]);
+                        `, ['Perdido', 'automatico', 'Sin seguimiento después de ser tomado de modo libre', new Date(), seguimiento.prospecto_id]);
 
-                        logger.info(`🔄 Prospecto ${seguimiento.codigo} cambiado a PERDIDO (pasaron 2 días laborales desde vencimiento, ${Math.round(horasVencidas)}h corridas)`, {
-                            service: 'seguimientos-avanzado',
-                            prospecto_id: seguimiento.prospecto_id,
-                            horas_corridas: Math.round(horasVencidas),
-                            fecha_limite_original: fechaLimiteVencimiento.toISOString(),
-                            fecha_limite_2_dias_laborales: fechaLimite2DiasLaborales.toISOString()
+                        logger.info(`🔴 Prospecto ${seguimiento.codigo} marcado como PERDIDO (tomado de modo libre y sin seguimiento)`, {
+                            numero_reasignaciones: seguimiento.numero_reasignaciones,
+                            asesor_final: seguimiento.asesor_nombre
                         });
 
                         resultado.procesados++;
-                        continue; // No reasignar si ya está perdido
+                        continue;
                     }
 
                     const nuevasReasignaciones = seguimiento.numero_reasignaciones + 1;
@@ -727,7 +738,7 @@ class SeguimientosController {
                         `, ['traspasado', true, new Date(), seguimiento.asesor_id, 'seguimiento_vencido', seguimiento.prospecto_id]);
 
                     } else {
-                        // ACTIVAR MODO LIBRE (3er strike)
+                        // ACTIVAR MODO LIBRE (3er rebote - numero_reasignaciones = 2 → 3)
                         await SeguimientosController.activarModoLibre(seguimiento.prospecto_id);
                         resultado.modo_libre_activado++;
 
@@ -811,13 +822,14 @@ class SeguimientosController {
             // - Prospectos de SUPER_ADMIN/ADMIN/JEFE_VENTAS → van a VENDEDOREs
             // - Prospectos de VENDEDOREs → van a otros VENDEDOREs
             // - Si no hay VENDEDOREs disponibles → MODO LIBRE automático
+            // - EXCLUYE asesor ID 19 (EMPRESA S.A.C. - usuario ficticio)
             // ============================================
             const asesoresResult = await query(`
                 SELECT u.id, u.nombre, u.apellido,
                        COUNT(p.id) as prospectos_count
                 FROM usuarios u
                 LEFT JOIN prospectos p ON u.id = p.asesor_id AND p.activo = true
-                WHERE u.rol_id = $1 AND u.activo = $2 AND u.id != $3
+                WHERE u.rol_id = $1 AND u.activo = $2 AND u.id != $3 AND u.id != 19
                 GROUP BY u.id, u.nombre, u.apellido
                 ORDER BY prospectos_count ASC
             `, [7, true, prospecto.asesor_id]); // rol_id = 7 (VENDEDOR)
@@ -862,10 +874,11 @@ class SeguimientosController {
             ]);
 
             // ✅ FIX: Crear nuevo seguimiento para el nuevo asesor
-            // 🕐 CORRECCIÓN: Usar 2 días laborales desde ahora
+            // 🕐 Programar seguimiento para 2 días laborales desde ahora
             const ahora = new Date();
             const fechaProgramada = calcular2DiasLaborales(ahora);
-            const fechaLimite = calcular2DiasLaborales(fechaProgramada);
+            // fecha_limite: 4h después de la fecha programada (alerta al asesor)
+            const fechaLimite = calcularFechaLimite(fechaProgramada.toISOString(), 'Llamada');
 
             await query(`
                 INSERT INTO seguimientos (
@@ -876,7 +889,7 @@ class SeguimientosController {
                 prospecto_id,
                 asesorSeleccionado.id,
                 fechaProgramada.toISOString(),
-                fechaLimite.toISOString(),
+                fechaLimite, // calcularFechaLimite ya devuelve ISO string
                 'Llamada',
                 `Seguimiento automático después de reasignación por: ${motivo}`,
                 false,

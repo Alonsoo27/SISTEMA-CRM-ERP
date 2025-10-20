@@ -693,8 +693,9 @@ class ProspectosController {
             // ✅ CREAR SEGUIMIENTO AUTOMÁTICO EN TABLA SEGUIMIENTOS
             if (fechaSeguimiento) {
                 try {
-                    // 🕐 CORRECCIÓN: Usar 2 días laborales en lugar de 18 horas corridas
-                    const fechaLimite = calcular2DiasLaborales(fechaSeguimiento);
+                    // 🕐 fecha_limite: Alerta al asesor (4h para Llamada)
+                    const { calcularFechaLimite } = require('../utils/fechasHelper');
+                    const fechaLimite = calcularFechaLimite(fechaSeguimiento, 'Llamada');
 
                     await query(`
                         INSERT INTO seguimientos (
@@ -705,14 +706,14 @@ class ProspectosController {
                         data.id,
                         asesorId,
                         fechaSeguimiento,
-                        fechaLimite.toISOString(),
+                        fechaLimite, // calcularFechaLimite ya devuelve ISO string
                         'Llamada',
                         'Seguimiento inicial del prospecto',
                         false,
                         true
                     ]);
 
-                    logger.info(`✅ Seguimiento inicial creado para prospecto ${data.codigo} - Fecha: ${fechaSeguimiento}, Límite: ${fechaLimite.toISOString()}`);
+                    logger.info(`✅ Seguimiento inicial creado para prospecto ${data.codigo} - Fecha: ${fechaSeguimiento}, Límite: ${fechaLimite}`);
                 } catch (errorSeguimiento) {
                     logger.error(`⚠️ Error al crear seguimiento inicial para prospecto ${data.codigo}:`, errorSeguimiento);
                     // No fallar la creación del prospecto si falla el seguimiento
@@ -3293,10 +3294,12 @@ static async obtenerPorId(req, res) {
             `, [asesor_id, id]);
 
             // 📝 Crear seguimiento automático
-            // 🕐 CORRECCIÓN: Usar 2 días laborales desde ahora
+            // 🕐 Programar para 2 días laborales desde ahora
             const ahora = new Date();
             const fechaProgramada = calcular2DiasLaborales(ahora);
-            const fechaLimite = calcular2DiasLaborales(fechaProgramada);
+            // fecha_limite: 4h después de la fecha programada (alerta al asesor)
+            const { calcularFechaLimite } = require('../utils/fechasHelper');
+            const fechaLimite = calcularFechaLimite(fechaProgramada.toISOString(), 'Llamada');
 
             await client.query(`
                 INSERT INTO seguimientos (
@@ -3307,7 +3310,7 @@ static async obtenerPorId(req, res) {
                 id,
                 asesor_id,
                 fechaProgramada.toISOString(),
-                fechaLimite.toISOString(),
+                fechaLimite, // calcularFechaLimite ya devuelve ISO string
                 'Llamada',
                 'Seguimiento después de tomar prospecto en modo libre',
                 false,
