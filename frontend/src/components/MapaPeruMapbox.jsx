@@ -11,12 +11,28 @@ const MAPBOX_TOKEN = 'pk.eyJ1IjoiYWxvbnNvb28yNyIsImEiOiJjbWZ1N21sN3gwb2swMnFxMTB
 // Configurar token de Mapbox
 mapboxgl.accessToken = MAPBOX_TOKEN;
 
-const MapaPeruMapbox = ({ departamentos = [] }) => {
+const MapaPeruMapbox = ({
+  departamentos = [],
+  tipo = 'ventas' // 'ventas' | 'prospectos'
+}) => {
   const mapContainerRef = useRef(null);
   const mapRef = useRef(null);
   const [selectedDepartment, setSelectedDepartment] = useState(null);
   const [peruDepartamentosData, setPeruDepartamentosData] = useState(null);
   const popupRef = useRef(null);
+
+  // 🏷️ ETIQUETAS DINÁMICAS SEGÚN TIPO
+  const labels = tipo === 'prospectos' ? {
+    cantidad: 'Prospectos',
+    valor: 'Valor Estimado',
+    titulo: 'Prospectos por Departamento',
+    descripcion: 'Distribución territorial de intención de compra por departamento'
+  } : {
+    cantidad: 'Ventas',
+    valor: 'Ingresos',
+    titulo: 'Mapa Geográfico',
+    descripcion: 'Distribución territorial real de ventas por departamento'
+  };
 
   // Cargar GeoJSON
   useEffect(() => {
@@ -89,7 +105,10 @@ const MapaPeruMapbox = ({ departamentos = [] }) => {
       container: mapContainerRef.current,
       style: 'mapbox://styles/mapbox/light-v11',
       center: [-75, -9.5],
-      zoom: 5.5
+      zoom: 5.5,
+      // 🔇 Deshabilitar telemetría de Mapbox para evitar errores CORS
+      trackResize: true,
+      preserveDrawingBuffer: false
     });
 
     mapRef.current = map;
@@ -149,11 +168,11 @@ const MapaPeruMapbox = ({ departamentos = [] }) => {
           popupHTML += `
             <div class="space-y-1 text-xs">
               <div class="flex justify-between">
-                <span class="text-gray-600">Ventas:</span>
+                <span class="text-gray-600">${labels.cantidad}:</span>
                 <span class="font-semibold text-blue-600">${data.total_ventas}</span>
               </div>
               <div class="flex justify-between">
-                <span class="text-gray-600">Ingresos:</span>
+                <span class="text-gray-600">${labels.valor}:</span>
                 <span class="font-semibold text-green-600">${formatearMoneda(data.ingresos_totales)}</span>
               </div>
             </div>`;
@@ -213,10 +232,10 @@ const MapaPeruMapbox = ({ departamentos = [] }) => {
       <div className="bg-white rounded-lg shadow-lg p-6">
         <div className="mb-6">
           <h3 className="text-xl font-bold text-gray-900 mb-2 flex items-center">
-            🗺️ Mapa Geográfico
+            🗺️ {labels.titulo}
           </h3>
           <p className="text-sm text-gray-600">
-            Distribución territorial real de ventas por departamento
+            {labels.descripcion}
           </p>
         </div>
         <div className="flex items-center justify-center h-96">
@@ -233,10 +252,10 @@ const MapaPeruMapbox = ({ departamentos = [] }) => {
     <div className="bg-white rounded-lg shadow-lg p-6">
       <div className="mb-6">
         <h3 className="text-xl font-bold text-gray-900 mb-2 flex items-center">
-          🗺️ Mapa Geográfico
+          🗺️ {labels.titulo}
         </h3>
         <p className="text-sm text-gray-600">
-          Distribución territorial real de ventas por departamento
+          {labels.descripcion}
         </p>
       </div>
 
@@ -259,13 +278,13 @@ const MapaPeruMapbox = ({ departamentos = [] }) => {
                   </h4>
                   <div className="space-y-2 text-sm">
                     <div className="flex justify-between">
-                      <span className="text-gray-600">Ventas:</span>
+                      <span className="text-gray-600">{labels.cantidad}:</span>
                       <span className="font-semibold text-blue-600">
                         {selectedDepartment.data.total_ventas}
                       </span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-gray-600">Ingresos:</span>
+                      <span className="text-gray-600">{labels.valor}:</span>
                       <span className="font-semibold text-green-600">
                         {formatearMoneda(selectedDepartment.data.ingresos_totales)}
                       </span>
@@ -304,7 +323,7 @@ const MapaPeruMapbox = ({ departamentos = [] }) => {
 
           {/* Leyenda del mapa */}
           <div className="mt-4 bg-gray-50 rounded-lg p-4">
-            <h5 className="font-semibold text-gray-700 mb-3">Leyenda de Ingresos</h5>
+            <h5 className="font-semibold text-gray-700 mb-3">Leyenda de {labels.valor}</h5>
             <div className="flex flex-wrap items-center gap-4 text-xs">
               <div className="flex items-center gap-2">
                 <div className="w-5 h-5 bg-green-100 border border-gray-300 rounded"></div>
@@ -351,7 +370,7 @@ const MapaPeruMapbox = ({ departamentos = [] }) => {
                 </div>
 
                 <div className="bg-green-50 rounded-lg p-3 border border-green-200">
-                  <p className="text-xs text-green-600 font-medium">INGRESOS</p>
+                  <p className="text-xs text-green-600 font-medium">{labels.valor.toUpperCase()}</p>
                   <p className="text-xl font-bold text-green-800">
                     {formatearMonedaCompacta(estadisticas.totalIngresos)}
                   </p>
@@ -359,9 +378,9 @@ const MapaPeruMapbox = ({ departamentos = [] }) => {
                 </div>
 
                 <div className="bg-purple-50 rounded-lg p-3 border border-purple-200">
-                  <p className="text-xs text-purple-600 font-medium">VENTAS</p>
+                  <p className="text-xs text-purple-600 font-medium">{labels.cantidad.toUpperCase()}</p>
                   <p className="text-xl font-bold text-purple-800">{estadisticas.totalVentas}</p>
-                  <p className="text-xs text-purple-600">Transacciones</p>
+                  <p className="text-xs text-purple-600">{tipo === 'prospectos' ? 'Intenciones' : 'Transacciones'}</p>
                 </div>
 
                 <div className="bg-orange-50 rounded-lg p-3 border border-orange-200">
@@ -392,7 +411,7 @@ const MapaPeruMapbox = ({ departamentos = [] }) => {
                           </div>
                           <div>
                             <p className="font-medium text-gray-900 text-sm">{dept.departamento}</p>
-                            <p className="text-xs text-gray-500">{dept.total_ventas} ventas</p>
+                            <p className="text-xs text-gray-500">{dept.total_ventas} {tipo === 'prospectos' ? 'prospectos' : 'ventas'}</p>
                           </div>
                         </div>
                         <div className="text-right">

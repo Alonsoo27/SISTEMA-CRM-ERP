@@ -2296,7 +2296,7 @@ static async obtenerPorId(req, res) {
 
             const unifiedQuery = `
                 WITH datos_base AS (
-                    SELECT
+                    SELECT DISTINCT ON (p.id)
                         p.id,
                         p.canal_contacto,
                         p.valor_estimado,
@@ -2304,18 +2304,20 @@ static async obtenerPorId(req, res) {
                         p.fecha_contacto,
                         p.fecha_cierre,
                         p.distrito,
+                        p.ciudad,
+                        p.departamento,
                         v.id as venta_id,
                         v.valor_final,
                         v.fecha_venta,
-                        s.id as seguimiento_id,
-                        s.completado as seguimiento_completado
+                        (SELECT COUNT(*) FROM seguimientos WHERE prospecto_id = p.id) as total_seguimientos_count,
+                        (SELECT COUNT(*) FROM seguimientos WHERE prospecto_id = p.id AND completado = true) as seguimientos_completados_count
                     FROM prospectos p
                     LEFT JOIN ventas v ON p.id = v.prospecto_id
-                    LEFT JOIN seguimientos s ON p.id = s.prospecto_id
                     WHERE p.activo = true
                     ${asesorFilter}
                     AND p.fecha_contacto >= ${asesor_id ? '$2' : '$1'}
                     AND p.fecha_contacto <= ${asesor_id ? '$3' : '$2'}
+                    ORDER BY p.id
                 )
                 SELECT
                     -- 📊 MÉTRICAS GENERALES
@@ -2329,10 +2331,10 @@ static async obtenerPorId(req, res) {
                     COUNT(DISTINCT CASE WHEN venta_id IS NOT NULL THEN venta_id END) as ventas_cerradas_cantidad,
 
                     -- 📈 EFECTIVIDAD DE SEGUIMIENTOS
-                    COUNT(DISTINCT seguimiento_id) as total_seguimientos,
-                    COUNT(DISTINCT CASE WHEN seguimiento_completado = true AND venta_id IS NOT NULL THEN seguimiento_id END) as seguimientos_exitosos,
+                    COALESCE(SUM(total_seguimientos_count), 0) as total_seguimientos,
+                    COALESCE(SUM(seguimientos_completados_count), 0) as seguimientos_exitosos,
 
-                    -- 🏆 POR CANAL (sin DISTINCT para evitar error JSON)
+                    -- 🏆 POR CANAL Y UBICACIÓN
                     JSON_AGG(
                         CASE WHEN canal_contacto IS NOT NULL THEN
                             JSON_BUILD_OBJECT(
@@ -2342,7 +2344,10 @@ static async obtenerPorId(req, res) {
                                 'convertido', CASE WHEN venta_id IS NOT NULL THEN 1 ELSE 0 END,
                                 'pipeline', CASE WHEN estado IN ('Prospecto', 'Cotizado', 'Negociacion') THEN valor_estimado ELSE 0 END,
                                 'cerrado', CASE WHEN venta_id IS NOT NULL THEN valor_final ELSE 0 END,
+                                'valor_estimado', valor_estimado,
                                 'distrito', distrito,
+                                'ciudad', ciudad,
+                                'departamento', departamento,
                                 'fecha_contacto', fecha_contacto
                             )
                         END
@@ -2354,35 +2359,7 @@ static async obtenerPorId(req, res) {
             const result = await query(unifiedQuery, params);
             const datos = result.rows[0];
 
-            // 📍 No necesitamos productos por ahora - enfoque en geografía y canales
-
-            // 🗺️ MAPEO DE DISTRITOS A DEPARTAMENTOS (datos reales de Lima)
-            const distritoADepartamento = {
-                'ATE': 'LIMA',
-                'PACHACAMAC': 'LIMA',
-                'HUAYCAN': 'LIMA',
-                'LOS OLIVOS': 'LIMA',
-                'MIRAFLORES': 'LIMA',
-                'SAN JUAN DE LURIGANCHO': 'LIMA',
-                'VILLA EL SALVADOR': 'LIMA',
-                'VILLA MARIA DEL TRIUNFO': 'LIMA',
-                'SAN MARTIN DE PORRES': 'LIMA',
-                'COMAS': 'LIMA',
-                'CARABAYLLO': 'LIMA',
-                'PUENTE PIEDRA': 'LIMA',
-                'ANCON': 'LIMA',
-                'SANTA ROSA': 'LIMA',
-                'VENTANILLA': 'CALLAO',
-                'BELLAVISTA': 'CALLAO',
-                'CALLAO': 'CALLAO',
-                'CARMEN DE LA LEGUA': 'CALLAO',
-                'LA PERLA': 'CALLAO',
-                'LA PUNTA': 'CALLAO',
-                // Agregar más distritos según se necesiten
-                'SIN ESPECIFICAR': 'LIMA'
-            };
-
-            // 🧮 PROCESAR DATOS EXPANDIDOS
+            // 🧮 PROCESAR DATOS EXPANDIDOS (usando departamento directo de la BD)
             const canalesProcesados = {};
             const distritosProcesados = {};
             const departamentosProcesados = {};
@@ -2392,6 +2369,8 @@ static async obtenerPorId(req, res) {
                 datos.datos_canales.forEach(item => {
                     const canal = item.canal;
                     const distrito = item.distrito || 'Sin especificar';
+                    const ciudad = item.ciudad || 'Sin especificar';
+                    const departamento = item.departamento || 'Sin especificar';
                     const mes = new Date(item.fecha_contacto).toISOString().substr(0, 7); // YYYY-MM
 
                     // 📊 PROCESAR POR CANAL
@@ -2418,7 +2397,7 @@ static async obtenerPorId(req, res) {
                     canalesProcesados[canal].cerrado += item.cerrado;
                     canalesProcesados[canal].por_estado[item.estado] += 1;
 
-                    // 🗺️ PROCESAR POR DISTRITO
+                    // 🗺️ PROCESAR POR DISTRITO (TODOS los prospectos - intención de compra histórica)
                     if (!distritosProcesados[distrito]) {
                         distritosProcesados[distrito] = {
                             nombre: distrito,
@@ -2430,34 +2409,32 @@ static async obtenerPorId(req, res) {
 
                     distritosProcesados[distrito].total_prospectos += item.total;
                     distritosProcesados[distrito].conversiones += item.convertido;
-                    distritosProcesados[distrito].valor_estimado_total += (item.pipeline || 0) + (item.cerrado || 0);
+                    distritosProcesados[distrito].valor_estimado_total += (item.valor_estimado || 0);
 
-                    // 🏛️ PROCESAR POR DEPARTAMENTO (para el mapa de PROSPECTOS - INTENCIÓN DE COMPRA)
-                    const departamento = distritoADepartamento[distrito.toUpperCase()] || 'OTROS';
+                    // 🏛️ PROCESAR POR DEPARTAMENTO (TODOS los prospectos - intención de compra histórica)
                     if (!departamentosProcesados[departamento]) {
                         departamentosProcesados[departamento] = {
                             departamento: departamento,
-                            total_prospectos: 0, // ✅ Cambiado de total_ventas a total_prospectos
+                            total_prospectos: 0,
                             conversiones: 0,
-                            valor_estimado_total: 0, // ✅ Cambiado de ingresos_totales a valor_estimado_total
+                            valor_estimado_total: 0,
                             ciudades: new Set(),
                             asesores_activos: 1
                         };
                     }
 
-                    // ✅ CONTAR TODOS LOS PROSPECTOS (no solo conversiones)
+                    // 📍 CONTAR TODOS LOS PROSPECTOS (intención de compra total)
                     departamentosProcesados[departamento].total_prospectos += item.total;
                     departamentosProcesados[departamento].conversiones += item.convertido;
-                    // ✅ SUMAR TODO EL VALOR (pipeline + cerrado) = INTENCIÓN DE COMPRA
-                    departamentosProcesados[departamento].valor_estimado_total += (item.pipeline || 0) + (item.cerrado || 0);
-                    departamentosProcesados[departamento].ciudades.add(distrito);
+                    departamentosProcesados[departamento].valor_estimado_total += (item.valor_estimado || 0);
+                    departamentosProcesados[departamento].ciudades.add(ciudad);
 
                     // 📈 DATOS TEMPORALES
                     datosTemporales.push({
                         mes: mes,
                         canal: canal,
                         estado: item.estado,
-                        valor: item.pipeline || item.cerrado || 0
+                        valor: item.valor_estimado || 0
                     });
                 });
             }

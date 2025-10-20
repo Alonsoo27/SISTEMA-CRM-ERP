@@ -333,7 +333,7 @@ const Analytics = ({ asesorId = null }) => {
       {/* Mapa Geográfico de Perú */}
       {datosParaMapa.length > 0 && (
         <div className="bg-white rounded-lg shadow-sm border p-2">
-          <MapaPeruMapbox departamentos={datosParaMapa} />
+          <MapaPeruMapbox departamentos={datosParaMapa} tipo="prospectos" />
         </div>
       )}
 
