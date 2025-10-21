@@ -9,7 +9,7 @@ const NotificacionesController = require('../../notificaciones/controllers/notif
 const { sincronizarCacheSeguimientos } = require('../utils/sincronizarSeguimientos');
 
 // 📅 INTEGRACIÓN CON HELPER DE FECHAS FLEXIBLE
-const { calcularFechaLimite, esHorarioLaboral, calcular2DiasLaborales } = require('../utils/fechasHelper');
+const { convertirHoraPeruAUTC, calcularFechaLimite, esHorarioLaboral, calcular2DiasLaborales } = require('../utils/fechasHelper');
 
 // CONFIGURACIÓN DE LOGGING
 const logger = winston.createLogger({
@@ -73,22 +73,26 @@ class SeguimientosController {
                     error: 'La fecha de seguimiento es obligatoria'
                 });
             }
-            
-            // Validar que la fecha sea futura
-            const fechaSeguimiento = new Date(fecha_programada);
-            if (fechaSeguimiento <= new Date()) {
+
+            // 🌎 CONVERTIR DE HORA PERÚ A UTC
+            // El frontend envía fechas en hora Perú (sin offset), hay que convertir a UTC
+            const fechaProgramadaUTC = convertirHoraPeruAUTC(fecha_programada);
+
+            // Validar que la fecha sea futura (comparar en UTC)
+            if (fechaProgramadaUTC <= new Date()) {
                 return res.status(400).json({
                     success: false,
                     error: 'La fecha de seguimiento debe ser futura'
                 });
             }
-            
+
             const asesor_id = req.user?.id || 1;
 
             // 🕐 fecha_limite: Alerta al asesor (4h para Llamada según tipo)
-            const fecha_limite = calcularFechaLimite(fecha_programada, tipo);
+            // Usar la fecha UTC convertida
+            const fecha_limite = calcularFechaLimite(fechaProgramadaUTC.toISOString(), tipo);
 
-            // Crear seguimiento
+            // Crear seguimiento con fechas en UTC
             const insertQuery = `
                 INSERT INTO seguimientos (
                     prospecto_id, asesor_id, fecha_programada, fecha_limite, tipo, descripcion
@@ -97,7 +101,7 @@ class SeguimientosController {
             `;
 
             const result = await query(insertQuery, [
-                parseInt(id), asesor_id, fecha_programada, fecha_limite.toISOString(), tipo, descripcion
+                parseInt(id), asesor_id, fechaProgramadaUTC.toISOString(), fecha_limite.toISOString(), tipo, descripcion
             ]);
             
             if (!result.rows || result.rows.length === 0) {
@@ -119,7 +123,7 @@ class SeguimientosController {
 
             // 🔔 NOTIFICACIÓN: seguimiento_proximo si está dentro de las próximas 24 horas
             try {
-                const horasHastaSeguimiento = (new Date(fecha_programada) - new Date()) / (1000 * 60 * 60);
+                const horasHastaSeguimiento = (fechaProgramadaUTC - new Date()) / (1000 * 60 * 60);
 
                 if (horasHastaSeguimiento > 0 && horasHastaSeguimiento <= 24) {
                     // Obtener datos del prospecto
@@ -222,16 +226,19 @@ class SeguimientosController {
                             continue;
                         }
 
-                        // Validar horario laboral
-                        if (!esHorarioLaboral(fecha_programada)) {
+                        // 🌎 CONVERTIR DE HORA PERÚ A UTC
+                        const fechaProgramadaUTC = convertirHoraPeruAUTC(fecha_programada);
+
+                        // Validar horario laboral (usando fecha UTC)
+                        if (!esHorarioLaboral(fechaProgramadaUTC.toISOString())) {
                             logger.warn(`⚠️ Fecha fuera de horario laboral: ${fecha_programada} (tipo: ${tipo})`);
                             // Continuar de todos modos, el helper ajustará automáticamente
                         }
 
                         // Calcular fecha_limite usando helper flexible (sin hardcode de 18h)
-                        const fechaLimite = calcularFechaLimite(fecha_programada, tipo);
+                        const fechaLimite = calcularFechaLimite(fechaProgramadaUTC.toISOString(), tipo);
 
-                        // Crear seguimiento
+                        // Crear seguimiento con fechas en UTC
                         await query(`
                             INSERT INTO seguimientos (
                                 prospecto_id, asesor_id, fecha_programada, fecha_limite,
@@ -240,7 +247,7 @@ class SeguimientosController {
                         `, [
                             data.prospecto_id,
                             data.asesor_id,
-                            fecha_programada,
+                            fechaProgramadaUTC.toISOString(),
                             fechaLimite,
                             tipo,
                             notasSeguimiento || `Seguimiento reprogramado: ${resultado}`,

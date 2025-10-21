@@ -7,10 +7,27 @@
  */
 
 /**
+ * Convierte una fecha de hora Perú (America/Lima) a UTC
+ * @param {string|Date} fechaHoraPeru - Fecha en hora Perú (sin offset)
+ * @returns {Date} Fecha convertida a UTC
+ *
+ * Ejemplo: "2025-10-22T12:00:00" (mediodía Perú) → "2025-10-22T17:00:00Z" (5pm UTC)
+ */
+const convertirHoraPeruAUTC = (fechaHoraPeru) => {
+    // Crear fecha interpretándola como hora Perú (UTC-5)
+    const fecha = new Date(fechaHoraPeru);
+
+    // Perú está en UTC-5, así que sumar 5 horas para obtener UTC
+    const fechaUTC = new Date(fecha.getTime() + (5 * 60 * 60 * 1000));
+
+    return fechaUTC;
+};
+
+/**
  * Calcula la fecha límite para un seguimiento según tipo y fecha programada
- * @param {string|Date} fechaProgramada - Fecha programada del seguimiento
+ * @param {string|Date} fechaProgramada - Fecha programada del seguimiento (en hora Perú)
  * @param {string} tipoSeguimiento - Tipo de seguimiento (Llamada, WhatsApp, etc.)
- * @returns {string} Fecha límite en formato ISO
+ * @returns {string} Fecha límite en formato ISO UTC
  */
 const calcularFechaLimite = (fechaProgramada, tipoSeguimiento = 'Llamada') => {
     const fecha = new Date(fechaProgramada);
@@ -309,6 +326,7 @@ const calcular2DiasLaborales = (fechaInicio) => {
 };
 
 module.exports = {
+    convertirHoraPeruAUTC,
     calcularFechaLimite,
     ajustarAHorarioLaboral,
     esHorarioLaboral,
