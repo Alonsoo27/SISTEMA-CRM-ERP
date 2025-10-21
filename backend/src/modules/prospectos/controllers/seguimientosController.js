@@ -1161,6 +1161,7 @@ class SeguimientosController {
                 INNER JOIN prospectos p ON s.prospecto_id = p.id
                 WHERE s.asesor_id = $1 AND s.completado = $2 AND p.activo = $3
                 AND s.visible_para_asesor = $4
+                AND p.estado NOT IN ('Cerrado', 'Perdido', 'Convertido')
                 ORDER BY s.fecha_programada ASC`
                 : `SELECT s.*,
                        p.codigo, p.nombre_cliente, p.apellido_cliente, p.empresa, p.telefono, p.estado, p.valor_estimado
@@ -1168,6 +1169,7 @@ class SeguimientosController {
                 INNER JOIN prospectos p ON s.prospecto_id = p.id
                 WHERE s.completado = $1 AND p.activo = $2
                 AND s.visible_para_asesor = $3
+                AND p.estado NOT IN ('Cerrado', 'Perdido', 'Convertido')
                 ORDER BY s.fecha_programada ASC`;
 
             const seguimientosParams = asesor_id
@@ -1220,12 +1222,16 @@ class SeguimientosController {
                 INNER JOIN prospectos p ON s.prospecto_id = p.id
                 WHERE s.asesor_id = $1 AND s.completado = $2
                 AND COALESCE(s.fecha_completado, s.updated_at, s.created_at) >= $3
+                AND p.activo = true
+                AND p.estado NOT IN ('Cerrado', 'Perdido', 'Convertido')
                 ORDER BY COALESCE(s.fecha_completado, s.updated_at, s.created_at) DESC`
                 : `SELECT s.*,
                        p.codigo, p.nombre_cliente, p.apellido_cliente, p.empresa, p.telefono, p.estado, p.valor_estimado
                 FROM seguimientos s
                 INNER JOIN prospectos p ON s.prospecto_id = p.id
                 WHERE s.completado = $1 AND COALESCE(s.fecha_completado, s.updated_at, s.created_at) >= $2
+                AND p.activo = true
+                AND p.estado NOT IN ('Cerrado', 'Perdido', 'Convertido')
                 ORDER BY COALESCE(s.fecha_completado, s.updated_at, s.created_at) DESC`;
 
             const realizadosParams = asesor_id
