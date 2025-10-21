@@ -1,11 +1,12 @@
 // src/components/prospectos/ProspectoList/ProspectoList.jsx
 import React, { useState, useEffect, useMemo } from 'react';
-import { 
-  Search, Filter, Download, Edit, Trash2, Phone, Mail, 
+import {
+  Search, Filter, Download, Edit, Trash2, Phone, Mail,
   Building, Calendar, DollarSign, User, Eye, MoreVertical,
-  ChevronLeft, ChevronRight, ArrowUpDown, AlertCircle
+  ChevronLeft, ChevronRight, ArrowUpDown, AlertCircle, RefreshCw
 } from 'lucide-react';
 import prospectosService from '../../../services/prospectosService';
+import { formatearVencimiento } from '../../../utils/formatearVencimiento';
 
 const ProspectoList = ({ refreshTrigger = 0, onEdit, onView }) => {
   const [prospectosCache, setProspectosCache] = useState([]); // Todos los prospectos
@@ -349,11 +350,30 @@ const ProspectoList = ({ refreshTrigger = 0, onEdit, onView }) => {
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
-            {prospectosPaginados.map((prospecto) => (
-              <tr key={prospecto.id} className="hover:bg-gray-50">
-                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                  {prospecto.codigo}
-                </td>
+            {prospectosPaginados.map((prospecto) => {
+              // 🔄 DETECTAR SI ES TRASPASADO
+              const esTraspasado = prospecto.traspasado_por_vencimiento === true;
+
+              // 📅 FORMATEAR VENCIMIENTO
+              const vencimientoInfo = (prospecto.estado !== 'Cerrado' && prospecto.estado !== 'Perdido' && prospecto.seguimiento_obligatorio)
+                ? formatearVencimiento(prospecto.seguimiento_obligatorio)
+                : null;
+
+              return (
+                <tr
+                  key={prospecto.id}
+                  className={`hover:bg-gray-100 transition-colors ${
+                    esTraspasado ? 'bg-amber-50' : ''
+                  }`}
+                >
+                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                    <div className="flex items-center gap-2">
+                      {prospecto.codigo}
+                      {esTraspasado && (
+                        <RefreshCw className="h-3 w-3 text-amber-600" title="Prospecto traspasado" />
+                      )}
+                    </div>
+                  </td>
                 <td className="px-6 py-4 whitespace-nowrap">
                   <div>
                     <div className="text-sm font-medium text-gray-900">
@@ -401,10 +421,16 @@ const ProspectoList = ({ refreshTrigger = 0, onEdit, onView }) => {
                     >
                       <Edit className="h-4 w-4" />
                     </button>
+                    {vencimientoInfo && (
+                      <span className={`text-xs ${vencimientoInfo.color}`} title={vencimientoInfo.texto}>
+                        ⏰
+                      </span>
+                    )}
                   </div>
                 </td>
               </tr>
-            ))}
+              );
+            })}
           </tbody>
         </table>
       </div>

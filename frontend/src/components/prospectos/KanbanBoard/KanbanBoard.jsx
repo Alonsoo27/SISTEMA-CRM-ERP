@@ -3,10 +3,11 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   Phone, Mail, Building, Calendar, DollarSign, User,
   MoreVertical, CheckCircle, XCircle, Clock, AlertCircle,
-  ExternalLink, Edit, Trash2, Filter, Package, ArrowRight
+  ExternalLink, Edit, Trash2, Filter, Package, ArrowRight, RefreshCw
 } from 'lucide-react';
 import prospectosService from '../../../services/prospectosService';
 import VentaForm from '../../ventas/VentaForm/VentaForm'; // AGREGADO: Import del VentaForm
+import { formatearVencimiento, ordenarProspectosPorVencimiento } from '../../../utils/formatearVencimiento';
 
 const KanbanBoard = ({
   asesorId = null,
@@ -749,18 +750,28 @@ const KanbanBoard = ({
 
   const ProspectoCard = ({ prospecto }) => {
     if (!prospecto) return null;
-    
+
     // No mostrar seguimientos en prospectos cerrados o perdidos
     const tieneUrgencia = (prospecto.estado !== 'Cerrado' && prospecto.estado !== 'Perdido') &&
                           (prospecto.seguimiento_vencido || prospecto.seguimiento_obligatorio);
     const isMenuOpen = menuAbierto === prospecto.id;
-    
+
+    // 🔄 DETECTAR SI ES TRASPASADO
+    const esTraspasado = prospecto.traspasado_por_vencimiento === true;
+
+    // 📅 FORMATEAR VENCIMIENTO (solo para prospectos activos)
+    const vencimientoInfo = (prospecto.estado !== 'Cerrado' && prospecto.estado !== 'Perdido' && prospecto.seguimiento_obligatorio)
+      ? formatearVencimiento(prospecto.seguimiento_obligatorio)
+      : null;
+
     return (
       <div
         draggable
         onDragStart={(e) => handleDragStart(e, prospecto)}
         className={`bg-white p-4 rounded-lg shadow hover:shadow-md cursor-move transition-all duration-200 border-l-4 ${
-          tieneUrgencia ? 'border-l-red-400 bg-red-50' : 'border-l-gray-300'
+          tieneUrgencia ? 'border-l-red-400 bg-red-50' :
+          esTraspasado ? 'border-l-amber-400 bg-amber-50' :
+          'border-l-gray-300'
         } ${draggedItem?.id === prospecto.id ? 'opacity-50 transform rotate-2' : ''}`}
       >
         {/* Header con nombre y código */}
@@ -830,6 +841,24 @@ const KanbanBoard = ({
             )}
           </div>
         </div>
+
+        {/* 🔄 INDICADOR DE TRASPASO */}
+        {esTraspasado && (
+          <div className="mb-3 p-2 bg-amber-100 border border-amber-300 rounded text-xs text-amber-800 flex items-center">
+            <RefreshCw className="h-3 w-3 mr-1 flex-shrink-0" />
+            <span>Traspasado el {formatearFecha(prospecto.fecha_traspaso)}</span>
+          </div>
+        )}
+
+        {/* ⏰ INDICADOR DE VENCIMIENTO */}
+        {vencimientoInfo && (
+          <div className={`mb-3 p-2 rounded text-xs font-medium flex items-center ${
+            vencimientoInfo.urgente ? 'bg-orange-100 border border-orange-300' : 'bg-blue-50 border border-blue-200'
+          }`}>
+            <Clock className="h-3 w-3 mr-1 flex-shrink-0" />
+            <span className={vencimientoInfo.color}>{vencimientoInfo.texto}</span>
+          </div>
+        )}
 
         {/* Información de contacto */}
         <div className="space-y-2 mb-3">
@@ -1041,7 +1070,9 @@ const KanbanBoard = ({
       {/* Tablero Kanban */}
       <div className="flex flex-col lg:flex-row gap-6 h-full overflow-x-auto">
         {Object.entries(estadosConfig).map(([estado, config]) => {
-          const prospectos = kanbanData[estado] || [];
+          const prospectosOriginales = kanbanData[estado] || [];
+          // 📊 ORDENAR POR VENCIMIENTO (más urgentes primero)
+          const prospectos = ordenarProspectosPorVencimiento(prospectosOriginales);
           const IconComponent = config.icon;
 
           return (

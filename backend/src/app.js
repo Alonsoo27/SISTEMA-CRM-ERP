@@ -278,6 +278,11 @@ app.use('/api/auth', authRateLimit, require('./routes/authRoutes'));
 // Middleware de autenticación para rutas protegidas
 const { authenticateToken } = require('./middleware/auth');
 
+// =====================================================
+// RUTAS DE CRON JOBS (sin autenticación JWT, solo token de cron)
+// =====================================================
+app.use('/api/cron', require('./modules/prospectos/routes/cronRoutes'));
+
 // Rutas de usuarios (protegidas)
 app.use('/api/usuarios', authenticateToken, require('./routes/usuariosRoutes'));
 

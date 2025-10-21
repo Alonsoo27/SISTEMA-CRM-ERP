@@ -29,6 +29,28 @@ const cronJobRateLimit = rateLimit({
     legacyHeaders: false,
 });
 
+// MIDDLEWARE DE SEGURIDAD PARA CRON JOBS
+const verificarTokenCron = (req, res, next) => {
+    const tokenCron = req.headers['x-cron-token'];
+    const tokenEsperado = process.env.CRON_SECRET_TOKEN;
+
+    // Si no hay token configurado, permitir (desarrollo local)
+    if (!tokenEsperado) {
+        console.warn('⚠️  ADVERTENCIA: CRON_SECRET_TOKEN no configurado en variables de entorno');
+        return next();
+    }
+
+    // Verificar token
+    if (!tokenCron || tokenCron !== tokenEsperado) {
+        return res.status(401).json({
+            success: false,
+            error: 'No autorizado para ejecutar cron jobs'
+        });
+    }
+
+    next();
+};
+
 // =====================================================
 // RUTAS DE SEGUIMIENTOS BÁSICOS
 // =====================================================
@@ -62,8 +84,9 @@ router.get('/vencidos', SeguimientosController.obtenerSeguimientosVencidos);
  * POST /api/prospectos/seguimientos/procesar-vencidos
  * Procesar seguimientos vencidos manualmente (también se ejecuta automáticamente)
  * Endpoint para testing y ejecución manual del cron job
+ * Requiere header: x-cron-token con el valor de CRON_SECRET_TOKEN
  */
-router.post('/procesar-vencidos', cronJobRateLimit, SeguimientosController.procesarSeguimientosVencidos);
+router.post('/procesar-vencidos', verificarTokenCron, cronJobRateLimit, SeguimientosController.procesarSeguimientosVencidos);
 
 /**
  * GET /api/prospectos/modo-libre/:asesorId
