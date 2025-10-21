@@ -1307,19 +1307,39 @@ class SeguimientosController {
 
             const listosConversion = listosConversionResult.rows;
             
-            // Categorizar seguimientos
+            // Categorizar seguimientos - CORRECCIÓN: Usar fecha_programada consistentemente
             const ahora = new Date();
             const seguimientosCategorias = {
-                vencidos: seguimientos?.filter(s => new Date(s.fecha_limite) < ahora) || [],
+                // 🔴 VENCIDOS: fecha_programada ya pasó (excluyendo los de hoy)
+                vencidos: seguimientos?.filter(s => {
+                    const fechaProgramada = new Date(s.fecha_programada);
+                    return fechaProgramada < ahora && fechaProgramada.toDateString() !== ahora.toDateString();
+                }) || [],
+                // 📅 HOY: fecha_programada es hoy
                 hoy: seguimientos?.filter(s => {
                     const fecha = new Date(s.fecha_programada);
                     return fecha.toDateString() === ahora.toDateString();
                 }) || [],
+                // 📆 PRÓXIMOS: fecha_programada es futura (no hoy)
                 proximos: seguimientos?.filter(s => {
                     const fecha = new Date(s.fecha_programada);
-                    return fecha > ahora && fecha.toDateString() !== ahora.toDateString();
+                    return fecha > ahora;
                 }) || []
             };
+
+            // 🔍 LOG: Verificar clasificación
+            console.log(`📊 [DEBUG Clasificación] Total pendientes: ${seguimientos?.length || 0}`);
+            console.log(`   - Vencidos: ${seguimientosCategorias.vencidos.length}`);
+            console.log(`   - Hoy: ${seguimientosCategorias.hoy.length}`);
+            console.log(`   - Próximos: ${seguimientosCategorias.proximos.length}`);
+
+            // Verificar que todos fueron clasificados
+            const totalClasificados = seguimientosCategorias.vencidos.length +
+                                     seguimientosCategorias.hoy.length +
+                                     seguimientosCategorias.proximos.length;
+            if (totalClasificados !== (seguimientos?.length || 0)) {
+                console.warn(`⚠️ [DEBUG] ALERTA: ${(seguimientos?.length || 0) - totalClasificados} seguimientos NO clasificados`);
+            }
             
             // Obtener métricas (últimos 30 días) - con filtrado por rol
             const fechaLimite = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
