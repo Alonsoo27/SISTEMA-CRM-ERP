@@ -61,10 +61,25 @@ const ajustarAHorarioLaboral = (fecha) => {
         return fecha.toISOString();
     }
 
-    // Caso 2: Sábado después de 12pm → Mover a Lunes 8am
+    // Caso 2: Sábado después de 12pm → Preservar overflow de horas
     if (dia === 6 && hora >= 12) {
+        // Calcular overflow: horas y minutos que sobrepasan las 12pm del sábado
+        const horasOverflow = hora - 12;
+        const minutosActuales = fecha.getMinutes();
+        const segundosActuales = fecha.getSeconds();
+
+        // Mover a Lunes
         fecha.setDate(fecha.getDate() + 2); // Sábado → Lunes
-        fecha.setHours(8, 0, 0, 0);
+
+        // Aplicar overflow empezando desde las 8am del lunes
+        const nuevaHora = 8 + horasOverflow;
+        fecha.setHours(nuevaHora, minutosActuales, segundosActuales, 0);
+
+        // Si el overflow hace que exceda 6pm del lunes, ajustar recursivamente
+        if (nuevaHora >= 18) {
+            return ajustarAHorarioLaboral(fecha);
+        }
+
         return fecha.toISOString();
     }
 
@@ -80,18 +95,45 @@ const ajustarAHorarioLaboral = (fecha) => {
         return fecha.toISOString();
     }
 
-    // Caso 5: Lunes a Viernes después de 6pm → Mover a siguiente día 8am
+    // Caso 5: Lunes a Viernes después de 6pm → Preservar overflow de horas
     if (dia >= 1 && dia <= 5 && hora >= 18) {
+        // Calcular overflow: horas y minutos que sobrepasan las 6pm
+        const horasOverflow = hora - 18;
+        const minutosActuales = fecha.getMinutes();
+        const segundosActuales = fecha.getSeconds();
+
+        // Mover al siguiente día
         fecha.setDate(fecha.getDate() + 1);
-        fecha.setHours(8, 0, 0, 0);
+
+        // Aplicar overflow empezando desde las 8am
+        const nuevaHora = 8 + horasOverflow;
+        fecha.setHours(nuevaHora, minutosActuales, segundosActuales, 0);
+
         // Verificar si el siguiente día es domingo
         if (fecha.getDay() === 0) {
             fecha.setDate(fecha.getDate() + 1); // Domingo → Lunes
+            fecha.setHours(nuevaHora, minutosActuales, segundosActuales, 0);
         }
-        // Verificar si el siguiente día es sábado después de medianoche
+
+        // Verificar si el siguiente día es sábado
         if (fecha.getDay() === 6) {
-            fecha.setHours(9, 0, 0, 0); // Ajustar a 9am sábado
+            // Sábado solo trabaja hasta 12pm
+            if (nuevaHora >= 12) {
+                // Si el overflow pasa de 12pm sábado, mover a lunes
+                fecha.setDate(fecha.getDate() + 2); // Sábado → Lunes
+                fecha.setHours(nuevaHora, minutosActuales, segundosActuales, 0);
+            } else if (nuevaHora < 9) {
+                // Si cae antes de 9am sábado, ajustar a 9am
+                fecha.setHours(9, minutosActuales, segundosActuales, 0);
+            }
         }
+
+        // Verificar si el overflow hace que exceda 6pm del siguiente día
+        if (fecha.getDay() >= 1 && fecha.getDay() <= 5 && fecha.getHours() >= 18) {
+            // Recursivamente ajustar si nuevamente cae fuera de horario
+            return ajustarAHorarioLaboral(fecha);
+        }
+
         return fecha.toISOString();
     }
 
