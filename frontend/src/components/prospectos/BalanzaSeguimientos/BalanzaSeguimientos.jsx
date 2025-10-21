@@ -773,12 +773,13 @@ const BalanzaSeguimientos = ({ asesorId: asesorIdProp = null, refreshTrigger = 0
                 // Determinar si es un grupo o un item individual
                 const esGrupo = vistaDetalle === 'realizados' && itemGrupo.seguimientos;
                 const item = esGrupo ? itemGrupo.seguimiento_mas_reciente : itemGrupo;
-                const prospectoId = item.prospecto_id || item.id;
+                const seguimientoId = item.id; // ID único del seguimiento
+                const prospectoId = item.prospecto_id;
                 const estaExpandido = prospectosExpandidos[prospectoId];
                 const totalSeguimientos = esGrupo ? itemGrupo.seguimientos.length : 1;
 
                 return (
-                  <div key={prospectoId || index} className="hover:bg-gray-50 transition-colors">
+                  <div key={seguimientoId || `${prospectoId}-${index}` || index} className="hover:bg-gray-50 transition-colors">
                     {/* Card Principal */}
                     <div className="p-4">
                       <div className="flex items-center justify-between">
