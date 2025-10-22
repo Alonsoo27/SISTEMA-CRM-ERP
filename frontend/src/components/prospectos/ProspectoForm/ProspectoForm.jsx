@@ -514,9 +514,26 @@ const cargarDatosProspectoCompletos = async (prospectoId) => {
 
         console.log('📦 Objeto validacion extraído:', validacion);
 
-        // 2. Verificar si requiere confirmación (Escenario B: ADVERTIR)
+        // 2. ✅ FIX CRÍTICO: Verificar bloqueo ANTES de advertencia (Escenario C: BLOQUEAR)
+        if (validacion.permitir === false) {
+          console.log('🚫 Escenario C - Bloqueo total detectado en validación');
+          console.log('   Motivo:', validacion.mensaje);
+          console.log('   Escenario:', validacion.escenario);
+
+          setValidacionDuplicado({
+            escenario: validacion.escenario || 'C_BLOQUEAR_PRODUCTO_AVANZADO',
+            mensaje: validacion.mensaje || 'No se puede crear el prospecto',
+            motivo_bloqueo: validacion.motivo_bloqueo,
+            asesores_activos: validacion.asesores_activos || []
+          });
+          setModalDuplicadoOpen(true);
+          setLoading(false);
+          return; // ❌ NO intentar crear - bloqueado
+        }
+
+        // 3. Verificar si requiere confirmación (Escenario B: ADVERTIR)
         if (validacion.requires_confirmation) {
-          console.log('⚠️ Requiere confirmación - Mostrando modal');
+          console.log('⚠️ Escenario B - Requiere confirmación del usuario');
           // Guardar el intento para usar después de la confirmación
           setIntentoCrear(dataToSend);
           setValidacionDuplicado(validacion);
@@ -525,8 +542,8 @@ const cargarDatosProspectoCompletos = async (prospectoId) => {
           return;
         }
 
-        console.log('✅ No requiere confirmación - Creando directamente');
-        // 3. Si no requiere confirmación, crear directamente (Escenarios A, D, NUEVO)
+        console.log('✅ Escenario A/D/NUEVO - Creando directamente sin validaciones');
+        // 4. Si permite y no requiere confirmación, crear directamente (Escenarios A, D, NUEVO)
         const createResponse = await prospectosService.crear(dataToSend);
         if (createResponse.success) {
           onSave?.(createResponse.data);
@@ -536,14 +553,15 @@ const cargarDatosProspectoCompletos = async (prospectoId) => {
     } catch (err) {
       console.error('❌ Error en handleSubmit:', err);
 
-      // Manejar errores de bloqueo (Escenario C)
+      // ⚠️ FALLBACK: Manejar errores de bloqueo si la validación falló (no debería pasar)
       if (err.response?.status === 409) {
-        console.log('🚫 Escenario C - Bloqueo total');
+        console.warn('⚠️ Bloqueo detectado en creación (validación previa falló)');
         const errorData = err.response.data;
         setValidacionDuplicado({
-          escenario: 'C_BLOQUEAR_PRODUCTO_AVANZADO',
+          escenario: errorData.escenario || 'C_BLOQUEAR_PRODUCTO_AVANZADO',
           mensaje: errorData.error || 'No se puede crear el prospecto',
-          motivo_bloqueo: errorData.motivo_bloqueo
+          motivo_bloqueo: errorData.motivo_bloqueo,
+          asesores_activos: errorData.asesores_activos || []
         });
         setModalDuplicadoOpen(true);
         setLoading(false);

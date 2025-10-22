@@ -1987,10 +1987,18 @@ static async obtenerPorId(req, res) {
 
             const resumen = await ValidacionDuplicados.obtenerResumenDuplicados(telefono);
 
+            // ✅ MEJORA: Respuesta consistente según el escenario
+            // Si es bloqueo (permitir: false), devolver success: false para claridad
+            const esBloqueo = validacion.permitir === false;
+
             res.json({
-                success: true,
+                success: !esBloqueo, // false si está bloqueado, true si permite
+                bloqueado: esBloqueo, // Flag explícito para frontend
                 validacion: validacion,
-                resumen_prospectos: resumen
+                resumen_prospectos: resumen,
+                mensaje: esBloqueo
+                    ? 'Prospecto bloqueado por validación de duplicados'
+                    : 'Validación completada'
             });
 
         } catch (error) {

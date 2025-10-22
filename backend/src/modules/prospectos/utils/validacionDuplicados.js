@@ -62,6 +62,7 @@ class ValidacionDuplicados {
 
             // 2. Si NO hay prospectos existentes -> PERMITIR
             if (!prospectosExistentes.rows || prospectosExistentes.rows.length === 0) {
+                logger.info(`✅ NUEVO: Prospecto nuevo sin duplicados`, { telefono, asesorId });
                 return {
                     permitir: true,
                     escenario: 'NUEVO',
@@ -89,6 +90,7 @@ class ValidacionDuplicados {
                 );
 
                 if (esMismoAsesor) {
+                    logger.info(`✅ ESCENARIO D: Asesor reactivando prospecto propio`, { telefono, asesorId });
                     return {
                         permitir: true,
                         escenario: 'D_REACTIVACION_PROPIO',
@@ -101,6 +103,11 @@ class ValidacionDuplicados {
 
             // 5. ESCENARIO A: Solo hay prospectos Cerrados/Perdidos (otros asesores)
             if (prospectosActivos.length === 0) {
+                logger.info(`✅ ESCENARIO A: Prospectos históricos cerrados/perdidos`, {
+                    telefono,
+                    asesorId,
+                    prospectos_historicos: prospectosCerradosOPerdidos.length
+                });
                 return {
                     permitir: true,
                     escenario: 'A_CERRADO_PERDIDO',
@@ -145,12 +152,21 @@ class ValidacionDuplicados {
 
             // 8. ESCENARIO C: BLOQUEAR por mismo producto en Cotizado/Negociación
             if (conflictos.bloqueantes.length > 0) {
+                const bloqueante = conflictos.bloqueantes[0];
+                logger.warn(`🚫 BLOQUEO: ${bloqueante.mensaje}`, {
+                    telefono,
+                    asesor_intenta: asesorId,
+                    asesor_tiene: bloqueante.asesor_nombre,
+                    estado: bloqueante.estado,
+                    productos: bloqueante.productos
+                });
+
                 return {
                     permitir: false,
                     escenario: 'C_BLOQUEAR_PRODUCTO_AVANZADO',
                     mensaje: 'Producto ya en cotización/negociación por otro asesor',
                     requires_confirmation: false,
-                    motivo_bloqueo: conflictos.bloqueantes[0],
+                    motivo_bloqueo: bloqueante,
                     asesores_activos: prospectosActivos.map(p => ({
                         id: p.id,
                         asesor_id: p.asesor_id,
@@ -162,6 +178,13 @@ class ValidacionDuplicados {
             }
 
             // 9. ESCENARIO B: Productos diferentes o mismo producto en estado inicial
+            logger.info(`⚠️ ESCENARIO B: Requiere confirmación - Productos diferentes`, {
+                telefono,
+                asesorId,
+                asesores_activos: prospectosActivos.length,
+                coincidencias: conflictos.coincidencias.length
+            });
+
             return {
                 permitir: true,
                 escenario: 'B_ADVERTIR_PRODUCTOS_DIFERENTES',

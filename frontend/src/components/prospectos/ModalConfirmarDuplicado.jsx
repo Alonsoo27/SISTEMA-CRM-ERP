@@ -221,31 +221,44 @@ const ModalConfirmarDuplicado = ({
 
         {/* Footer */}
         <div className="px-6 py-4 bg-gray-50 border-t flex justify-end gap-3">
-          <button
-            onClick={onClose}
-            disabled={loading}
-            className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-medium"
-          >
-            Cancelar
-          </button>
-          {!esBloqueo && (
+          {esBloqueo ? (
+            // Solo botón de cerrar para bloqueos
             <button
-              onClick={onConfirm}
+              onClick={onClose}
               disabled={loading}
-              className="px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-medium flex items-center gap-2"
+              className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-medium flex items-center gap-2"
             >
-              {loading ? (
-                <>
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                  Registrando...
-                </>
-              ) : (
-                <>
-                  <CheckCircle className="h-4 w-4" />
-                  Sí, registrar de todas formas
-                </>
-              )}
+              <XCircle className="h-4 w-4" />
+              Entendido
             </button>
+          ) : (
+            // Botones de cancelar y confirmar para advertencias
+            <>
+              <button
+                onClick={onClose}
+                disabled={loading}
+                className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={onConfirm}
+                disabled={loading}
+                className="px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-medium flex items-center gap-2"
+              >
+                {loading ? (
+                  <>
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                    Registrando...
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle className="h-4 w-4" />
+                    Sí, registrar de todas formas
+                  </>
+                )}
+              </button>
+            </>
           )}
         </div>
       </div>
