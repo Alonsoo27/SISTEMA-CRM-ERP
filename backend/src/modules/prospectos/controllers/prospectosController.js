@@ -453,9 +453,24 @@ class ProspectosController {
                 p.fecha_contacto, p.fecha_seguimiento, p.observaciones,
                 p.asesor_id, p.modo_libre, p.numero_reasignaciones,
                 u.nombre as asesor_nombre,
-                u.apellido as asesor_apellido
+                u.apellido as asesor_apellido,
+                -- 🔥 NUEVO: Datos del próximo seguimiento
+                s.id as seguimiento_id,
+                s.fecha_programada as proximo_seguimiento,
+                s.fecha_limite as fecha_limite_seguimiento,
+                s.tipo as tipo_seguimiento,
+                s.vencido as seguimiento_vencido
             FROM prospectos p
             LEFT JOIN usuarios u ON p.asesor_id = u.id
+            LEFT JOIN LATERAL (
+                SELECT id, fecha_programada, fecha_limite, tipo, vencido
+                FROM seguimientos
+                WHERE prospecto_id = p.id
+                  AND completado = false
+                  AND visible_para_asesor = true
+                ORDER BY fecha_programada ASC
+                LIMIT 1
+            ) s ON true
             WHERE p.activo = $1
         `;
 
@@ -503,15 +518,77 @@ class ProspectosController {
             }
         });
 
-        // Ordenar cada columna por prioridad
+        // ========================================
+        // 🎯 ORDENAMIENTO MULTINIVEL INTELIGENTE
+        // ========================================
         Object.keys(kanbanData).forEach(estado => {
             kanbanData[estado].sort((a, b) => {
-                // Prioridad: modo libre > número de reasignaciones > fecha más antigua
-                if (a.modo_libre !== b.modo_libre) return b.modo_libre - a.modo_libre;
-                if (a.numero_reasignaciones !== b.numero_reasignaciones) return b.numero_reasignaciones - a.numero_reasignaciones;
+                // ========================================
+                // NIVEL 1: Modo Libre (máxima prioridad)
+                // Prospectos disponibles para todos los asesores
+                // ========================================
+                if (a.modo_libre !== b.modo_libre) {
+                    return b.modo_libre - a.modo_libre;
+                }
+
+                // ========================================
+                // NIVEL 2: Número de Reasignaciones
+                // Prospectos "rebotados" requieren atención especial
+                // ========================================
+                if (a.numero_reasignaciones !== b.numero_reasignaciones) {
+                    return b.numero_reasignaciones - a.numero_reasignaciones;
+                }
+
+                // ========================================
+                // NIVEL 3: SEGUIMIENTO MÁS PRÓXIMO (NUEVO)
+                // Ordenar por urgencia de seguimiento
+                // ========================================
+                const tieneA = a.proximo_seguimiento;
+                const tieneB = b.proximo_seguimiento;
+
+                // Prospectos CON seguimiento van ANTES que los sin seguimiento
+                if (tieneA && !tieneB) return -1;
+                if (!tieneA && tieneB) return 1;
+
+                // Si ambos tienen seguimiento: ordenar por fecha más próxima PRIMERO
+                if (tieneA && tieneB) {
+                    const fechaA = new Date(a.proximo_seguimiento);
+                    const fechaB = new Date(b.proximo_seguimiento);
+
+                    // Ascendente: los que vencen ANTES van primero
+                    return fechaA - fechaB;
+                }
+
+                // ========================================
+                // NIVEL 4: Fallback - Fecha de contacto
+                // Prospectos más antiguos primero
+                // ========================================
                 return new Date(a.fecha_contacto) - new Date(b.fecha_contacto);
             });
+
+            // 📝 LOG: Mostrar primeros 3 prospectos de cada columna (para debugging)
+            if (kanbanData[estado].length > 0) {
+                logger.debug(`   [${estado}] Ordenamiento (primeros 3):`);
+                kanbanData[estado].slice(0, 3).forEach((p, index) => {
+                    const seguimientoInfo = p.proximo_seguimiento
+                        ? `Sigue: ${new Date(p.proximo_seguimiento).toLocaleString('es-PE', { timeZone: 'America/Lima' })}`
+                        : 'Sin seguimiento';
+                    const prioridad = p.modo_libre ? '🔥Libre' : p.numero_reasignaciones > 0 ? `🔄${p.numero_reasignaciones}x` : '📌';
+                    logger.debug(`      ${index + 1}. ${p.codigo} | ${prioridad} | ${seguimientoInfo}`);
+                });
+            }
         });
+
+        // ========================================
+        // 📊 MÉTRICAS AMPLIADAS
+        // ========================================
+        const prospectos_con_seguimiento = (data || []).filter(p => p.proximo_seguimiento).length;
+        const seguimientos_vencidos = (data || []).filter(p => p.seguimiento_vencido).length;
+        const seguimientos_urgentes = (data || []).filter(p => {
+            if (!p.proximo_seguimiento) return false;
+            const diffHoras = (new Date(p.proximo_seguimiento) - new Date()) / (1000 * 60 * 60);
+            return diffHoras < 24 && diffHoras >= 0; // Vence en menos de 24h
+        }).length;
 
         const metricas = {
             total_prospectos: data?.length || 0,
@@ -523,10 +600,18 @@ class ProspectosController {
                 cerrado: kanbanData.Cerrado.length,
                 perdido: kanbanData.Perdido.length
             },
-            modo_libre_activos: (data || []).filter(p => p.modo_libre).length
+            modo_libre_activos: (data || []).filter(p => p.modo_libre).length,
+            // 🆕 Nuevas métricas de seguimiento
+            seguimientos: {
+                con_seguimiento: prospectos_con_seguimiento,
+                sin_seguimiento: (data?.length || 0) - prospectos_con_seguimiento,
+                vencidos: seguimientos_vencidos,
+                urgentes: seguimientos_urgentes
+            }
         };
 
-        logger.info(`Kanban obtenido: ${metricas.total_prospectos} prospectos, $${valorTotalPipeline} en pipeline`);
+        logger.info(`📋 Kanban obtenido: ${metricas.total_prospectos} prospectos, $${valorTotalPipeline} en pipeline`);
+        logger.info(`   📅 Seguimientos: ${prospectos_con_seguimiento} activos, ${seguimientos_vencidos} vencidos, ${seguimientos_urgentes} urgentes (<24h)`);
 
         return {
             success: true,
