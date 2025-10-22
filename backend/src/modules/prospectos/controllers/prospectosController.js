@@ -519,20 +519,15 @@ class ProspectosController {
         });
 
         // ========================================
-        // 🎯 ORDENAMIENTO MULTINIVEL INTELIGENTE
+        // 🎯 ORDENAMIENTO POR URGENCIA DE SEGUIMIENTO
+        // ========================================
+        // NOTA: Los prospectos en modo_libre NO aparecen aquí (tienen vista separada)
+        // NOTA: TODOS los prospectos activos tienen seguimiento obligatorio
         // ========================================
         Object.keys(kanbanData).forEach(estado => {
             kanbanData[estado].sort((a, b) => {
                 // ========================================
-                // NIVEL 1: Modo Libre (máxima prioridad)
-                // Prospectos disponibles para todos los asesores
-                // ========================================
-                if (a.modo_libre !== b.modo_libre) {
-                    return b.modo_libre - a.modo_libre;
-                }
-
-                // ========================================
-                // NIVEL 2: Número de Reasignaciones
+                // NIVEL 1: Número de Reasignaciones
                 // Prospectos "rebotados" requieren atención especial
                 // ========================================
                 if (a.numero_reasignaciones !== b.numero_reasignaciones) {
@@ -540,30 +535,25 @@ class ProspectosController {
                 }
 
                 // ========================================
-                // NIVEL 3: SEGUIMIENTO MÁS PRÓXIMO (NUEVO)
-                // Ordenar por urgencia de seguimiento
+                // NIVEL 2: SEGUIMIENTO MÁS PRÓXIMO
+                // Ordenar por urgencia: vencidos/próximos primero
                 // ========================================
-                const tieneA = a.proximo_seguimiento;
-                const tieneB = b.proximo_seguimiento;
-
-                // Prospectos CON seguimiento van ANTES que los sin seguimiento
-                if (tieneA && !tieneB) return -1;
-                if (!tieneA && tieneB) return 1;
-
-                // Si ambos tienen seguimiento: ordenar por fecha más próxima PRIMERO
-                if (tieneA && tieneB) {
-                    const fechaA = new Date(a.proximo_seguimiento);
-                    const fechaB = new Date(b.proximo_seguimiento);
-
-                    // Ascendente: los que vencen ANTES van primero
-                    return fechaA - fechaB;
+                // Todos los prospectos activos tienen seguimiento, pero por seguridad:
+                if (!a.proximo_seguimiento && !b.proximo_seguimiento) {
+                    // Ambos sin seguimiento (caso excepcional) → ordenar por fecha contacto
+                    return new Date(a.fecha_contacto) - new Date(b.fecha_contacto);
                 }
 
-                // ========================================
-                // NIVEL 4: Fallback - Fecha de contacto
-                // Prospectos más antiguos primero
-                // ========================================
-                return new Date(a.fecha_contacto) - new Date(b.fecha_contacto);
+                // Si solo uno tiene seguimiento (no debería pasar)
+                if (a.proximo_seguimiento && !b.proximo_seguimiento) return -1;
+                if (!a.proximo_seguimiento && b.proximo_seguimiento) return 1;
+
+                // Ambos tienen seguimiento: ordenar por fecha más próxima PRIMERO
+                const fechaA = new Date(a.proximo_seguimiento);
+                const fechaB = new Date(b.proximo_seguimiento);
+
+                // Ascendente: los que vencen ANTES van primero
+                return fechaA - fechaB;
             });
 
             // 📝 LOG: Mostrar primeros 3 prospectos de cada columna (para debugging)
@@ -573,7 +563,7 @@ class ProspectosController {
                     const seguimientoInfo = p.proximo_seguimiento
                         ? `Sigue: ${new Date(p.proximo_seguimiento).toLocaleString('es-PE', { timeZone: 'America/Lima' })}`
                         : 'Sin seguimiento';
-                    const prioridad = p.modo_libre ? '🔥Libre' : p.numero_reasignaciones > 0 ? `🔄${p.numero_reasignaciones}x` : '📌';
+                    const prioridad = p.numero_reasignaciones > 0 ? `🔄${p.numero_reasignaciones}x` : '📌';
                     logger.debug(`      ${index + 1}. ${p.codigo} | ${prioridad} | ${seguimientoInfo}`);
                 });
             }
@@ -600,8 +590,7 @@ class ProspectosController {
                 cerrado: kanbanData.Cerrado.length,
                 perdido: kanbanData.Perdido.length
             },
-            modo_libre_activos: (data || []).filter(p => p.modo_libre).length,
-            // 🆕 Nuevas métricas de seguimiento
+            // 🆕 Métricas de seguimiento
             seguimientos: {
                 con_seguimiento: prospectos_con_seguimiento,
                 sin_seguimiento: (data?.length || 0) - prospectos_con_seguimiento,
