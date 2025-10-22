@@ -3379,6 +3379,9 @@ static async obtenerPorId(req, res) {
             // ✅ COMMIT: Todo exitoso
             await client.query('COMMIT');
 
+            // 🔄 INVALIDAR CACHE: Para que el kanban se actualice inmediatamente
+            await cacheService.invalidarPorAsesor(asesor_id);
+
             logger.info(`✅ Prospecto ${prospecto.codigo} tomado por ${asesor_nombre} desde modo libre`);
 
             res.json({
