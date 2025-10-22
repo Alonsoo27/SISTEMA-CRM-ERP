@@ -57,21 +57,44 @@ const obtenerFechaLima = () => {
  * @returns {number} - Hora en formato 24h
  */
 const obtenerHoraLima = () => {
-    const fechaLima = new Date().toLocaleString('en-US', {
-        timeZone: 'America/Lima'
-    });
-    return new Date(fechaLima).getHours();
+    return obtenerFechaHoraLima().getHours();
 };
 
 /**
- * Obtener fecha/hora completa en zona horaria Lima
- * @returns {Date} - Objeto Date en hora Lima
+ * ✅ CORREGIDO: Obtener fecha/hora completa en zona horaria Lima
+ * Conversión correcta usando Intl.DateTimeFormat para evitar problemas de parseo
+ * @returns {Date} - Objeto Date representando hora de Lima
  */
 const obtenerFechaHoraLima = () => {
-    const fechaLima = new Date().toLocaleString('en-US', {
-        timeZone: 'America/Lima'
+    const formatter = new Intl.DateTimeFormat('en-US', {
+        timeZone: 'America/Lima',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: false
     });
-    return new Date(fechaLima);
+
+    const parts = formatter.formatToParts(new Date());
+    const dateObj = {};
+    parts.forEach(part => {
+        if (part.type !== 'literal') {
+            dateObj[part.type] = part.value;
+        }
+    });
+
+    // Crear objeto Date con componentes de Lima
+    // IMPORTANTE: month es 0-indexed en JS Date
+    return new Date(
+        parseInt(dateObj.year),
+        parseInt(dateObj.month) - 1,
+        parseInt(dateObj.day),
+        parseInt(dateObj.hour),
+        parseInt(dateObj.minute),
+        parseInt(dateObj.second)
+    );
 };
 
 /**
@@ -267,7 +290,9 @@ exports.getEstadoHoy = async (req, res) => {
         
         // ✅ CORRECCIÓN 1: Calcular fecha de hoy en zona horaria Lima
         const fechaHoy = obtenerFechaLima();
-        const horaActualLima = obtenerHoraLima();
+        const fechaHoraLima = obtenerFechaHoraLima();
+        const horaActualLima = fechaHoraLima.getHours();
+        const minutosActualLima = fechaHoraLima.getMinutes();
         
         // ✅ DEBUG TEMPORAL para verificar corrección
         console.log('🔍 DEBUG RESET DIARIO:');
@@ -438,7 +463,9 @@ exports.getEstadoHoy = async (req, res) => {
                     dias_trabajados: parseInt(estadisticas.dias_trabajados || 0)
                 },
                 horarios: {
-                    hora_actual: new Date().toLocaleTimeString('es-PE'),
+                    hora_actual: fechaHoraLima.toLocaleTimeString('es-PE', { timeZone: 'America/Lima' }),
+                    hora_lima: horaActualLima, // ✅ NUEVO: Hora de Lima (0-23)
+                    minutos_lima: minutosActualLima, // ✅ NUEVO: Minutos de Lima (0-59)
                     ventana_check_in: obtenerHorariosPermitidos().check_in,
                     ventana_check_out: obtenerHorariosPermitidos().check_out
                 },
@@ -555,9 +582,8 @@ exports.checkIn = async (req, res) => {
             });
         }
 
-        // ✅ NUEVA LÓGICA: Calcular estado de entrada y tardanza
-        const horaActual = new Date();
-        const horaCheckIn = new Date(horaActual.toLocaleString("en-US", {timeZone: "America/Lima"}));
+        // ✅ CORREGIDO: Calcular estado de entrada y tardanza usando hora Lima correcta
+        const horaCheckIn = obtenerFechaHoraLima();
         const hora = horaCheckIn.getHours();
         const minutos = horaCheckIn.getMinutes();
 

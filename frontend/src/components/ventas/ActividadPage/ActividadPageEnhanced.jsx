@@ -93,9 +93,9 @@ const ActividadPageEnhanced = () => {
   const evaluarFloatingButton = (estadoData) => {
     if (!estadoData) return;
 
-    const ahora = new Date();
-    const hora = ahora.getHours();
-    const minutos = ahora.getMinutes();
+    // ✅ CORREGIDO: Usar hora Lima del servidor en lugar de hora local del navegador
+    const hora = estadoData.horarios?.hora_lima ?? new Date().getHours();
+    const minutos = estadoData.horarios?.minutos_lima ?? new Date().getMinutes();
 
     // Mostrar floating button si:
     // 1. Tardanza (después de 8:15 AM sin check-in)
@@ -411,13 +411,13 @@ const ActividadPageEnhanced = () => {
     };
   }, [estado?.jornada?.check_in_realizado, estado?.jornada?.check_out_realizado, estado?.jornada?.hora_check_in]);
 
-  // Obtener color del widget según estado
+  // ✅ CORREGIDO: Obtener color del widget según estado usando hora Lima del servidor
   const getWidgetStatus = () => {
     if (!estado) return { color: 'gray', text: 'Cargando...', needsAction: false };
 
-    const ahora = new Date();
-    const hora = ahora.getHours();
-    const minutos = ahora.getMinutes();
+    // ✅ FIX: Usar hora Lima del servidor en lugar de hora local del navegador
+    const hora = estado.horarios?.hora_lima ?? new Date().getHours();
+    const minutos = estado.horarios?.minutos_lima ?? new Date().getMinutes();
     const checkInRealizado = estado.jornada?.check_in_realizado;
     const checkOutRealizado = estado.jornada?.check_out_realizado;
 
