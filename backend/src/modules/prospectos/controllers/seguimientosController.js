@@ -121,37 +121,10 @@ class SeguimientosController {
 
             logger.info(`Seguimiento creado: Prospecto ${id}, fecha límite: ${fecha_limite.toISOString()}`);
 
-            // 🔔 NOTIFICACIÓN: seguimiento_proximo si está dentro de las próximas 24 horas
-            try {
-                const horasHastaSeguimiento = (fechaProgramadaUTC - new Date()) / (1000 * 60 * 60);
-
-                if (horasHastaSeguimiento > 0 && horasHastaSeguimiento <= 24) {
-                    // Obtener datos del prospecto
-                    const prospectoData = await query('SELECT * FROM prospectos WHERE id = $1', [id]);
-                    const prospecto = prospectoData.rows[0];
-
-                    if (prospecto) {
-                        await NotificacionesController.crearNotificaciones({
-                            tipo: 'seguimiento_proximo',
-                            modo: 'basico',
-                            data: {
-                                usuario_id: asesor_id,
-                                prospecto_id: parseInt(id),
-                                prospecto_codigo: prospecto.codigo,
-                                prospecto_nombre: prospecto.nombre_cliente,
-                                seguimiento_id: seguimiento.id,
-                                fecha_programada: fecha_programada,
-                                horas_restantes: Math.round(horasHastaSeguimiento),
-                                valor_estimado: prospecto.valor_estimado || 0
-                            },
-                            auto_prioridad: true
-                        });
-                        logger.info(`✅ Notificación seguimiento_proximo enviada (${Math.round(horasHastaSeguimiento)}h)`);
-                    }
-                }
-            } catch (errorNotif) {
-                logger.error('⚠️ Error creando notificación seguimiento_proximo:', errorNotif);
-            }
+            // ❌ NOTIFICACIÓN INMEDIATA ELIMINADA
+            // Las notificaciones de "seguimiento_proximo" deben enviarse mediante cron job
+            // 2-4 horas ANTES de la fecha programada, NO al momento de crear el seguimiento.
+            // Esto evita spam de notificaciones cuando el asesor programa seguimientos futuros.
 
             res.status(201).json({
                 success: true,
@@ -279,20 +252,28 @@ class SeguimientosController {
             logger.info(`Seguimiento completado: ${id} con resultado: ${resultado}`);
 
             // 🔔 NOTIFICACIÓN: seguimiento_completado
+            // ✅ FIX: Verificar estado del prospecto antes de notificar
             try {
-                await NotificacionesController.crearNotificaciones({
-                    tipo: 'seguimiento_completado',
-                    modo: 'basico',
-                    data: {
-                        usuario_id: data.asesor_id,
-                        prospecto_id: data.prospecto_id,
-                        seguimiento_id: parseInt(id),
-                        resultado: resultado,
-                        calificacion: calificacion
-                    },
-                    auto_prioridad: true
-                });
-                logger.info(`✅ Notificación seguimiento_completado enviada para seguimiento ${id}`);
+                const prospectoResult = await query('SELECT estado FROM prospectos WHERE id = $1', [data.prospecto_id]);
+                const prospecto = prospectoResult.rows[0];
+
+                if (prospecto && !['Cerrado', 'Perdido', 'Convertido'].includes(prospecto.estado)) {
+                    await NotificacionesController.crearNotificaciones({
+                        tipo: 'seguimiento_completado',
+                        modo: 'basico',
+                        data: {
+                            usuario_id: data.asesor_id,
+                            prospecto_id: data.prospecto_id,
+                            seguimiento_id: parseInt(id),
+                            resultado: resultado,
+                            calificacion: calificacion
+                        },
+                        auto_prioridad: true
+                    });
+                    logger.info(`✅ Notificación seguimiento_completado enviada para seguimiento ${id}`);
+                } else {
+                    logger.info(`⏭️ Notificación seguimiento_completado omitida: prospecto en estado ${prospecto?.estado || 'desconocido'}`);
+                }
             } catch (errorNotif) {
                 logger.error('⚠️ Error creando notificación seguimiento_completado:', errorNotif);
             }
@@ -674,24 +655,29 @@ class SeguimientosController {
                     // Si NO han pasado 2 días laborales → Solo notificar y esperar
                     if (!haPasado2DiasLaborales) {
                         // 🔔 NOTIFICACIÓN: seguimiento_vencido (aún en período de espera)
-                        try {
-                            await NotificacionesController.crearNotificaciones({
-                                tipo: 'seguimiento_urgente',
-                                modo: 'basico',
-                                data: {
-                                    usuario_id: seguimiento.prospecto_asesor_id,
-                                    prospecto_id: seguimiento.prospecto_id,
-                                    prospecto_codigo: seguimiento.codigo,
-                                    prospecto_nombre: seguimiento.nombre_cliente,
-                                    seguimiento_id: seguimiento.id,
-                                    horas_vencidas: Math.round(horasVencidas),
-                                    valor_estimado: seguimiento.valor_estimado || 0
-                                },
-                                auto_prioridad: true
-                            });
-                            logger.info(`⏰ Seguimiento vencido pero en período de gracia (faltan ${Math.round((fechaLimite2DiasLaborales - ahora_date) / (1000 * 60 * 60))}h para traspaso)`);
-                        } catch (errorNotif) {
-                            logger.error('⚠️ Error creando notificación:', errorNotif);
+                        // ✅ FIX: Solo notificar si el prospecto está en estados activos
+                        if (!['Cerrado', 'Perdido', 'Convertido'].includes(seguimiento.estado)) {
+                            try {
+                                await NotificacionesController.crearNotificaciones({
+                                    tipo: 'seguimiento_urgente',
+                                    modo: 'basico',
+                                    data: {
+                                        usuario_id: seguimiento.prospecto_asesor_id,
+                                        prospecto_id: seguimiento.prospecto_id,
+                                        prospecto_codigo: seguimiento.codigo,
+                                        prospecto_nombre: seguimiento.nombre_cliente,
+                                        seguimiento_id: seguimiento.id,
+                                        horas_vencidas: Math.round(horasVencidas),
+                                        valor_estimado: seguimiento.valor_estimado || 0
+                                    },
+                                    auto_prioridad: true
+                                });
+                                logger.info(`⏰ Seguimiento vencido pero en período de gracia (faltan ${Math.round((fechaLimite2DiasLaborales - ahora_date) / (1000 * 60 * 60))}h para traspaso)`);
+                            } catch (errorNotif) {
+                                logger.error('⚠️ Error creando notificación:', errorNotif);
+                            }
+                        } else {
+                            logger.info(`⏭️ Notificación omitida: prospecto ${seguimiento.codigo} está en estado ${seguimiento.estado}`);
                         }
 
                         resultado.procesados++;
@@ -962,12 +948,13 @@ class SeguimientosController {
             await SeguimientosController.crearNotificacionModoLibre(prospecto_id, asesor_ids);
 
             // 🔔 NOTIFICACIÓN VÍA SISTEMA UNIFICADO: prospecto_libre_activado
+            // ✅ FIX: Solo notificar si el prospecto está en estados activos
             try {
                 // Obtener datos del prospecto
                 const prospectoData = await query('SELECT * FROM prospectos WHERE id = $1', [prospecto_id]);
                 const prospecto = prospectoData.rows[0];
 
-                if (prospecto) {
+                if (prospecto && !['Cerrado', 'Perdido', 'Convertido'].includes(prospecto.estado)) {
                     // Crear notificación para cada asesor del área de ventas
                     for (const asesorId of asesor_ids) {
                         await NotificacionesController.crearNotificaciones({
@@ -984,6 +971,8 @@ class SeguimientosController {
                         });
                     }
                     logger.info(`✅ Notificaciones prospecto_libre_activado enviadas a ${asesor_ids.length} asesores`);
+                } else {
+                    logger.info(`⏭️ Notificaciones modo libre omitidas: prospecto en estado ${prospecto?.estado || 'desconocido'}`);
                 }
             } catch (errorNotif) {
                 logger.error('⚠️ Error creando notificaciones de modo libre:', errorNotif);
