@@ -11,6 +11,7 @@ import ProspectosPage from './pages/ProspectosPage';
 import VentasPage from './pages/VentasPage';
 import AlmacenPage from './pages/AlmacenPage'; // ✅ NUEVO: Importar AlmacenPage real
 import SoportePage from './pages/SoportePage'; // ✅ NUEVO: Importar SoportePage con tabs
+import MarketingPage from './pages/MarketingPage'; // ✅ NUEVO: Importar MarketingPage completo
 import AdministracionUsuariosPage from './pages/AdministracionUsuariosPage'; // ✅ NUEVO: Administración de usuarios
 // import ClientesPage from './pages/ClientesPage'; // ✅ ELIMINADO: ClientesPage removido
 
@@ -52,25 +53,7 @@ const DashboardPage = () => (
 // ✅ ELIMINADO: Placeholder SoportePage - Ahora se usa SoporteDashboard real
 
 // ✅ ELIMINADO: Placeholder AlmacenPage - Ahora se importa desde pages/AlmacenPage
-
-const MarketingPage = () => (
-  <div className="h-full flex items-center justify-center">
-    <div className="text-center">
-      <div className="text-6xl mb-4">📈</div>
-      <h1 className="text-2xl font-bold text-gray-900 mb-2">Marketing</h1>
-      <p className="text-gray-600 mb-4">Campañas y planificación</p>
-      <div className="text-sm text-gray-500">
-        <p>En desarrollo:</p>
-        <ul className="mt-2 space-y-1">
-          <li>• Planificador semanal de tareas</li>
-          <li>• Gestión de urgencias</li>
-          <li>• Métricas de campañas</li>
-          <li>• Calendario de contenido</li>
-        </ul>
-      </div>
-    </div>
-  </div>
-);
+// ✅ ELIMINADO: Placeholder MarketingPage - Ahora se importa desde pages/MarketingPage
 
 const ChatPage = () => (
   <div className="h-full flex items-center justify-center">

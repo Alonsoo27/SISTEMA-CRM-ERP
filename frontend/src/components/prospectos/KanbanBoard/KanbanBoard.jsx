@@ -127,28 +127,19 @@ const KanbanBoard = ({
       }
       
       console.log('KanbanBoard: Filtros procesados:', filtrosLimpios);
-      
-      const response = await prospectosService.obtenerTodos(filtrosLimpios);
+
+      // 🔥 FIX: Usar obtenerKanban() que no tiene límite de 50 registros
+      // obtenerTodos() tiene LIMIT 50 que causaba que solo aparecieran 6 Cerrados de 49
+      const response = await prospectosService.obtenerKanban(asesorId);
       console.log('KanbanBoard: Respuesta del servicio:', response);
-      
+
       if (!response || !response.data) {
         throw new Error('Respuesta inválida del servidor');
       }
-      
-      // Organizar datos por estado para el Kanban
-      const datosOrganizados = {};
-      Object.keys(estadosConfig).forEach(estado => {
-        datosOrganizados[estado] = [];
-      });
-      
-      if (Array.isArray(response.data)) {
-        response.data.forEach(prospecto => {
-          if (prospecto && prospecto.estado && datosOrganizados[prospecto.estado]) {
-            datosOrganizados[prospecto.estado].push(prospecto);
-          }
-        });
-      }
-      
+
+      // Los datos ya vienen organizados por estado desde el backend
+      const datosOrganizados = response.data;
+
       console.log('KanbanBoard: Datos organizados:', datosOrganizados);
       setKanbanData(datosOrganizados);
       

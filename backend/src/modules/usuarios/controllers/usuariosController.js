@@ -599,6 +599,62 @@ const listarVendedores = async (req, res) => {
     }
 };
 
+// ============================================
+// LISTAR EQUIPO DE MARKETING
+// ============================================
+const listarEquipoMarketing = async (req, res) => {
+    try {
+        // Obtener TODOS los usuarios del área de marketing
+        // Incluye: MARKETING_EJECUTOR, JEFE_MARKETING
+        // + Ejecutivos con acceso a todas las áreas (para que puedan ver)
+        const result = await query(`
+            SELECT
+                u.id,
+                u.nombre,
+                u.apellido,
+                u.nombre || ' ' || u.apellido as nombre_completo,
+                u.email,
+                r.nombre as rol,
+                r.id as rol_id,
+                a.nombre as area
+            FROM usuarios u
+            LEFT JOIN roles r ON u.rol_id = r.id
+            LEFT JOIN areas a ON u.area_id = a.id
+            WHERE u.deleted_at IS NULL
+              AND u.activo = true
+              AND (
+                r.nombre IN ('MARKETING_EJECUTOR', 'JEFE_MARKETING')
+                OR r.nombre IN ('SUPER_ADMIN', 'ADMIN', 'GERENTE')
+              )
+            ORDER BY
+              CASE
+                WHEN r.nombre = 'SUPER_ADMIN' THEN 1
+                WHEN r.nombre = 'ADMIN' THEN 2
+                WHEN r.nombre = 'GERENTE' THEN 3
+                WHEN r.nombre = 'JEFE_MARKETING' THEN 4
+                WHEN r.nombre = 'MARKETING_EJECUTOR' THEN 5
+                ELSE 6
+              END,
+              u.nombre, u.apellido
+        `);
+
+        res.json({
+            success: true,
+            message: 'Equipo de marketing obtenido exitosamente',
+            data: result.rows,
+            total: result.rowCount
+        });
+
+    } catch (error) {
+        console.error('Error al listar equipo de marketing:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error al obtener equipo de marketing',
+            error: error.message
+        });
+    }
+};
+
 module.exports = {
     listarUsuarios,
     obtenerUsuario,
@@ -611,5 +667,6 @@ module.exports = {
     listarModulos,
     obtenerPermisosUsuario,
     actualizarPermisosUsuario,
-    listarVendedores
+    listarVendedores,
+    listarEquipoMarketing
 };

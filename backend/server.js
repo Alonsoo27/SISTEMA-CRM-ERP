@@ -1,4 +1,8 @@
 ﻿require('dotenv').config();
+
+// ⚡ CONFIGURAR TIMEZONE A PERÚ (UTC-5) - DEBE SER LO PRIMERO
+process.env.TZ = 'America/Lima';
+
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
@@ -78,7 +82,8 @@ const modules = {
     metas: { path: './src/modules/ventas/routes/metas', route: '/api/metas', loaded: null },
     asesores: { path: './src/modules/ventas/routes/asesoresRoutes', route: '/api/asesores', loaded: null },
     ubicaciones: { path: './src/modules/ubicaciones/routes/ubicacionesRoutes', route: '/api/ubicaciones', loaded: null },
-    campanasAsesor: { path: './src/modules/ventas/routes/campanasAsesorRoutes', route: '/api/campanas-asesor', loaded: null }
+    campanasAsesor: { path: './src/modules/ventas/routes/campanasAsesorRoutes', route: '/api/campanas-asesor', loaded: null },
+    marketing: { path: './src/modules/marketing/routes/marketingRoutes', route: '/api/marketing', loaded: null }
 };
 
 // MÓDULOS PAUSADOS TEMPORALMENTE:

@@ -17,7 +17,8 @@ const {
     listarModulos,
     obtenerPermisosUsuario,
     actualizarPermisosUsuario,
-    listarVendedores
+    listarVendedores,
+    listarEquipoMarketing
 } = require('../controllers/usuariosController');
 
 const { authenticateToken, requireRole, requireOwnership } = require('../../../middleware/auth');
@@ -37,6 +38,13 @@ router.get('/vendedores',
     authenticateToken,
     requireRole(GRUPOS_ROLES.JEFES_Y_EJECUTIVOS),
     listarVendedores
+);
+
+// Listar equipo de marketing (para calendarios)
+router.get('/marketing',
+    authenticateToken,
+    requireRole(GRUPOS_ROLES.MARKETING_COMPLETO),
+    listarEquipoMarketing
 );
 
 // ============================================

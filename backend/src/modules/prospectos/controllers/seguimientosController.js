@@ -279,6 +279,44 @@ class SeguimientosController {
             }
 
             // ============================================
+            // 🔴 CAMBIO AUTOMÁTICO A PERDIDO
+            // ============================================
+            // Si el cliente no está interesado, marcar el prospecto como perdido
+            if (resultado === 'no_interesado' || resultado === 'Cliente No Interesado') {
+                logger.info(`🔴 Resultado "no_interesado" detectado - Marcando prospecto ${data.prospecto_id} como Perdido`);
+
+                try {
+                    // Cambiar estado del prospecto a Perdido
+                    await query(`
+                        UPDATE prospectos
+                        SET estado = $1,
+                            tipo_cierre = $2,
+                            motivo_perdida = $3,
+                            fecha_cierre = $4,
+                            estado_anterior = estado
+                        WHERE id = $5 AND estado NOT IN ('Cerrado', 'Perdido')
+                    `, ['Perdido', 'manual', 'Cliente no interesado', new Date(), data.prospecto_id]);
+
+                    logger.info(`✅ Prospecto ${data.prospecto_id} marcado como Perdido exitosamente`);
+
+                    return res.json({
+                        success: true,
+                        message: '✅ Seguimiento completado - Prospecto marcado como Perdido (cliente no interesado)',
+                        data: {
+                            seguimiento_completado: true,
+                            prospecto_perdido: true,
+                            motivo: 'Cliente no interesado',
+                            resultado: resultado
+                        }
+                    });
+
+                } catch (errorPerdido) {
+                    logger.error('❌ Error marcando prospecto como perdido:', errorPerdido);
+                    // Continuar con el flujo normal si falla
+                }
+            }
+
+            // ============================================
             // 🚀 CONVERSIÓN AUTOMÁTICA
             // ============================================
 
@@ -642,14 +680,13 @@ class SeguimientosController {
                     // Calcular horas vencidas solo para logging
                     const horasVencidas = (ahora_date - fechaLimiteVencimiento) / (1000 * 60 * 60);
 
-                    // ✅ FIX: Marcar seguimiento como completado automáticamente al procesar
-                    // Esto previene que se vuelva a procesar en la siguiente ejecución del cron
+                    // ✅ SOLO MARCAR COMO VENCIDO - NO ocultar ni completar
+                    // El asesor debe verlo en la balanza por 2 días laborales
                     await query(`
                         UPDATE seguimientos
-                        SET vencido = $1, visible_para_asesor = $2, completado = $3,
-                            fecha_completado = $4, resultado = $5
-                        WHERE id = $6
-                    `, [true, false, true, new Date(), 'Procesado automáticamente - seguimiento vencido', seguimiento.id]);
+                        SET vencido = $1
+                        WHERE id = $2
+                    `, [true, seguimiento.id]);
 
                     // ⏰ LÓGICA CORRECTA: Esperar 2 días laborales ANTES de traspasar
                     // Si NO han pasado 2 días laborales → Solo notificar y esperar
@@ -695,6 +732,15 @@ class SeguimientosController {
                     // 🚨 CASO ESPECIAL: Prospecto tomado de modo libre (numero_reasignaciones >= 3)
                     // Si falla después de ser tomado de modo libre → PERDIDO (última oportunidad)
                     if (seguimiento.numero_reasignaciones >= 3) {
+                        // ✅ Ocultar seguimiento antes de marcar como perdido
+                        await query(`
+                            UPDATE seguimientos
+                            SET visible_para_asesor = $1, completado = $2,
+                                fecha_completado = $3, resultado = $4
+                            WHERE id = $5
+                        `, [false, true, new Date(), 'Prospecto marcado como perdido automáticamente', seguimiento.id]);
+
+                        // Marcar prospecto como perdido
                         await query(`
                             UPDATE prospectos
                             SET estado = $1, tipo_cierre = $2, motivo_perdida = $3, fecha_cierre = $4
@@ -722,6 +768,14 @@ class SeguimientosController {
                             resultado.reasignados++;
                         }
 
+                        // ✅ AL TRASPASAR: Ahora SÍ ocultar y completar el seguimiento vencido del asesor anterior
+                        await query(`
+                            UPDATE seguimientos
+                            SET visible_para_asesor = $1, completado = $2,
+                                fecha_completado = $3, resultado = $4
+                            WHERE id = $5
+                        `, [false, true, new Date(), 'Traspasado por vencimiento después de 2 días laborales', seguimiento.id]);
+
                         // Actualizar estado del prospecto
                         await query(`
                             UPDATE prospectos
@@ -734,6 +788,14 @@ class SeguimientosController {
                         // ACTIVAR MODO LIBRE (3er rebote - numero_reasignaciones = 2 → 3)
                         await SeguimientosController.activarModoLibre(seguimiento.prospecto_id);
                         resultado.modo_libre_activado++;
+
+                        // ✅ AL ACTIVAR MODO LIBRE: Ocultar seguimiento vencido del asesor anterior
+                        await query(`
+                            UPDATE seguimientos
+                            SET visible_para_asesor = $1, completado = $2,
+                                fecha_completado = $3, resultado = $4
+                            WHERE id = $5
+                        `, [false, true, new Date(), 'Modo libre activado después de 3 reasignaciones', seguimiento.id]);
 
                         // Actualizar estado del prospecto a modo libre
                         await query(`
