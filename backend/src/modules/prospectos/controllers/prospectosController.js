@@ -452,6 +452,14 @@ class ProspectosController {
                 p.canal_contacto, p.estado, p.valor_estimado, p.probabilidad_cierre,
                 p.fecha_contacto, p.fecha_seguimiento, p.observaciones,
                 p.asesor_id, p.modo_libre, p.numero_reasignaciones,
+                -- ✅ FIX: Agregar campos de seguimiento de la tabla prospectos
+                p.seguimiento_obligatorio,
+                p.seguimiento_completado,
+                p.seguimiento_vencido as seguimiento_vencido_cache,
+                p.traspasado_por_vencimiento,
+                p.fecha_traspaso,
+                p.asesor_anterior_id,
+                p.motivo_traspaso,
                 u.nombre as asesor_nombre,
                 u.apellido as asesor_apellido,
                 -- 🔥 NUEVO: Datos del próximo seguimiento
@@ -1801,6 +1809,7 @@ static async obtenerPorId(req, res) {
                 FROM seguimientos s
                 INNER JOIN prospectos p ON s.prospecto_id = p.id
                 WHERE s.completado = false AND p.activo = true
+                AND s.visible_para_asesor = true
             `;
 
             let seguimientosParams = [];

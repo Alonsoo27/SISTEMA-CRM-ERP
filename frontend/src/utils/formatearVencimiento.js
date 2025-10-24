@@ -19,9 +19,16 @@ export const formatearVencimiento = (fechaVencimiento) => {
     return { texto: 'Sin seguimiento', color: 'text-gray-400', urgente: false };
   }
 
+  // ✅ FIX: Obtener hora actual en timezone de Perú
   const ahora = new Date();
-  const vence = new Date(fechaVencimiento);
-  const diffMs = vence - ahora;
+  const ahoraPeruStr = ahora.toLocaleString('en-US', { timeZone: 'America/Lima' });
+  const ahoraPeruDate = new Date(ahoraPeruStr);
+
+  // ✅ FIX: Convertir fecha de vencimiento a timezone de Perú
+  const venceStr = new Date(fechaVencimiento).toLocaleString('en-US', { timeZone: 'America/Lima' });
+  const vence = new Date(venceStr);
+
+  const diffMs = vence - ahoraPeruDate;
   const diffHoras = diffMs / (1000 * 60 * 60);
 
   // ❌ SI YA VENCIÓ
@@ -61,7 +68,8 @@ export const formatearVencimiento = (fechaVencimiento) => {
     day: '2-digit',
     month: '2-digit',
     hour: '2-digit',
-    minute: '2-digit'
+    minute: '2-digit',
+    timeZone: 'America/Lima'  // ✅ FIX: Forzar timezone de Perú
   });
 
   return {
@@ -107,9 +115,15 @@ export const ordenarProspectosPorVencimiento = (prospectos) => {
 export const esVencimientoUrgente = (fechaVencimiento) => {
   if (!fechaVencimiento) return false;
 
+  // ✅ FIX: Usar timezone de Perú
   const ahora = new Date();
-  const vence = new Date(fechaVencimiento);
-  const diffHoras = (vence - ahora) / (1000 * 60 * 60);
+  const ahoraPeruStr = ahora.toLocaleString('en-US', { timeZone: 'America/Lima' });
+  const ahoraPeruDate = new Date(ahoraPeruStr);
+
+  const venceStr = new Date(fechaVencimiento).toLocaleString('en-US', { timeZone: 'America/Lima' });
+  const vence = new Date(venceStr);
+
+  const diffHoras = (vence - ahoraPeruDate) / (1000 * 60 * 60);
 
   // Es urgente si ya venció o vence en menos de 24 horas
   return diffHoras < 24;
@@ -123,9 +137,15 @@ export const esVencimientoUrgente = (fechaVencimiento) => {
 export const getEstadoVencimiento = (fechaVencimiento) => {
   if (!fechaVencimiento) return 'sin_seguimiento';
 
+  // ✅ FIX: Usar timezone de Perú
   const ahora = new Date();
-  const vence = new Date(fechaVencimiento);
-  const diffHoras = (vence - ahora) / (1000 * 60 * 60);
+  const ahoraPeruStr = ahora.toLocaleString('en-US', { timeZone: 'America/Lima' });
+  const ahoraPeruDate = new Date(ahoraPeruStr);
+
+  const venceStr = new Date(fechaVencimiento).toLocaleString('en-US', { timeZone: 'America/Lima' });
+  const vence = new Date(venceStr);
+
+  const diffHoras = (vence - ahoraPeruDate) / (1000 * 60 * 60);
 
   if (diffHoras < 0) return 'vencido';
   if (diffHoras < 24) return 'urgente';

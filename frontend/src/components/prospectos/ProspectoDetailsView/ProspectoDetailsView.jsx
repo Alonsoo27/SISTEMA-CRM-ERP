@@ -7,6 +7,7 @@ import {
   Activity, MessageCircle, ArrowLeft, Copy, Send
 } from 'lucide-react';
 import prospectosService from '../../../services/prospectosService';
+import { formatearFecha, formatearFechaCorta, formatearMonto } from '../../../utils/dateHelpers';
 
 const ProspectoDetailsView = ({ prospecto, onClose, onEdit, currentUser }) => {
   const [detallesCompletos, setDetallesCompletos] = useState(null);
@@ -43,31 +44,6 @@ const ProspectoDetailsView = ({ prospecto, onClose, onEdit, currentUser }) => {
     } finally {
       setLoading(false);
     }
-  };
-
-  const formatearMonto = (valor) => {
-    if (!valor || isNaN(valor)) return '$0.00';
-    return `$${parseFloat(valor).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-  };
-
-  const formatearFecha = (fecha) => {
-    if (!fecha) return 'No especificada';
-    return new Date(fecha).toLocaleDateString('es-PE', {
-      day: '2-digit',
-      month: 'long',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
-  };
-
-  const formatearFechaCorta = (fecha) => {
-    if (!fecha) return '';
-    return new Date(fecha).toLocaleDateString('es-PE', {
-      day: '2-digit',
-      month: '2-digit',
-      year: '2-digit'
-    });
   };
 
   const obtenerEstadoInfo = (estado) => {

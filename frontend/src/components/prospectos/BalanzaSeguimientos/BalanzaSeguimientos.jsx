@@ -10,6 +10,7 @@ import HistorialCompleto from '../HistorialCompleto/HistorialCompleto';
 import VistaSelector from '../../common/VistaSelector';
 import ModalCompletarConReprogramacion from '../ModalCompletarConReprogramacion';
 import ProspectoDetailsView from '../ProspectoDetailsView';
+import { formatearFechaHora } from '../../../utils/dateHelpers';
 
 const BalanzaSeguimientos = ({ asesorId: asesorIdProp = null, refreshTrigger = 0 }) => {
   const [dashboardData, setDashboardData] = useState(null);
@@ -830,8 +831,8 @@ const BalanzaSeguimientos = ({ asesorId: asesorIdProp = null, refreshTrigger = 0
                             <div className="flex items-center justify-between text-gray-500">
                               <span>
                                 {vistaDetalle === 'pendientes'
-                                  ? `⏰ Vence: ${new Date(item.fecha_programada).toLocaleDateString()} ${new Date(item.fecha_programada).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
-                                  : `✅ Último: ${new Date(item.fecha_completado || item.created_at).toLocaleDateString()} ${new Date(item.fecha_completado || item.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+                                  ? `⏰ Vence: ${formatearFechaHora(item.fecha_programada)}`
+                                  : `✅ Último: ${formatearFechaHora(item.fecha_completado || item.created_at)}`
                                 }
                               </span>
                               {vistaDetalle === 'pendientes' && item.fecha_programada && (
@@ -948,7 +949,7 @@ const BalanzaSeguimientos = ({ asesorId: asesorIdProp = null, refreshTrigger = 0
                                     {idx === 0 ? '🔵 Más reciente' : `#${idx + 1}`}
                                   </span>
                                   <span className="text-gray-500">
-                                    {new Date(seg.fecha_completado || seg.created_at).toLocaleDateString()} {new Date(seg.fecha_completado || seg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                    {formatearFechaHora(seg.fecha_completado || seg.created_at)}
                                   </span>
                                 </div>
                                 <div className="flex items-center space-x-2 text-gray-600">

@@ -649,7 +649,8 @@ class SeguimientosController {
                 WHERE s.completado = $1 AND s.fecha_limite < $2
                 AND p.activo = $3 AND p.estado NOT IN ('Cerrado', 'Perdido')
                 AND p.modo_libre = $4
-            `, [false, ahora, true, false]);
+                AND s.visible_para_asesor = $5
+            `, [false, ahora, true, false, true]);
             
             const vencidos = result.rows;
             

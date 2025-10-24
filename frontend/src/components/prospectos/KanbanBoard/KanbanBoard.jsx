@@ -8,6 +8,7 @@ import {
 import prospectosService from '../../../services/prospectosService';
 import VentaForm from '../../ventas/VentaForm/VentaForm'; // AGREGADO: Import del VentaForm
 import { formatearVencimiento, ordenarProspectosPorVencimiento } from '../../../utils/formatearVencimiento';
+import { formatearFechaCorta as formatearFechaHelper } from '../../../utils/dateHelpers';
 
 const KanbanBoard = ({
   asesorId = null,
@@ -472,11 +473,8 @@ const KanbanBoard = ({
   const formatearFecha = (fecha) => {
     if (!fecha) return 'Sin fecha';
     try {
-      return new Date(fecha).toLocaleDateString('es-PE', {
-        day: '2-digit',
-        month: '2-digit',
-        year: '2-digit'
-      });
+      // ✅ FIX: Usar helper con timezone de Perú
+      return formatearFechaHelper(fecha) || 'Fecha inválida';
     } catch {
       return 'Fecha inválida';
     }
