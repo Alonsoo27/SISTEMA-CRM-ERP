@@ -8,6 +8,24 @@ const { query } = require('../../../config/database');
 const actividadesService = require('../services/actividadesService');
 const reajusteService = require('../services/reajusteService');
 
+// Mapeo de colores por categoría principal
+const COLORES_CATEGORIAS = {
+    'GRABACIONES': '#3B82F6',
+    'EDICIONES': '#F59E0B',
+    'LIVES': '#EC4899',
+    'DISEÑO': '#A855F7',
+    'FICHAS TÉCNICAS': '#64748B',
+    'FERIA': '#0EA5E9',
+    'REUNIONES': '#84CC16',
+    'PRUEBAS Y MUESTRAS': '#F43F5E',
+    'CAPACITACIONES': '#16A34A'
+};
+
+// Función helper para obtener color por categoría
+function obtenerColorCategoria(categoria_principal) {
+    return COLORES_CATEGORIAS[categoria_principal] || '#3B82F6'; // Azul por defecto
+}
+
 class CargaMasivaController {
     /**
      * Generar plantilla Excel para descarga
@@ -370,7 +388,7 @@ class CargaMasivaController {
 
                 // Validar categoría/subcategoría
                 const tipoResult = await query(
-                    'SELECT color_hex FROM tipos_actividad_marketing WHERE categoria_principal = $1 AND subcategoria = $2 AND activo = true',
+                    'SELECT 1 FROM tipos_actividad_marketing WHERE categoria_principal = $1 AND subcategoria = $2 AND activo = true',
                     [fila.categoria_principal, fila.subcategoria]
                 );
 
@@ -422,7 +440,7 @@ class CargaMasivaController {
                     subcategoria: fila.subcategoria,
                     duracion_minutos: Math.round(parseFloat(fila.duracion_minutos)),
                     usuarios: usuariosValidos,
-                    color_hex: tipoResult.rows[0].color_hex,
+                    color_hex: obtenerColorCategoria(fila.categoria_principal),
                     notas: fila.notas || null,
                     es_grupal: usuariosValidos.length > 1
                 });

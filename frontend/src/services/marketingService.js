@@ -257,6 +257,46 @@ const marketingService = {
         }
 
         return data;
+    },
+
+    // ============================================
+    // INDICADORES Y MÉTRICAS
+    // ============================================
+
+    /**
+     * Obtener indicadores de rendimiento individual
+     */
+    async obtenerIndicadoresIndividual(usuarioId, periodo = 'mes_actual') {
+        const response = await apiClient.get(`/marketing/indicadores/individual/${usuarioId}?periodo=${periodo}`);
+        return response.data;
+    },
+
+    /**
+     * Obtener análisis de tiempo (real vs planeado)
+     */
+    async obtenerAnalisisTiempo(usuarioId, periodo = 'mes_actual') {
+        const response = await apiClient.get(`/marketing/indicadores/tiempo/${usuarioId}?periodo=${periodo}`);
+        return response.data;
+    },
+
+    /**
+     * Obtener indicadores del equipo
+     */
+    async obtenerIndicadoresEquipo(periodo = 'mes_actual') {
+        const response = await apiClient.get(`/marketing/indicadores/equipo?periodo=${periodo}`);
+        return response.data;
+    },
+
+    /**
+     * Obtener análisis por categoría
+     */
+    async obtenerAnalisisCategorias(periodo = 'mes_actual', usuarioId = null) {
+        let url = `/marketing/indicadores/categorias?periodo=${periodo}`;
+        if (usuarioId) {
+            url += `&usuarioId=${usuarioId}`;
+        }
+        const response = await apiClient.get(url);
+        return response.data;
     }
 };
 

@@ -11,6 +11,7 @@ const TransferenciasController = require('../controllers/transferenciasControlle
 const TiposActividadController = require('../controllers/tiposActividadController');
 const CalendarioController = require('../controllers/calendarioController');
 const CargaMasivaController = require('../controllers/cargaMasivaController');
+const IndicadoresController = require('../controllers/indicadoresController');
 
 // Middleware
 const { authenticateToken, requireRole } = require('../../../middleware/auth');
@@ -231,6 +232,50 @@ router.post('/carga-masiva',
     requireRole([ROLES.JEFE_MARKETING, ROLES.SUPER_ADMIN, ROLES.GERENTE, ROLES.ADMIN]),
     upload.single('archivo'),
     CargaMasivaController.procesarCargaMasiva
+);
+
+// ============================================
+// INDICADORES Y MÉTRICAS
+// ============================================
+
+/**
+ * Indicadores de rendimiento individual
+ * Roles: Marketing completo
+ */
+router.get('/indicadores/individual/:usuarioId',
+    authenticateToken,
+    requireRole(GRUPOS_ROLES.MARKETING_COMPLETO),
+    IndicadoresController.obtenerIndicadoresIndividual
+);
+
+/**
+ * Análisis de tiempo (real vs planeado)
+ * Roles: Marketing completo
+ */
+router.get('/indicadores/tiempo/:usuarioId',
+    authenticateToken,
+    requireRole(GRUPOS_ROLES.MARKETING_COMPLETO),
+    IndicadoresController.obtenerAnalisisTiempo
+);
+
+/**
+ * Indicadores del equipo (ranking y comparativas)
+ * Roles: Marketing completo
+ */
+router.get('/indicadores/equipo',
+    authenticateToken,
+    requireRole(GRUPOS_ROLES.MARKETING_COMPLETO),
+    IndicadoresController.obtenerIndicadoresEquipo
+);
+
+/**
+ * Análisis por categoría de actividades
+ * Roles: Marketing completo
+ */
+router.get('/indicadores/categorias',
+    authenticateToken,
+    requireRole(GRUPOS_ROLES.MARKETING_COMPLETO),
+    IndicadoresController.obtenerAnalisisCategorias
 );
 
 module.exports = router;

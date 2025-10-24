@@ -6,6 +6,24 @@ const { query } = require('../../../config/database');
 const reajusteService = require('../services/reajusteService');
 const actividadesService = require('../services/actividadesService');
 
+// Mapeo de colores por categoría principal
+const COLORES_CATEGORIAS = {
+    'GRABACIONES': '#3B82F6',
+    'EDICIONES': '#F59E0B',
+    'LIVES': '#EC4899',
+    'DISEÑO': '#A855F7',
+    'FICHAS TÉCNICAS': '#64748B',
+    'FERIA': '#0EA5E9',
+    'REUNIONES': '#84CC16',
+    'PRUEBAS Y MUESTRAS': '#F43F5E',
+    'CAPACITACIONES': '#16A34A'
+};
+
+// Función helper para obtener color por categoría
+function obtenerColorCategoria(categoria_principal) {
+    return COLORES_CATEGORIAS[categoria_principal] || '#3B82F6'; // Azul por defecto
+}
+
 class ActividadesController {
     /**
      * Crear actividad individual
@@ -64,9 +82,9 @@ class ActividadesController {
                 });
             }
 
-            // Obtener color del tipo de actividad
+            // Validar que el tipo de actividad existe
             const tipoResult = await query(
-                'SELECT color_hex FROM tipos_actividad_marketing WHERE categoria_principal = $1 AND subcategoria = $2',
+                'SELECT 1 FROM tipos_actividad_marketing WHERE categoria_principal = $1 AND subcategoria = $2',
                 [categoria_principal, subcategoria]
             );
 
@@ -77,7 +95,8 @@ class ActividadesController {
                 });
             }
 
-            const color_hex = tipoResult.rows[0].color_hex;
+            // Obtener color por categoría principal
+            const color_hex = obtenerColorCategoria(categoria_principal);
 
             // Generar código único
             const codigo = await actividadesService.generarCodigoActividad();
@@ -215,13 +234,21 @@ class ActividadesController {
                 });
             }
 
-            // Obtener color
+            // Validar que el tipo de actividad existe
             const tipoResult = await query(
-                'SELECT color_hex FROM tipos_actividad_marketing WHERE categoria_principal = $1 AND subcategoria = $2',
+                'SELECT 1 FROM tipos_actividad_marketing WHERE categoria_principal = $1 AND subcategoria = $2',
                 [categoria_principal, subcategoria]
             );
 
-            const color_hex = tipoResult.rows[0]?.color_hex || '#3B82F6';
+            if (tipoResult.rows.length === 0) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Tipo de actividad no válido'
+                });
+            }
+
+            // Obtener color por categoría principal
+            const color_hex = obtenerColorCategoria(categoria_principal);
             const codigo = await actividadesService.generarCodigoActividad();
 
             const fechaInicioPlaneada = new Date(fecha_inicio);

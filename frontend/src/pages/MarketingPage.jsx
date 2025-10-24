@@ -5,6 +5,8 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import CalendarioActividades from '../components/marketing/CalendarioActividades/CalendarioActividades';
+import IndicadoresMarketing from '../components/marketing/Indicadores/IndicadoresMarketing';
+import ReportesMarketing from '../components/marketing/Reportes/ReportesMarketing';
 import ModalCrearActividad from '../components/marketing/ModalCrearActividad';
 import ModalCargaMasiva from '../components/marketing/ModalCargaMasiva';
 import ModalActividadGrupal from '../components/marketing/ModalActividadGrupal';
@@ -29,6 +31,7 @@ const MarketingPage = () => {
         }
     }, []);
 
+    const [pestanaActiva, setPestanaActiva] = useState('calendario'); // calendario | indicadores | reportes
     const [vistaActual, setVistaActual] = useState('semanal'); // semanal | mensual | trimestral | anual
     const [usuarioSeleccionado, setUsuarioSeleccionado] = useState(null);
     const [modalCrearAbierto, setModalCrearAbierto] = useState(false);
@@ -280,75 +283,138 @@ const MarketingPage = () => {
                     </div>
                 </div>
 
-                {/* Selector de vista y filtros */}
-                <div className="flex justify-between items-center bg-white p-4 rounded-lg shadow-sm">
-                    <SelectorVista vista={vistaActual} onChange={setVistaActual} />
-
-                    {/* Selector de usuario */}
-                    <div className="flex items-center gap-2">
-                        <label className="text-sm font-medium text-gray-700">
-                            Ver calendario de:
-                        </label>
-                        <select
-                            value={usuarioSeleccionado || ''}
-                            onChange={(e) => setUsuarioSeleccionado(parseInt(e.target.value))}
-                            className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 min-w-[250px]"
-                        >
-                            {/* Placeholder si no hay selección */}
-                            {!usuarioSeleccionado && (
-                                <option value="">Selecciona un usuario...</option>
-                            )}
-
-                            {/* Si eres de marketing, puedes ver "Mi calendario" */}
-                            {esMarketing && (
-                                <option value={user.id}>Mi calendario</option>
-                            )}
-
-                            {/* Mostrar equipo de marketing */}
-                            {equipoMarketing
-                                .filter(m => ['MARKETING_EJECUTOR', 'JEFE_MARKETING'].includes(m.rol))
-                                .filter(m => !esMarketing || m.id !== user.id) // Si eres de marketing, no duplicar tu ID
-                                .map(miembro => (
-                                    <option key={miembro.id} value={miembro.id}>
-                                        {miembro.nombre_completo} ({miembro.rol === 'JEFE_MARKETING' ? 'Jefe' : 'Ejecutor'})
-                                    </option>
-                                ))
+                {/* Pestañas de navegación */}
+                <div className="bg-white rounded-lg shadow-sm p-1 flex gap-1">
+                    <button
+                        onClick={() => setPestanaActiva('calendario')}
+                        className={`
+                            flex-1 px-6 py-3 rounded-lg font-medium transition-all
+                            ${pestanaActiva === 'calendario'
+                                ? 'bg-blue-600 text-white shadow-md'
+                                : 'text-gray-600 hover:bg-gray-100'
                             }
-                        </select>
-
-                        {/* Indicador de vista */}
-                        {requiereSeleccion && (
-                            <div className="ml-2 px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-xs font-medium">
-                                Vista de equipo
-                            </div>
-                        )}
-                    </div>
+                        `}
+                    >
+                        📅 Calendario
+                    </button>
+                    <button
+                        onClick={() => setPestanaActiva('indicadores')}
+                        className={`
+                            flex-1 px-6 py-3 rounded-lg font-medium transition-all
+                            ${pestanaActiva === 'indicadores'
+                                ? 'bg-blue-600 text-white shadow-md'
+                                : 'text-gray-600 hover:bg-gray-100'
+                            }
+                        `}
+                    >
+                        📊 Indicadores
+                    </button>
+                    <button
+                        onClick={() => setPestanaActiva('reportes')}
+                        className={`
+                            flex-1 px-6 py-3 rounded-lg font-medium transition-all
+                            ${pestanaActiva === 'reportes'
+                                ? 'bg-blue-600 text-white shadow-md'
+                                : 'text-gray-600 hover:bg-gray-100'
+                            }
+                        `}
+                    >
+                        📄 Reportes
+                    </button>
                 </div>
+
+                {/* Selector de vista y filtros - Solo visible en pestaña Calendario */}
+                {pestanaActiva === 'calendario' && (
+                    <div className="flex justify-between items-center bg-white p-4 rounded-lg shadow-sm">
+                        <SelectorVista vista={vistaActual} onChange={setVistaActual} />
+
+                        {/* Selector de usuario */}
+                        <div className="flex items-center gap-2">
+                            <label className="text-sm font-medium text-gray-700">
+                                Ver calendario de:
+                            </label>
+                            <select
+                                value={usuarioSeleccionado || ''}
+                                onChange={(e) => setUsuarioSeleccionado(parseInt(e.target.value))}
+                                className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 min-w-[250px]"
+                            >
+                                {/* Placeholder si no hay selección */}
+                                {!usuarioSeleccionado && (
+                                    <option value="">Selecciona un usuario...</option>
+                                )}
+
+                                {/* Si eres de marketing, puedes ver "Mi calendario" */}
+                                {esMarketing && (
+                                    <option value={user.id}>Mi calendario</option>
+                                )}
+
+                                {/* Mostrar equipo de marketing */}
+                                {equipoMarketing
+                                    .filter(m => ['MARKETING_EJECUTOR', 'JEFE_MARKETING'].includes(m.rol))
+                                    .filter(m => !esMarketing || m.id !== user.id) // Si eres de marketing, no duplicar tu ID
+                                    .map(miembro => (
+                                        <option key={miembro.id} value={miembro.id}>
+                                            {miembro.nombre_completo} ({miembro.rol === 'JEFE_MARKETING' ? 'Jefe' : 'Ejecutor'})
+                                        </option>
+                                    ))
+                                }
+                            </select>
+
+                            {/* Indicador de vista */}
+                            {requiereSeleccion && (
+                                <div className="ml-2 px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-xs font-medium">
+                                    Vista de equipo
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                )}
             </div>
 
-            {/* Leyenda de colores */}
-            <LeyendaColores />
+            {/* Leyenda de colores - Solo visible en pestaña Calendario */}
+            {pestanaActiva === 'calendario' && <LeyendaColores />}
 
-            {/* Calendario principal */}
-            {usuarioSeleccionado ? (
-                <div className="bg-white rounded-lg shadow-lg p-6 mt-4">
-                    <CalendarioActividades
-                        key={calendarioKey}
-                        vista={vistaActual}
-                        usuarioId={usuarioSeleccionado}
+            {/* Contenido de la pestaña activa */}
+            <div className="mt-4">
+                {/* PESTAÑA: CALENDARIO */}
+                {pestanaActiva === 'calendario' && (
+                    usuarioSeleccionado ? (
+                        <div className="bg-white rounded-lg shadow-lg p-6">
+                            <CalendarioActividades
+                                key={calendarioKey}
+                                vista={vistaActual}
+                                usuarioId={usuarioSeleccionado}
+                            />
+                        </div>
+                    ) : (
+                        <div className="bg-white rounded-lg shadow-lg p-6">
+                            <div className="flex flex-col items-center justify-center h-96 text-gray-400">
+                                <svg className="w-24 h-24 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                </svg>
+                                <p className="text-lg font-medium text-gray-600">Selecciona un usuario para ver su calendario</p>
+                                <p className="text-sm text-gray-500 mt-2">Usa el selector superior para elegir un miembro del equipo</p>
+                            </div>
+                        </div>
+                    )
+                )}
+
+                {/* PESTAÑA: INDICADORES */}
+                {pestanaActiva === 'indicadores' && (
+                    <IndicadoresMarketing
+                        usuarioId={usuarioSeleccionado || user?.id}
+                        esJefe={esJefe}
                     />
-                </div>
-            ) : (
-                <div className="bg-white rounded-lg shadow-lg p-6 mt-4">
-                    <div className="flex flex-col items-center justify-center h-96 text-gray-400">
-                        <svg className="w-24 h-24 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                        </svg>
-                        <p className="text-lg font-medium text-gray-600">Selecciona un usuario para ver su calendario</p>
-                        <p className="text-sm text-gray-500 mt-2">Usa el selector superior para elegir un miembro del equipo</p>
-                    </div>
-                </div>
-            )}
+                )}
+
+                {/* PESTAÑA: REPORTES */}
+                {pestanaActiva === 'reportes' && (
+                    <ReportesMarketing
+                        usuarioId={usuarioSeleccionado || user?.id}
+                        esJefe={esJefe}
+                    />
+                )}
+            </div>
 
             {/* Modales */}
             {modalCrearAbierto && (

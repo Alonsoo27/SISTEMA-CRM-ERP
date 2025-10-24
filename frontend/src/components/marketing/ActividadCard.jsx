@@ -147,9 +147,12 @@ const ActividadCard = ({ actividad, onClick, onRecargar }) => {
                 className={`
                 relative h-full p-3 rounded-lg border-l-4 cursor-pointer
                 transition-all duration-200 hover:shadow-xl hover:scale-[1.02]
-                ${styles.bg} ${styles.border} ${styles.text} ${styles.extra} ${styles.opacity}
+                ${styles.border} ${styles.text} ${styles.extra} ${styles.opacity}
             `}
-            style={{ borderLeftColor: color_hex }}
+            style={{
+                borderLeftColor: color_hex,
+                backgroundColor: `${color_hex}15` // Color de fondo al 15% de opacidad
+            }}
             onMouseEnter={() => setShowMenu(true)}
             onMouseLeave={() => setShowMenu(false)}
         >

@@ -3,7 +3,7 @@
 // ============================================
 
 import { useState, useEffect } from 'react';
-import VistaSemanal from './VistaSemanal';
+import VistaSemanalCompacta from './VistaSemanalCompacta';
 import VistaMensual from './VistaMensual';
 import VistaTrimestral from './VistaTrimestral';
 import VistaAnual from './VistaAnual';
@@ -226,7 +226,7 @@ const CalendarioActividades = ({ vista, usuarioId }) => {
             {/* Vista seleccionada */}
             <div className="min-h-[600px]">
                 {vista === 'semanal' && (
-                    <VistaSemanal
+                    <VistaSemanalCompacta
                         actividades={actividades}
                         fechaInicio={fechaActual}
                         onActividadClick={(actividad) => console.log('Click en actividad:', actividad)}
