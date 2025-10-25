@@ -24,6 +24,24 @@ const convertirHoraPeruAUTC = (fechaHoraPeru) => {
 };
 
 /**
+ * Convierte una fecha UTC a hora Perú (America/Lima)
+ * @param {string|Date} fechaUTC - Fecha en UTC
+ * @returns {Date} Fecha convertida a hora Perú
+ *
+ * Ejemplo: "2025-10-22T17:00:00Z" (5pm UTC) → "2025-10-22T12:00:00" (mediodía Perú)
+ *
+ * Nota: Perú usa UTC-5 permanente (no usa horario de verano desde 1994)
+ */
+const convertirUTCAHoraPeru = (fechaUTC) => {
+    const fecha = new Date(fechaUTC);
+
+    // Perú está en UTC-5 permanente, así que restar 5 horas para obtener hora local
+    const fechaPeru = new Date(fecha.getTime() - (5 * 60 * 60 * 1000));
+
+    return fechaPeru;
+};
+
+/**
  * Calcula la fecha límite para un seguimiento según tipo y fecha programada
  * @param {string|Date} fechaProgramada - Fecha programada del seguimiento (en hora Perú)
  * @param {string} tipoSeguimiento - Tipo de seguimiento (Llamada, WhatsApp, etc.)
@@ -325,13 +343,50 @@ const calcular2DiasLaborales = (fechaInicio) => {
     return fechaActual;
 };
 
+/**
+ * 🔧 CORRECCIÓN DE FECHAS DE SEGUIMIENTOS
+ *
+ * PROBLEMA: Las fechas en la BD están en UTC, pero el servidor PostgreSQL
+ * está configurado con timezone='America/Lima'. Al leer TIMESTAMP sin timezone,
+ * el driver pg las interpreta como hora de Perú y las convierte a UTC,
+ * causando una doble conversión (+5h).
+ *
+ * SOLUCIÓN: Este helper corrige las fechas después de leerlas de la BD,
+ * restándoles las 5 horas que fueron agregadas incorrectamente.
+ *
+ * @param {Array} rows - Filas del resultado de query
+ * @param {Array} camposFecha - Nombres de campos a corregir
+ * @returns {Array} Filas con fechas corregidas
+ */
+const corregirFechasSeguimientos = (rows, camposFecha = ['fecha_programada', 'fecha_limite', 'fecha_completado', 'created_at', 'updated_at']) => {
+    if (!rows || !Array.isArray(rows)) return rows;
+
+    return rows.map(row => {
+        camposFecha.forEach(campo => {
+            if (row[campo]) {
+                // La fecha viene interpretada como America/Lima por el driver pg
+                // Pero en realidad es UTC, así que restamos 5 horas para obtener el valor real
+                const fechaInterpretadaComoPeru = new Date(row[campo]);
+                const fechaUTCReal = new Date(fechaInterpretadaComoPeru.getTime() - (5 * 60 * 60 * 1000));
+
+                // Devolver en formato ISO con 'Z' para indicar UTC
+                row[campo] = fechaUTCReal.toISOString();
+            }
+        });
+
+        return row;
+    });
+};
+
 module.exports = {
     convertirHoraPeruAUTC,
+    convertirUTCAHoraPeru,
     calcularFechaLimite,
     ajustarAHorarioLaboral,
     esHorarioLaboral,
     obtenerInfoHorarioLaboral,
     obtenerProximaFechaLaboral,
     generarSugerenciasFechas,
-    calcular2DiasLaborales
+    calcular2DiasLaborales,
+    corregirFechasSeguimientos
 };

@@ -8,9 +8,10 @@ const { Pool } = require('pg');
 const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
     ssl: { rejectUnauthorized: false },
-    max: 20,
-    idleTimeoutMillis: 30000,
-    connectionTimeoutMillis: 10000,
+    max: 30,                        // Aumentado de 20 a 30 para soportar más concurrencia
+    idleTimeoutMillis: 30000,       // 30 seg idle antes de cerrar conexión
+    connectionTimeoutMillis: 30000, // 30 seg timeout (aumentado de 10 seg para estabilidad)
+    acquireTimeoutMillis: 30000,    // 30 seg esperando conexión disponible del pool
     // ⚡ CONFIGURACIÓN DE CHARSET Y TIMEZONE
     options: "-c client_encoding=UTF8 -c timezone='America/Lima'"
 });

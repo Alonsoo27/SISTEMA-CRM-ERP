@@ -203,12 +203,13 @@ const BalanzaSeguimientos = ({ asesorId: asesorIdProp = null, refreshTrigger = 0
     // - Vencidos tienen tiempo de recuperación antes de traspaso
     // - Solo seguimientos confirmados van a "realizados"
 
-    // ✅ CORRECCIÓN: Usar conteos.proximos (no pendientes) para evitar contar vencidos dos veces
-    const pendientesProximos = conteos.proximos || 0;  // Solo próximos (sin vencidos)
+    // ✅ CORRECCIÓN: Usar conteos completos (vencidos + hoy + proximos)
+    const pendientesProximos = conteos.proximos || 0;  // Solo próximos (sin vencidos ni hoy)
     const vencidosSinConfirmar = conteos.vencidos || 0;
+    const pendientesHoy = conteos.hoy || 0;  // ✅ FIX: Agregar seguimientos de hoy
 
     // Total de seguimientos que necesitan acción del asesor
-    const totalPendientes = pendientesProximos + vencidosSinConfirmar;
+    const totalPendientes = pendientesProximos + vencidosSinConfirmar + pendientesHoy;
 
     // Seguimientos confirmados/realizados - usar datos reales de la API
     // ✅ CAMBIO: Usar realizados_semana en lugar de completados_hoy
@@ -248,7 +249,7 @@ const BalanzaSeguimientos = ({ asesorId: asesorIdProp = null, refreshTrigger = 0
 
     const seguimientos = dashboardData.seguimientos || {};
     let datos = tipoListaModal === 'pendientes'
-      ? [...(seguimientos.proximos || []), ...(seguimientos.vencidos || [])]
+      ? [...(seguimientos.vencidos || []), ...(seguimientos.hoy || []), ...(seguimientos.proximos || [])]
       : seguimientos.realizados_semana || [];
 
     // Aplicar filtros
@@ -316,8 +317,9 @@ const BalanzaSeguimientos = ({ asesorId: asesorIdProp = null, refreshTrigger = 0
     if (!dashboardData) return [];
     const seguimientos = dashboardData.seguimientos || {};
     return [...new Set([
-      ...(seguimientos.proximos || []).map(s => s.tipo),
       ...(seguimientos.vencidos || []).map(s => s.tipo),
+      ...(seguimientos.hoy || []).map(s => s.tipo),
+      ...(seguimientos.proximos || []).map(s => s.tipo),
       ...(seguimientos.realizados_semana || []).map(s => s.tipo)
     ])].filter(Boolean);
   }, [dashboardData]);

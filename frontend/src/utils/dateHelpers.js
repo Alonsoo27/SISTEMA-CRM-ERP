@@ -10,10 +10,20 @@
 /**
  * Formatear fecha completa (día, mes, año, hora)
  * Ejemplo: "24 de octubre de 2025, 6:00 p. m."
+ *
+ * IMPORTANTE: Las fechas del backend vienen en UTC sin indicador 'Z'.
+ * Este helper fuerza la interpretación como UTC antes de convertir a Lima.
  */
 export const formatearFecha = (fecha) => {
   if (!fecha) return 'No especificada';
-  return new Date(fecha).toLocaleDateString('es-PE', {
+
+  // 🌎 FORZAR INTERPRETACIÓN UTC
+  let fechaStr = fecha.toString();
+  if (fechaStr && !fechaStr.endsWith('Z') && !fechaStr.includes('+') && !fechaStr.includes('GMT')) {
+    fechaStr = fechaStr.replace(' ', 'T') + 'Z';
+  }
+
+  return new Date(fechaStr).toLocaleDateString('es-PE', {
     day: '2-digit',
     month: 'long',
     year: 'numeric',
@@ -67,10 +77,23 @@ export const formatearHora = (fecha) => {
 /**
  * Formatear fecha y hora completos
  * Ejemplo: "24/10/2025 6:00 p. m."
+ *
+ * IMPORTANTE: Las fechas del backend vienen en UTC sin indicador 'Z'.
+ * Este helper fuerza la interpretación como UTC antes de convertir a Lima.
  */
 export const formatearFechaHora = (fecha) => {
   if (!fecha) return '';
-  const date = new Date(fecha);
+
+  // 🌎 FORZAR INTERPRETACIÓN UTC:
+  // Si la fecha no tiene 'Z' al final, agregarla para forzar interpretación UTC
+  let fechaStr = fecha.toString();
+
+  if (fechaStr && !fechaStr.endsWith('Z') && !fechaStr.includes('+') && !fechaStr.includes('GMT')) {
+    // Remover espacios y agregar 'Z' si es formato ISO sin timezone
+    fechaStr = fechaStr.replace(' ', 'T') + 'Z';
+  }
+
+  const date = new Date(fechaStr);
   return `${formatearFechaSimple(date)} ${formatearHora(date)}`;
 };
 

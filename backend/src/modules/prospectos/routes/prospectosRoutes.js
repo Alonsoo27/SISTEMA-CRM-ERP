@@ -10,6 +10,9 @@ const { authenticateToken, requireRole, requireOwnership } = require('../../../m
 // IMPORTAR CONSTANTES DE ROLES
 const { ROLES, GRUPOS_ROLES } = require('../../../config/roles');
 
+// IMPORTAR HELPER DE FECHAS
+const { corregirFechasSeguimientos } = require('../utils/fechasHelper');
+
 // APLICAR AUTENTICACIÓN JWT A TODAS LAS RUTAS
 router.use(authenticateToken);
 
@@ -864,10 +867,13 @@ router.get('/:id/seguimientos',
                 ORDER BY s.fecha_programada DESC, s.created_at DESC
             `, [id]);
 
+            // Corregir fechas de seguimientos
+            const seguimientosCorregidos = corregirFechasSeguimientos(result.rows);
+
             res.json({
                 success: true,
-                data: result.rows,
-                total: result.rows.length
+                data: seguimientosCorregidos,
+                total: seguimientosCorregidos.length
             });
 
         } catch (error) {

@@ -9,7 +9,7 @@ const NotificacionesController = require('../../notificaciones/controllers/notif
 const { sincronizarCacheSeguimientos } = require('../utils/sincronizarSeguimientos');
 
 // 📅 INTEGRACIÓN CON HELPER DE FECHAS FLEXIBLE
-const { convertirHoraPeruAUTC, calcularFechaLimite, esHorarioLaboral, calcular2DiasLaborales } = require('../utils/fechasHelper');
+const { convertirHoraPeruAUTC, convertirUTCAHoraPeru, calcularFechaLimite, esHorarioLaboral, calcular2DiasLaborales, corregirFechasSeguimientos } = require('../utils/fechasHelper');
 
 // CONFIGURACIÓN DE LOGGING
 const logger = winston.createLogger({
@@ -470,47 +470,8 @@ class SeguimientosController {
         }
     }
     
-    /**
-     * GET /api/prospectos/listos-conversion
-     * Obtener prospectos listos para conversión
-     */
-    static async obtenerProspectosListos(req, res) {
-        try {
-            const asesor_id = req.user?.id;
+    // 🗑️ CÓDIGO ELIMINADO: obtenerProspectosListos - No se usaba en ningún lugar
 
-            const result = await query(`
-                SELECT p.*, s.resultado, s.fecha_completado, s.completado
-                FROM prospectos p
-                INNER JOIN seguimientos s ON p.id = s.prospecto_id
-                LEFT JOIN ventas v ON p.id = v.prospecto_id
-                WHERE p.asesor_id = $1 AND p.activo = $2
-                AND v.id IS NULL
-                AND s.completado = $3 AND s.resultado = ANY($4::text[])
-                ORDER BY s.fecha_completado DESC
-            `, [asesor_id, true, true, RESULTADOS_QUE_CONVIERTEN]);
-            
-            const prospectos = result.rows;
-            
-            res.json({
-                success: true,
-                data: {
-                    prospectos_listos: prospectos || [],
-                    total: prospectos?.length || 0,
-                    mensaje: prospectos?.length > 0 
-                        ? `${prospectos.length} prospecto(s) listo(s) para conversión`
-                        : 'No hay prospectos listos para conversión en este momento'
-                }
-            });
-            
-        } catch (error) {
-            logger.error('Error al obtener prospectos listos:', error);
-            res.status(500).json({
-                success: false,
-                message: 'Error interno del servidor'
-            });
-        }
-    }
-    
     /**
      * Generar código único para venta
      */
@@ -589,8 +550,9 @@ class SeguimientosController {
                 AND p.activo = $4 AND p.estado NOT IN ('Cerrado', 'Perdido')
                 AND p.modo_libre = $5 AND s.visible_para_asesor = $6
             `, [false, false, ahora, true, false, true]);
-            
-            const data = result.rows;
+
+            // 🔧 CORRECCIÓN: Aplicar fix de timezone a las fechas leídas
+            const data = corregirFechasSeguimientos(result.rows);
             
             res.json({
                 success: true,
@@ -1237,7 +1199,8 @@ class SeguimientosController {
 
             const seguimientosResult = await query(seguimientosQuery, seguimientosParams);
 
-            const seguimientos = seguimientosResult.rows;
+            // 🔧 CORRECCIÓN: Aplicar fix de timezone a las fechas leídas
+            const seguimientos = corregirFechasSeguimientos(seguimientosResult.rows);
 
             console.log(`📊 [DEBUG pendientes] Seguimientos pendientes encontrados: ${seguimientos.length}`);
             if (seguimientos.length > 0) {
@@ -1298,7 +1261,8 @@ class SeguimientosController {
                 : [true, unMesAtras.toISOString()];
 
             const realizadosResult = await query(realizadosQuery, realizadosParams);
-            const seguimientosRealizados = realizadosResult.rows;
+            // 🔧 CORRECCIÓN: Aplicar fix de timezone a las fechas leídas
+            const seguimientosRealizados = corregirFechasSeguimientos(realizadosResult.rows);
 
             console.log(`📊 [DEBUG realizados] Total seguimientos realizados encontrados: ${seguimientosRealizados.length}`);
             if (seguimientosRealizados.length > 0) {
@@ -1372,23 +1336,38 @@ class SeguimientosController {
 
             const listosConversion = listosConversionResult.rows;
             
-            // Categorizar seguimientos - CORRECCIÓN: Usar fecha_programada consistentemente
-            const ahora = new Date();
+            // Categorizar seguimientos - CORRECCIÓN: Usar fecha_programada con timezone Perú
+            // 🌎 IMPORTANTE: Convertir a hora de Perú para clasificar correctamente
+            const ahoraUTC = new Date();
+            const ahoraPeru = convertirUTCAHoraPeru(ahoraUTC);
+
+            // Obtener solo la parte de fecha (YYYY-MM-DD) en hora Perú para comparaciones de día
+            const diaHoyPeru = ahoraPeru.toISOString().split('T')[0];
+
             const seguimientosCategorias = {
-                // 🔴 VENCIDOS: fecha_programada ya pasó (excluyendo los de hoy)
+                // 🔴 VENCIDOS: fecha_programada ya pasó (excluyendo los de hoy en hora Perú)
                 vencidos: seguimientos?.filter(s => {
-                    const fechaProgramada = new Date(s.fecha_programada);
-                    return fechaProgramada < ahora && fechaProgramada.toDateString() !== ahora.toDateString();
+                    const fechaProgramadaUTC = new Date(s.fecha_programada);
+                    const fechaProgramadaPeru = convertirUTCAHoraPeru(fechaProgramadaUTC);
+                    const diaProgramadoPeru = fechaProgramadaPeru.toISOString().split('T')[0];
+
+                    return fechaProgramadaPeru < ahoraPeru && diaProgramadoPeru !== diaHoyPeru;
                 }) || [],
-                // 📅 HOY: fecha_programada es hoy
+                // 📅 HOY: fecha_programada es hoy en hora Perú
                 hoy: seguimientos?.filter(s => {
-                    const fecha = new Date(s.fecha_programada);
-                    return fecha.toDateString() === ahora.toDateString();
+                    const fechaProgramadaUTC = new Date(s.fecha_programada);
+                    const fechaProgramadaPeru = convertirUTCAHoraPeru(fechaProgramadaUTC);
+                    const diaProgramadoPeru = fechaProgramadaPeru.toISOString().split('T')[0];
+
+                    return diaProgramadoPeru === diaHoyPeru;
                 }) || [],
-                // 📆 PRÓXIMOS: fecha_programada es futura (no hoy)
+                // 📆 PRÓXIMOS: fecha_programada es futura en hora Perú (no hoy)
                 proximos: seguimientos?.filter(s => {
-                    const fecha = new Date(s.fecha_programada);
-                    return fecha > ahora;
+                    const fechaProgramadaUTC = new Date(s.fecha_programada);
+                    const fechaProgramadaPeru = convertirUTCAHoraPeru(fechaProgramadaUTC);
+                    const diaProgramadoPeru = fechaProgramadaPeru.toISOString().split('T')[0];
+
+                    return fechaProgramadaPeru > ahoraPeru && diaProgramadoPeru !== diaHoyPeru;
                 }) || []
             };
 
@@ -1745,6 +1724,9 @@ class SeguimientosController {
 
             const result = await query(baseQuery, queryParams);
 
+            // 🔧 CORRECCIÓN: Aplicar fix de timezone a las fechas leídas
+            const seguimientosCorregidos = corregirFechasSeguimientos(result.rows);
+
             // 📈 CONSULTA SIMPLE PARA MÉTRICAS
             const metricsQuery = `
                 SELECT
@@ -1772,7 +1754,7 @@ class SeguimientosController {
             const metricas = metricsResult.rows[0];
 
             // 📊 FORMATEAR DATOS PARA LA UI
-            const historial = result.rows.map(row => ({
+            const historial = seguimientosCorregidos.map(row => ({
                 id: row.seguimiento_id,
                 fecha_actividad: row.fecha_venta || row.fecha_completado || row.fecha_programada,
                 tipo_actividad: row.tipo_actividad,
@@ -1829,8 +1811,8 @@ class SeguimientosController {
                     paginacion: {
                         page: parseInt(page),
                         limit: parseInt(limit),
-                        total: result.rows.length,
-                        has_next: result.rows.length === parseInt(limit)
+                        total: seguimientosCorregidos.length,
+                        has_next: seguimientosCorregidos.length === parseInt(limit)
                     },
                     metricas_resumen: {
                         total_actividades: parseInt(metricas.total_actividades),
