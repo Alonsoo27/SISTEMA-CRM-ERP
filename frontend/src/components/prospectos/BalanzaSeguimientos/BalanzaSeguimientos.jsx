@@ -10,13 +10,15 @@ import HistorialCompleto from '../HistorialCompleto/HistorialCompleto';
 import VistaSelector from '../../common/VistaSelector';
 import ModalCompletarConReprogramacion from '../ModalCompletarConReprogramacion';
 import ProspectoDetailsView from '../ProspectoDetailsView';
+import ModalListaSeguimientos from './ModalListaSeguimientos';
 import { formatearFechaHora } from '../../../utils/dateHelpers';
 
 const BalanzaSeguimientos = ({ asesorId: asesorIdProp = null, refreshTrigger = 0 }) => {
   const [dashboardData, setDashboardData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [vistaDetalle, setVistaDetalle] = useState(null); // 'pendientes' | 'realizados' | null
+  const [modalListaAbierto, setModalListaAbierto] = useState(false); // Modal de lista de seguimientos
+  const [tipoListaModal, setTipoListaModal] = useState(null); // 'pendientes' | 'completados' | null
   const [autoRefresh, setAutoRefresh] = useState(false);
   const [modalCompletarAbierto, setModalCompletarAbierto] = useState(false);
   const [seguimientoSeleccionado, setSeguimientoSeleccionado] = useState(null);
@@ -127,6 +129,12 @@ const BalanzaSeguimientos = ({ asesorId: asesorIdProp = null, refreshTrigger = 0
     }));
   };
 
+  // Función para abrir modal de lista de seguimientos
+  const abrirModalLista = (tipo) => {
+    setTipoListaModal(tipo);
+    setModalListaAbierto(true);
+  };
+
   useEffect(() => {
     console.log('🔄 [BalanzaSeguimientos] useEffect cargarDatos disparado:', {
       vistaSeleccionada,
@@ -232,6 +240,86 @@ const BalanzaSeguimientos = ({ asesorId: asesorIdProp = null, refreshTrigger = 0
     };
 
     return resultado;
+  }, [dashboardData]);
+
+  // 🎯 Datos filtrados para el modal
+  const datosModalFiltrados = useMemo(() => {
+    if (!dashboardData || !tipoListaModal) return [];
+
+    const seguimientos = dashboardData.seguimientos || {};
+    let datos = tipoListaModal === 'pendientes'
+      ? [...(seguimientos.proximos || []), ...(seguimientos.vencidos || [])]
+      : seguimientos.realizados_semana || [];
+
+    // Aplicar filtros
+    datos = datos.filter(item => {
+      // Filtro por tipo
+      if (filtros.tipo !== 'todos' && item.tipo !== filtros.tipo) {
+        return false;
+      }
+
+      // Filtro por urgencia (solo para pendientes)
+      if (tipoListaModal === 'pendientes' && filtros.urgencia !== 'todos') {
+        if (filtros.urgencia === 'vencidos' && !item.vencido) return false;
+        if (filtros.urgencia === 'hoy' && item.vencido) return false;
+      }
+
+      // Filtro por búsqueda
+      if (filtros.busqueda.trim()) {
+        const busqueda = filtros.busqueda.toLowerCase();
+        const nombre = (item.nombre_cliente || item.prospecto_nombre || '').toLowerCase();
+        const telefono = (item.telefono || '').toLowerCase();
+        const codigo = (item.prospecto_codigo || '').toLowerCase();
+
+        return nombre.includes(busqueda) ||
+               telefono.includes(busqueda) ||
+               codigo.includes(busqueda);
+      }
+
+      return true;
+    });
+
+    // 🎯 AGRUPACIÓN POR PROSPECTO (solo para completados)
+    if (tipoListaModal === 'completados') {
+      const gruposPorProspecto = {};
+
+      datos.forEach(seguimiento => {
+        const prospectoId = seguimiento.prospecto_id || seguimiento.id;
+
+        if (!gruposPorProspecto[prospectoId]) {
+          gruposPorProspecto[prospectoId] = {
+            prospecto: seguimiento,
+            seguimientos: [],
+            seguimiento_mas_reciente: seguimiento
+          };
+        }
+
+        gruposPorProspecto[prospectoId].seguimientos.push(seguimiento);
+
+        // Actualizar el más reciente
+        const fechaActual = new Date(seguimiento.fecha_completado || seguimiento.created_at);
+        const fechaReciente = new Date(gruposPorProspecto[prospectoId].seguimiento_mas_reciente.fecha_completado || gruposPorProspecto[prospectoId].seguimiento_mas_reciente.created_at);
+
+        if (fechaActual > fechaReciente) {
+          gruposPorProspecto[prospectoId].seguimiento_mas_reciente = seguimiento;
+        }
+      });
+
+      return Object.values(gruposPorProspecto);
+    }
+
+    return datos;
+  }, [dashboardData, tipoListaModal, filtros]);
+
+  // Tipos disponibles para el filtro
+  const tiposDisponibles = useMemo(() => {
+    if (!dashboardData) return [];
+    const seguimientos = dashboardData.seguimientos || {};
+    return [...new Set([
+      ...(seguimientos.proximos || []).map(s => s.tipo),
+      ...(seguimientos.vencidos || []).map(s => s.tipo),
+      ...(seguimientos.realizados_semana || []).map(s => s.tipo)
+    ])].filter(Boolean);
   }, [dashboardData]);
 
   const obtenerInclinacionBalanza = () => {
@@ -431,7 +519,7 @@ const BalanzaSeguimientos = ({ asesorId: asesorIdProp = null, refreshTrigger = 0
                 }}
               >
                 <div
-                  onClick={() => setVistaDetalle('pendientes')}
+                  onClick={() => abrirModalLista('pendientes')}
                   className="relative w-40 h-40 bg-gradient-to-br from-red-500 via-pink-500 to-red-600 rounded-full border-8 border-red-400 shadow-2xl shadow-red-500/50 flex flex-col items-center justify-center text-white group-hover:scale-105 transition-all duration-300"
                 >
                   {/* Anillos */}
@@ -473,7 +561,7 @@ const BalanzaSeguimientos = ({ asesorId: asesorIdProp = null, refreshTrigger = 0
                 }}
               >
                 <div
-                  onClick={() => setVistaDetalle('realizados')}
+                  onClick={() => abrirModalLista('completados')}
                   className="relative w-40 h-40 bg-gradient-to-br from-green-500 via-emerald-500 to-green-600 rounded-full border-8 border-green-400 shadow-2xl shadow-green-500/50 flex flex-col items-center justify-center text-white group-hover:scale-105 transition-all duration-300"
                 >
                   {/* Anillos */}
@@ -601,391 +689,6 @@ const BalanzaSeguimientos = ({ asesorId: asesorIdProp = null, refreshTrigger = 0
     );
   };
 
-  const renderListaDetalle = () => {
-    if (!vistaDetalle || !dashboardData) return null;
-
-    const seguimientos = dashboardData.seguimientos || {};
-    let datos = vistaDetalle === 'pendientes'
-      ? [...(seguimientos.proximos || []), ...(seguimientos.vencidos || [])]
-      : seguimientos.realizados_semana || []; // ✅ Ahora usa realizados_semana
-
-    // Aplicar filtros
-    datos = datos.filter(item => {
-      // Filtro por tipo
-      if (filtros.tipo !== 'todos' && item.tipo !== filtros.tipo) {
-        return false;
-      }
-
-      // Filtro por urgencia (solo para pendientes)
-      if (vistaDetalle === 'pendientes' && filtros.urgencia !== 'todos') {
-        if (filtros.urgencia === 'vencidos' && !item.vencido) return false;
-        if (filtros.urgencia === 'hoy' && item.vencido) return false;
-      }
-
-      // Filtro por búsqueda
-      if (filtros.busqueda.trim()) {
-        const busqueda = filtros.busqueda.toLowerCase();
-        const nombre = (item.nombre_cliente || item.prospecto_nombre || '').toLowerCase();
-        const telefono = (item.telefono || '').toLowerCase();
-        const codigo = (item.prospecto_codigo || '').toLowerCase();
-
-        return nombre.includes(busqueda) ||
-               telefono.includes(busqueda) ||
-               codigo.includes(busqueda);
-      }
-
-      return true;
-    });
-
-    // 🎯 AGRUPACIÓN POR PROSPECTO (solo para realizados)
-    let datosAgrupados = datos;
-    if (vistaDetalle === 'realizados') {
-      const gruposPorProspecto = {};
-
-      datos.forEach(seguimiento => {
-        const prospectoId = seguimiento.prospecto_id || seguimiento.id;
-
-        if (!gruposPorProspecto[prospectoId]) {
-          gruposPorProspecto[prospectoId] = {
-            prospecto: seguimiento,
-            seguimientos: [],
-            seguimiento_mas_reciente: seguimiento
-          };
-        }
-
-        gruposPorProspecto[prospectoId].seguimientos.push(seguimiento);
-
-        // Actualizar el más reciente
-        const fechaActual = new Date(seguimiento.fecha_completado || seguimiento.created_at);
-        const fechaReciente = new Date(gruposPorProspecto[prospectoId].seguimiento_mas_reciente.fecha_completado || gruposPorProspecto[prospectoId].seguimiento_mas_reciente.created_at);
-
-        if (fechaActual > fechaReciente) {
-          gruposPorProspecto[prospectoId].seguimiento_mas_reciente = seguimiento;
-        }
-      });
-
-      datosAgrupados = Object.values(gruposPorProspecto);
-    }
-
-    const titulo = vistaDetalle === 'pendientes' ? 'Seguimientos Pendientes' : 'Seguimientos Realizados (Últimos 7 días)';
-    const icono = vistaDetalle === 'pendientes' ? Clock : CheckCircle;
-    const colorTema = vistaDetalle === 'pendientes' ? 'red' : 'green';
-
-    // Obtener tipos únicos para el filtro
-    const tiposDisponibles = [...new Set([
-      ...(seguimientos.proximos || []).map(s => s.tipo),
-      ...(seguimientos.vencidos || []).map(s => s.tipo),
-      ...(seguimientos.realizados_semana || []).map(s => s.tipo)
-    ])].filter(Boolean);
-
-    // Calcular el total real de seguimientos (para mostrar en el contador)
-    const totalSeguimientosReales = vistaDetalle === 'realizados'
-      ? datosAgrupados.reduce((acc, grupo) => acc + (grupo.seguimientos ? grupo.seguimientos.length : 1), 0)
-      : datosAgrupados.length;
-
-    return (
-      <div className="mt-8 bg-white rounded-lg shadow-lg border">
-        <div className={`px-6 py-4 bg-${colorTema}-50 border-b border-${colorTema}-200 rounded-t-lg`}>
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center space-x-3">
-              {React.createElement(icono, { className: `h-6 w-6 text-${colorTema}-600` })}
-              <h3 className={`text-lg font-semibold text-${colorTema}-800`}>{titulo}</h3>
-              <span className={`px-3 py-1 bg-${colorTema}-200 text-${colorTema}-800 rounded-full text-sm font-medium`}>
-                {vistaDetalle === 'realizados' ? `${datosAgrupados.length} prospectos` : datosAgrupados.length}
-              </span>
-              {vistaDetalle === 'realizados' && totalSeguimientosReales > datosAgrupados.length && (
-                <span className="text-xs text-gray-600">
-                  ({totalSeguimientosReales} seguimientos totales)
-                </span>
-              )}
-            </div>
-            <button
-              onClick={() => setVistaDetalle(null)}
-              className={`p-2 hover:bg-${colorTema}-200 rounded-lg transition-colors`}
-            >
-              <ChevronDown className="h-5 w-5" />
-            </button>
-          </div>
-
-          {/* Barra de filtros y búsqueda */}
-          <div className="flex flex-col sm:flex-row gap-4 items-center">
-            {/* Buscador */}
-            <div className="flex-1 max-w-md">
-              <div className="relative">
-                <input
-                  type="text"
-                  placeholder="Buscar por nombre, teléfono o código..."
-                  value={filtros.busqueda}
-                  onChange={(e) => setFiltros(prev => ({ ...prev, busqueda: e.target.value }))}
-                  className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <span className="text-gray-400">🔍</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Filtro por tipo */}
-            <select
-              value={filtros.tipo}
-              onChange={(e) => setFiltros(prev => ({ ...prev, tipo: e.target.value }))}
-              className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            >
-              <option value="todos">Todos los tipos</option>
-              {tiposDisponibles.map(tipo => (
-                <option key={tipo} value={tipo}>{tipo}</option>
-              ))}
-            </select>
-
-            {/* Filtro por urgencia (solo para pendientes) */}
-            {vistaDetalle === 'pendientes' && (
-              <select
-                value={filtros.urgencia}
-                onChange={(e) => setFiltros(prev => ({ ...prev, urgencia: e.target.value }))}
-                className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              >
-                <option value="todos">Todas las urgencias</option>
-                <option value="vencidos">Solo vencidos</option>
-                <option value="hoy">Solo vigentes</option>
-              </select>
-            )}
-
-            {/* Botón limpiar filtros */}
-            {(filtros.busqueda || filtros.tipo !== 'todos' || filtros.urgencia !== 'todos') && (
-              <button
-                onClick={() => setFiltros({ tipo: 'todos', urgencia: 'todos', busqueda: '' })}
-                className="px-3 py-2 text-sm text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors"
-              >
-                Limpiar
-              </button>
-            )}
-          </div>
-        </div>
-
-        <div className="max-h-96 overflow-y-auto">
-          {datosAgrupados.length === 0 ? (
-            <div className="p-8 text-center text-gray-500">
-              <Target className="h-12 w-12 mx-auto mb-4 text-gray-400" />
-              <p>No hay {vistaDetalle} en este momento</p>
-            </div>
-          ) : (
-            <div className="divide-y divide-gray-200">
-              {datosAgrupados.map((itemGrupo, index) => {
-                // Determinar si es un grupo o un item individual
-                const esGrupo = vistaDetalle === 'realizados' && itemGrupo.seguimientos;
-                const item = esGrupo ? itemGrupo.seguimiento_mas_reciente : itemGrupo;
-                const seguimientoId = item.id; // ID único del seguimiento
-                const prospectoId = item.prospecto_id;
-                const estaExpandido = prospectosExpandidos[prospectoId];
-                const totalSeguimientos = esGrupo ? itemGrupo.seguimientos.length : 1;
-
-                return (
-                  <div key={seguimientoId || `${prospectoId}-${index}` || index} className="hover:bg-gray-50 transition-colors">
-                    {/* Card Principal */}
-                    <div className="p-4">
-                      <div className="flex items-center justify-between">
-                        <div className="flex-1">
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center space-x-2">
-                              <h4 className="font-medium text-gray-900">
-                                {`${item.nombre_cliente || item.prospecto_nombre || ''} ${item.apellido_cliente || ''}`.trim() || 'Sin nombre'}
-                              </h4>
-                              {/* Contador de seguimientos */}
-                              {esGrupo && totalSeguimientos > 1 && (
-                                <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded-full text-xs font-semibold">
-                                  {totalSeguimientos} seguimientos
-                                </span>
-                              )}
-                            </div>
-                            <div className="text-xs text-gray-500 font-mono">
-                              #{item.prospecto_codigo || item.codigo || 'N/A'}
-                            </div>
-                          </div>
-
-                      <div className="flex items-center space-x-4 mt-1 text-sm text-gray-600">
-                        <span className="flex items-center space-x-1">
-                          <span>📞</span>
-                          <span>{item.telefono || 'Sin teléfono'}</span>
-                        </span>
-                        {item.asesor_nombre && (
-                          <span className="flex items-center space-x-1">
-                            <User className="h-3 w-3" />
-                            <span>{item.asesor_nombre}</span>
-                          </span>
-                        )}
-                        {item.valor_estimado && (
-                          <span className="flex items-center space-x-1">
-                            <span>💰</span>
-                            <span className="font-semibold">${item.valor_estimado.toLocaleString()}</span>
-                          </span>
-                        )}
-                        {item.probabilidad_cierre && (
-                          <span className="flex items-center space-x-1">
-                            <Target className="h-3 w-3" />
-                            <span>{item.probabilidad_cierre}%</span>
-                          </span>
-                        )}
-                      </div>
-
-                          <div className="mt-2 text-xs space-y-1">
-                            <div className="flex items-center justify-between text-gray-500">
-                              <span>
-                                {vistaDetalle === 'pendientes'
-                                  ? `⏰ Vence: ${formatearFechaHora(item.fecha_programada)}`
-                                  : `✅ Último: ${formatearFechaHora(item.fecha_completado || item.created_at)}`
-                                }
-                              </span>
-                              {vistaDetalle === 'pendientes' && item.fecha_programada && (
-                                <span className={`px-2 py-1 rounded text-xs font-medium ${
-                                  new Date(item.fecha_programada) < new Date()
-                                    ? 'bg-red-100 text-red-700'
-                                    : new Date(item.fecha_programada) < new Date(Date.now() + 24 * 60 * 60 * 1000)
-                                    ? 'bg-yellow-100 text-yellow-700'
-                                    : 'bg-green-100 text-green-700'
-                                }`}>
-                                  {new Date(item.fecha_programada) < new Date()
-                                    ? '🚨 Vencido'
-                                    : new Date(item.fecha_programada) < new Date(Date.now() + 24 * 60 * 60 * 1000)
-                                    ? '⚠️ Hoy'
-                                    : '📅 Programado'
-                                  }
-                                </span>
-                              )}
-                            </div>
-
-                            {item.resultado && (
-                              <div className="text-gray-600 bg-gray-50 p-2 rounded">
-                                <span className="font-medium">📝 Resultado:</span> {item.resultado}
-                              </div>
-                            )}
-
-                            {item.estado && (
-                              <div className="flex items-center text-gray-500">
-                                <span className="font-medium">Estado:</span>
-                                <span className={`ml-2 px-2 py-1 rounded text-xs font-medium ${
-                                  item.estado === 'Negociacion' ? 'bg-orange-100 text-orange-700' :
-                                  item.estado === 'Cotizado' ? 'bg-blue-100 text-blue-700' :
-                                  item.estado === 'Cerrado' ? 'bg-green-100 text-green-700' :
-                                  'bg-gray-100 text-gray-700'
-                                }`}>
-                                  {item.estado}
-                                </span>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                        <div className="flex items-center space-x-2">
-                          {item.vencido && (
-                            <span className="px-2 py-1 bg-red-100 text-red-800 rounded text-xs font-medium">
-                              Vencido
-                            </span>
-                          )}
-                          {item.tipo && (
-                            <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded text-xs font-medium">
-                              {item.tipo}
-                            </span>
-                          )}
-                          {item.valor_estimado && item.valor_estimado >= 2000 && (
-                            <span className="px-2 py-1 bg-yellow-100 text-yellow-800 rounded text-xs font-medium">
-                              💎 Alto valor
-                            </span>
-                          )}
-                          {item.valor_estimado && item.valor_estimado >= 1000 && item.valor_estimado < 2000 && (
-                            <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded text-xs font-medium">
-                              💼 Valor medio
-                            </span>
-                          )}
-                          {item.estado === 'Negociacion' && (
-                            <span className="px-2 py-1 bg-green-100 text-green-800 rounded text-xs font-medium">
-                              🎯 Conv. potencial
-                            </span>
-                          )}
-
-                          {/* Botón expandir/colapsar (solo si hay múltiples seguimientos) */}
-                          {esGrupo && totalSeguimientos > 1 && (
-                            <button
-                              onClick={() => toggleProspectoExpandido(prospectoId)}
-                              className="px-3 py-1 bg-blue-100 text-blue-700 text-xs font-medium rounded hover:bg-blue-200 transition-colors flex items-center space-x-1"
-                            >
-                              <ChevronDown className={`h-3 w-3 transform transition-transform ${estaExpandido ? 'rotate-180' : ''}`} />
-                              <span>{estaExpandido ? 'Ocultar' : 'Ver todos'}</span>
-                            </button>
-                          )}
-
-                          {/* Botón de acción - solo para pendientes */}
-                          {vistaDetalle === 'pendientes' && !item.completado && (
-                            <button
-                              onClick={() => abrirModalCompletar(item)}
-                              className="px-3 py-1 bg-gradient-to-r from-green-600 to-blue-600 text-white text-xs font-medium rounded hover:from-green-700 hover:to-blue-700 transition-colors flex items-center space-x-1"
-                            >
-                              <CheckCircle className="h-3 w-3" />
-                              <span>COMPLETAR</span>
-                            </button>
-                          )}
-
-                          <button
-                            onClick={() => abrirDetallesProspecto(item)}
-                            className="p-2 hover:bg-gray-100 rounded transition-colors"
-                          >
-                            <Eye className="h-4 w-4 text-gray-400 hover:text-blue-600" />
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Sección Desplegable - Solo para grupos con múltiples seguimientos */}
-                    {esGrupo && totalSeguimientos > 1 && estaExpandido && (
-                      <div className="px-4 pb-4 bg-gray-50 border-t border-gray-200">
-                        <div className="pt-3 space-y-2">
-                          <div className="text-xs font-semibold text-gray-700 mb-2">
-                            📋 Historial de seguimientos ({totalSeguimientos}):
-                          </div>
-                          {itemGrupo.seguimientos
-                            .sort((a, b) => new Date(b.fecha_completado || b.created_at) - new Date(a.fecha_completado || a.created_at))
-                            .map((seg, idx) => (
-                              <div key={seg.id || idx} className="bg-white p-3 rounded border border-gray-200 text-xs">
-                                <div className="flex items-center justify-between mb-1">
-                                  <span className="font-medium text-gray-900">
-                                    {idx === 0 ? '🔵 Más reciente' : `#${idx + 1}`}
-                                  </span>
-                                  <span className="text-gray-500">
-                                    {formatearFechaHora(seg.fecha_completado || seg.created_at)}
-                                  </span>
-                                </div>
-                                <div className="flex items-center space-x-2 text-gray-600">
-                                  <span className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded">
-                                    {seg.tipo}
-                                  </span>
-                                  {seg.vencido && (
-                                    <span className="px-2 py-0.5 bg-red-100 text-red-700 rounded">
-                                      Vencido
-                                    </span>
-                                  )}
-                                </div>
-                                {seg.resultado && (
-                                  <div className="mt-1 text-gray-700">
-                                    <span className="font-medium">📝</span> {seg.resultado}
-                                  </div>
-                                )}
-                                {seg.notas && (
-                                  <div className="mt-1 text-gray-600 italic">
-                                    "{seg.notas}"
-                                  </div>
-                                )}
-                              </div>
-                            ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      </div>
-    );
-  };
 
   if (loading) {
     return (
@@ -1214,7 +917,6 @@ const BalanzaSeguimientos = ({ asesorId: asesorIdProp = null, refreshTrigger = 0
   return (
     <div className="space-y-6 relative" style={{ zIndex: 1 }}>
       {renderBalanza()}
-      {renderListaDetalle()}
       {renderNotificacion()}
       {renderModalScore()}
 
@@ -1256,6 +958,24 @@ const BalanzaSeguimientos = ({ asesorId: asesorIdProp = null, refreshTrigger = 0
           currentUser={usuarioActual}
         />
       )}
+
+      {/* Modal Lista de Seguimientos */}
+      <ModalListaSeguimientos
+        isOpen={modalListaAbierto}
+        onClose={() => {
+          setModalListaAbierto(false);
+          setTipoListaModal(null);
+        }}
+        tipo={tipoListaModal}
+        datos={datosModalFiltrados}
+        filtros={filtros}
+        setFiltros={setFiltros}
+        tiposDisponibles={tiposDisponibles}
+        prospectosExpandidos={prospectosExpandidos}
+        toggleExpansion={toggleProspectoExpandido}
+        onCompletarSeguimiento={abrirModalCompletar}
+        onVerDetalles={abrirDetallesProspecto}
+      />
     </div>
   );
 };

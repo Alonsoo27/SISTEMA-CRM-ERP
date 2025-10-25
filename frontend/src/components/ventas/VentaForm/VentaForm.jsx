@@ -225,6 +225,7 @@ const VentaForm = ({
   const [busquedaDocumento, setBusquedaDocumento] = useState('');
   const [loadingDocumento, setLoadingDocumento] = useState(false);
   const [clienteEncontrado, setClienteEncontrado] = useState(null);
+  const [clienteRegistradoBloqueado, setClienteRegistradoBloqueado] = useState(false); // 🔒 Bloquear edición cuando cliente ya existe
 
   // Estados para productos
   const [busquedaProducto, setBusquedaProducto] = useState('');
@@ -1675,13 +1676,46 @@ const response = await ventasService.crearVentaCompleta(datosVenta);
                   // Actualizar formData con la información del documento
                   handleInputChange('cliente_documento', data.documento);
                   handleInputChange('tipo_documento', data.tipo_documento);
+
+                  // 🏢 AUTO-CONCATENAR PARA RUC: Si detecta RUC, concatenar nombre + apellido
+                  if (data.tipo_documento === 'RUC') {
+                    const nombreActual = formData.nombre_cliente?.trim() || '';
+                    const apellidoActual = formData.apellido_cliente?.trim() || '';
+
+                    // Solo concatenar si hay nombre y apellido separados
+                    if (nombreActual && apellidoActual) {
+                      const razonSocial = `${nombreActual} ${apellidoActual}`.trim();
+
+                      console.log('🏢 RUC detectado - Concatenando nombre+apellido para empresa:', {
+                        nombre: nombreActual,
+                        apellido: apellidoActual,
+                        razonSocial: razonSocial
+                      });
+
+                      // Reorganizar campos para empresa
+                      handleInputChange('nombre_cliente', razonSocial);
+                      handleInputChange('apellido_cliente', '');
+                      handleInputChange('cliente_empresa', razonSocial);
+                    }
+                  }
+
+                  // 👤 AUTO-SEPARAR PARA DNI: Si detecta DNI y cliente_empresa tiene valor
+                  if (data.tipo_documento === 'DNI' && formData.cliente_empresa) {
+                    console.log('👤 DNI detectado - Limpiando cliente_empresa');
+                    handleInputChange('cliente_empresa', '');
+                  }
                 }}
                 onClienteEncontrado={(data) => {
-                  // Auto-llenar campos cuando encuentra un cliente
+                  // 🔒 CLIENTE YA REGISTRADO: Auto-llenar Y BLOQUEAR edición
                   const cliente = data.cliente;
                   const tipoCliente = data.tipo_documento;
 
+                  console.log('🔒 Cliente registrado encontrado:', cliente);
+
                   handleInputChange('cliente_id', cliente.id);
+
+                  // 🔒 ACTIVAR BLOQUEO - Los datos del cliente ya NO son editables
+                  setClienteRegistradoBloqueado(true);
 
                   // ⚡ MANEJO DIFERENCIADO: RUC vs DNI
                   if (tipoCliente === 'RUC' || cliente.tipo_cliente === 'empresa') {
@@ -1779,18 +1813,30 @@ const response = await ventasService.crearVentaCompleta(datosVenta);
                       Nombre del Cliente *
                     </>
                   )}
+                  {clienteRegistradoBloqueado && (
+                    <span className="ml-2 px-2 py-0.5 bg-yellow-100 text-yellow-800 text-xs font-medium rounded-full">
+                      🔒 Cliente Registrado
+                    </span>
+                  )}
                 </label>
                 <input
                   type="text"
                   value={formData.nombre_cliente}
                   onChange={(e) => handleInputChange('nombre_cliente', e.target.value)}
+                  disabled={clienteRegistradoBloqueado}
                   className={`w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
                     errors.nombre_cliente ? 'border-red-300' : 'border-gray-300'
-                  }`}
+                  } ${clienteRegistradoBloqueado ? 'bg-gray-100 cursor-not-allowed' : ''}`}
                   placeholder={formData.tipo_documento === 'RUC' ? 'Ej: Empresa ABC S.A.C.' : 'Nombre del cliente'}
                 />
                 {errors.nombre_cliente && (
                   <p className="mt-1 text-sm text-red-600">{errors.nombre_cliente}</p>
+                )}
+                {clienteRegistradoBloqueado && (
+                  <p className="mt-1 text-xs text-yellow-600 flex items-center">
+                    <AlertCircle className="h-3 w-3 mr-1" />
+                    Datos validados en registro anterior - No editable
+                  </p>
                 )}
               </div>
 
@@ -1804,9 +1850,10 @@ const response = await ventasService.crearVentaCompleta(datosVenta);
                     type="text"
                     value={formData.apellido_cliente}
                     onChange={(e) => handleInputChange('apellido_cliente', e.target.value)}
+                    disabled={clienteRegistradoBloqueado}
                     className={`w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
                       errors.apellido_cliente ? 'border-red-300' : 'border-gray-300'
-                    }`}
+                    } ${clienteRegistradoBloqueado ? 'bg-gray-100 cursor-not-allowed' : ''}`}
                     placeholder="Apellido del cliente"
                   />
                   {errors.apellido_cliente && (
@@ -1839,9 +1886,10 @@ const response = await ventasService.crearVentaCompleta(datosVenta);
                   type="email"
                   value={formData.cliente_email}
                   onChange={(e) => handleInputChange('cliente_email', e.target.value)}
+                  disabled={clienteRegistradoBloqueado}
                   className={`w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
                     errors.cliente_email ? 'border-red-300' : 'border-gray-300'
-                  }`}
+                  } ${clienteRegistradoBloqueado ? 'bg-gray-100 cursor-not-allowed' : ''}`}
                   placeholder="cliente@email.com"
                 />
                 {errors.cliente_email && (
@@ -1857,9 +1905,10 @@ const response = await ventasService.crearVentaCompleta(datosVenta);
                   type="tel"
                   value={formData.cliente_telefono}
                   onChange={(e) => handleInputChange('cliente_telefono', e.target.value)}
+                  disabled={clienteRegistradoBloqueado}
                   className={`w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
                     errors.cliente_telefono ? 'border-red-300' : 'border-gray-300'
-                  }`}
+                  } ${clienteRegistradoBloqueado ? 'bg-gray-100 cursor-not-allowed' : ''}`}
                   placeholder="+51 999 999 999"
                 />
                 {errors.cliente_telefono && (
@@ -1869,13 +1918,15 @@ const response = await ventasService.crearVentaCompleta(datosVenta);
 
               {/* SELECTOR DE UBICACIONES OFICIALES */}
               <div className="md:col-span-3">
-                <div className="p-4 bg-gradient-to-r from-green-50 to-blue-50 rounded-lg border border-green-200">
+                <div className={`p-4 bg-gradient-to-r from-green-50 to-blue-50 rounded-lg border border-green-200 ${clienteRegistradoBloqueado ? 'opacity-60' : ''}`}>
                   <div className="flex items-center mb-3">
                     <MapPin className="h-5 w-5 text-green-600 mr-2" />
                     <h4 className="text-lg font-semibold text-gray-900">Ubicación del Cliente</h4>
-                    <span className="ml-2 px-2 py-1 bg-green-100 text-green-800 text-xs font-medium rounded-full">
-                      
-                    </span>
+                    {clienteRegistradoBloqueado && (
+                      <span className="ml-2 px-2 py-1 bg-yellow-100 text-yellow-800 text-xs font-medium rounded-full">
+                        🔒 Bloqueado
+                      </span>
+                    )}
                   </div>
 
                   <UbicacionesSelector
@@ -1885,6 +1936,9 @@ const response = await ventasService.crearVentaCompleta(datosVenta);
                       distrito: formData.distrito
                     }}
                     onChange={(ubicacion) => {
+                      // 🔒 No permitir cambios si el cliente está bloqueado
+                      if (clienteRegistradoBloqueado) return;
+
                       // Actualizar los campos del formulario
                       handleInputChange('departamento', ubicacion.departamento);
                       handleInputChange('ciudad', ubicacion.provincia); // Tu BD usa 'ciudad' para provincia

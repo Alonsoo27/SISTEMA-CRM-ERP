@@ -96,6 +96,26 @@ const VentaDetailsView = ({ venta, onClose, onEdit, currentUser }) => {
 
   const puedeEditar = currentUser && (currentUser.rol === 'admin' || currentUser.rol === 'manager');
 
+  // 🎯 OBTENER NOMBRE DINÁMICO SEGÚN TIPO DE DOCUMENTO
+  const obtenerNombreCliente = () => {
+    // Verificar si hay cliente vinculado con razón social
+    if (datos.cliente_razon_social) {
+      return datos.cliente_razon_social;
+    }
+
+    // Si no hay cliente, usar datos de la venta
+    const nombre = datos.nombre_cliente || datos.cliente_nombre || '';
+    const apellido = datos.apellido_cliente || datos.cliente_apellido || '';
+
+    // Si tiene apellido, es persona (DNI/CE/PASAPORTE)
+    if (apellido && apellido !== '.') {
+      return `${nombre} ${apellido}`.trim();
+    }
+
+    // Si no tiene apellido o es ".", es empresa (RUC)
+    return nombre || 'Cliente no especificado';
+  };
+
   // Función para descargar PDF
   const handleDescargarPDF = async () => {
     try {
@@ -247,7 +267,7 @@ const VentaDetailsView = ({ venta, onClose, onEdit, currentUser }) => {
                   <div>
                     <label className="text-sm font-medium text-gray-500">Nombre / Razón Social</label>
                     <p className="text-lg font-semibold text-gray-900 mt-1">
-                      {datos.cliente_nombre || 'Cliente no especificado'}
+                      {obtenerNombreCliente()}
                     </p>
                   </div>
                   

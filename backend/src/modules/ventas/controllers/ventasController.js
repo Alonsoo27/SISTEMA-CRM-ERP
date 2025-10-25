@@ -772,14 +772,43 @@ exports.crearVenta = async (req, res) => {
                 }
             }
 
-            // Actualizar prospecto si existe
+            // Actualizar prospecto si existe - SINCRONIZAR DATOS CORREGIDOS
             if (prospecto_id) {
                 try {
                     await query(`
                         UPDATE prospectos
-                        SET estado = 'Convertido', venta_id = $1, updated_at = NOW(), updated_by = $2
-                        WHERE id = $3 AND activo = true
-                    `, [nuevaVenta.id, req.user.id, prospecto_id]);
+                        SET
+                            estado = 'Convertido',
+                            venta_id = $1,
+                            -- 🔄 SINCRONIZAR DATOS CORREGIDOS DEL CLIENTE
+                            nombre_cliente = $2,
+                            apellido_cliente = $3,
+                            empresa = $4,
+                            telefono = $5,
+                            email = $6,
+                            departamento = $7,
+                            ciudad = $8,
+                            distrito = $9,
+                            updated_at = NOW(),
+                            updated_by = $10
+                        WHERE id = $11 AND activo = true
+                    `, [
+                        nuevaVenta.id,
+                        nombre_cliente.trim(),
+                        apellido_cliente?.trim() || null,
+                        cliente_empresa || null,
+                        cliente_telefono || null,
+                        cliente_email || null,
+                        departamento?.trim() || null,
+                        ciudad?.trim() || null,
+                        distrito?.trim() || null,
+                        req.user.id,
+                        prospecto_id
+                    ]);
+
+                    if (isDevelopment) {
+                        console.log(`✅ Prospecto ${prospecto_id} actualizado con datos corregidos de la venta`);
+                    }
                 } catch (error) {
                     if (isDevelopment) console.log('⚠️ No se pudo actualizar el prospecto:', error.message);
                 }
