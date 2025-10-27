@@ -45,7 +45,7 @@ class ReajusteService {
 
             // 3. Dividir actividades afectadas
             const actividadesAReajustar = [];
-            let actividadCortada = null;
+            const actividadesCortadas = []; // CAMBIO: Array en lugar de variable singular
 
             for (const actividad of actividadesExistentes) {
                 // Usar fecha_inicio_real si ya está en progreso, sino usar fecha_inicio_planeada
@@ -72,12 +72,13 @@ class ReajusteService {
                         // Tratar como si empezara después del punto de inserción
                         actividadesAReajustar.push(actividad);
                     } else {
-                        actividadCortada = {
+                        // CAMBIO: Agregar al array en lugar de sobrescribir
+                        actividadesCortadas.push({
                             ...actividad,
                             tiempoAntes: Math.max(0, tiempoAntes),      // Asegurar que no sea negativo
                             tiempoDespues: Math.max(0, tiempoDespues),  // Asegurar que no sea negativo
                             inicioReal: inicioActividad                 // Guardar qué tiempo usamos
-                        };
+                        });
 
                         console.log('🔍 Actividad detectada para corte:', {
                             id: actividad.id,
@@ -94,14 +95,16 @@ class ReajusteService {
                 }
             }
 
+            console.log(`🔪 Total actividades a cortar: ${actividadesCortadas.length}`);
+
             // 4. Calcular nueva programación
             let cursorTiempo = new Date(puntoInsercion);
             cursorTiempo = this.agregarMinutosEfectivos(cursorTiempo, duracionMinutos);
 
             const actividadesAfectadas = [];
 
-            // Si hubo actividad cortada, dividirla en dos partes
-            if (actividadCortada) {
+            // CAMBIO: Procesar TODAS las actividades cortadas (no solo una)
+            for (const actividadCortada of actividadesCortadas) {
                 console.log('🔪 Cortando actividad:', {
                     id: actividadCortada.id,
                     tiempoAntes: actividadCortada.tiempoAntes,
@@ -262,7 +265,7 @@ class ReajusteService {
                 success: true,
                 actividades_afectadas: actividadesAfectadas.length,
                 detalles: {
-                    cortada: actividadCortada ? 1 : 0,
+                    cortadas: actividadesCortadas.length,
                     reajustadas: actividadesAReajustar.length
                 }
             };

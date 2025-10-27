@@ -5,6 +5,7 @@
 const { query } = require('../../../config/database');
 const reajusteService = require('../services/reajusteService');
 const actividadesService = require('../services/actividadesService');
+const colisionesService = require('../services/colisionesService');
 
 // Mapeo de colores por categoría principal
 const COLORES_CATEGORIAS = {
@@ -24,9 +25,55 @@ function obtenerColorCategoria(categoria_principal) {
     return COLORES_CATEGORIAS[categoria_principal] || '#3B82F6'; // Azul por defecto
 }
 
+// Función helper para validar horario laboral
+function validarHorarioLaboral(fecha) {
+    const diaSemana = fecha.getDay(); // 0=Domingo, 6=Sábado
+    const hora = fecha.getHours();
+    const minuto = fecha.getMinutes();
+    const horaDecimal = hora + (minuto / 60);
+
+    // Domingo: NO laboral
+    if (diaSemana === 0) {
+        return {
+            valido: false,
+            mensaje: 'No se pueden programar actividades los domingos'
+        };
+    }
+
+    // Sábado: 9 AM - 12 PM
+    if (diaSemana === 6) {
+        if (horaDecimal < 9 || horaDecimal >= 12) {
+            return {
+                valido: false,
+                mensaje: 'Los sábados el horario laboral es de 9:00 AM a 12:00 PM'
+            };
+        }
+        return { valido: true };
+    }
+
+    // Lunes-Viernes: 8 AM - 6 PM (excluyendo almuerzo 1-2 PM)
+    if (horaDecimal < 8 || horaDecimal >= 18) {
+        return {
+            valido: false,
+            mensaje: 'El horario laboral de lunes a viernes es de 8:00 AM a 6:00 PM'
+        };
+    }
+
+    // Verificar que no esté en horario de almuerzo (1 PM - 2 PM)
+    if (horaDecimal >= 13 && horaDecimal < 14) {
+        return {
+            valido: false,
+            mensaje: 'No se pueden programar actividades durante el horario de almuerzo (1:00 PM - 2:00 PM)'
+        };
+    }
+
+    return { valido: true };
+}
+
 class ActividadesController {
     /**
      * Crear actividad individual
+     * V2: Con validaciones de colisiones completas
      */
     static async crearActividad(req, res) {
         try {
@@ -38,7 +85,8 @@ class ActividadesController {
                 duracion_minutos,
                 fecha_inicio,
                 es_prioritaria = false,
-                usuario_id // ID del usuario para quien se crea (opcional)
+                usuario_id, // ID del usuario para quien se crea (opcional)
+                confirmar_colision = false // Flag para confirmar que usuario acepta la colisión
             } = req.body;
 
             // Determinar para quién es la actividad
@@ -55,7 +103,7 @@ class ActividadesController {
                 }
             }
 
-            // Validaciones
+            // Validaciones básicas
             if (!categoria_principal || !subcategoria || !descripcion || !duracion_minutos) {
                 return res.status(400).json({
                     success: false,
@@ -63,7 +111,6 @@ class ActividadesController {
                 });
             }
 
-            // Validar duración
             if (duracion_minutos <= 0) {
                 return res.status(400).json({
                     success: false,
@@ -71,7 +118,6 @@ class ActividadesController {
                 });
             }
 
-            // Validar duración máxima (30 días laborales = 240 horas = 14400 minutos)
             const MAX_MINUTOS = 14400;
             if (duracion_minutos > MAX_MINUTOS) {
                 const diasSolicitados = Math.round(duracion_minutos / 60 / 8);
@@ -95,28 +141,172 @@ class ActividadesController {
                 });
             }
 
-            // Obtener color por categoría principal
-            const color_hex = obtenerColorCategoria(categoria_principal);
+            // VALIDACIÓN #1: Bloquear fechas al pasado
+            if (fecha_inicio) {
+                const fechaManual = new Date(fecha_inicio);
+                const ahora = new Date();
 
-            // Generar código único
-            const codigo = await actividadesService.generarCodigoActividad();
+                // Validar que la fecha sea válida
+                if (isNaN(fechaManual.getTime())) {
+                    return res.status(400).json({
+                        success: false,
+                        message: 'Fecha inválida. Formato esperado: YYYY-MM-DDTHH:mm'
+                    });
+                }
+
+                // Comparar con margen de 1 minuto para evitar problemas de sincronización
+                const MARGEN_SEGUNDOS = 60;
+                const diferencia = (fechaManual - ahora) / 1000; // segundos
+
+                console.log('🕐 Validando fecha:', {
+                    fecha_recibida: fecha_inicio,
+                    fecha_parseada_utc: fechaManual.toISOString(),
+                    ahora_utc: ahora.toISOString(),
+                    diferencia_segundos: Math.round(diferencia)
+                });
+
+                if (diferencia < -MARGEN_SEGUNDOS) {
+                    return res.status(400).json({
+                        success: false,
+                        message: `No se pueden programar actividades en el pasado. La fecha debe ser posterior a ${ahora.toLocaleString('es-PE', { timeZone: 'America/Lima' })}`
+                    });
+                }
+
+                // VALIDACIÓN #1.5: Verificar horario laboral
+                const validacionHorario = validarHorarioLaboral(fechaManual);
+                if (!validacionHorario.valido) {
+                    return res.status(400).json({
+                        success: false,
+                        message: validacionHorario.mensaje
+                    });
+                }
+            }
+
+            // Obtener color
+            const color_hex = obtenerColorCategoria(categoria_principal);
 
             // Calcular fecha de inicio
             let fechaInicioPlaneada;
+            let esAutomatica = false;
+
             if (fecha_inicio) {
+                // FECHA MANUAL
                 fechaInicioPlaneada = new Date(fecha_inicio);
                 console.log('📅 Usando fecha_inicio MANUAL:', fecha_inicio);
             } else {
-                // Buscar el próximo slot disponible para el usuario destino
-                fechaInicioPlaneada = await actividadesService.obtenerProximoSlotDisponible(usuarioDestino);
+                // FECHA AUTOMÁTICA
+                esAutomatica = true;
+                const slotInfo = await actividadesService.obtenerProximoSlotDisponible(
+                    usuarioDestino,
+                    es_prioritaria ? null : duracion_minutos // Solo validar duración si NO es prioritaria
+                );
+
+                // Si obtenerProximoSlotDisponible retorna objeto con info
+                if (typeof slotInfo === 'object' && slotInfo.fecha) {
+                    fechaInicioPlaneada = slotInfo.fecha;
+
+                    // Para actividades NORMALES, si no hay espacio suficiente, buscar al final
+                    if (!es_prioritaria && !slotInfo.esSuficiente) {
+                        console.log('⚠️ No hay espacio suficiente en slot encontrado para actividad normal');
+                        // Buscar siguiente hueco suficiente
+                        const huecoPosterior = await colisionesService.buscarHuecoPosterior(
+                            usuarioDestino,
+                            slotInfo.fecha,
+                            duracion_minutos
+                        );
+
+                        if (huecoPosterior) {
+                            fechaInicioPlaneada = huecoPosterior.inicio;
+                        }
+                    }
+                } else {
+                    fechaInicioPlaneada = slotInfo;
+                }
+
                 console.log('📅 Usando fecha_inicio AUTOMÁTICA:', fechaInicioPlaneada);
             }
 
-            // Calcular fecha fin usando el servicio de reajuste
+            // Calcular fecha fin
             const fechaFinPlaneada = reajusteService.agregarMinutosEfectivos(
                 new Date(fechaInicioPlaneada),
                 duracion_minutos
             );
+
+            // VALIDACIÓN #2: Detectar colisiones (solo para PRIORITARIAS)
+            if (es_prioritaria && !confirmar_colision) {
+                const colision = await colisionesService.detectarColisionesPrioritaria(
+                    usuarioDestino,
+                    fechaInicioPlaneada,
+                    duracion_minutos
+                );
+
+                if (colision.hayColision) {
+                    // Retornar HTTP 409 con información de la colisión
+                    return res.status(409).json({
+                        success: false,
+                        tipo_colision: colision.tipo,
+                        mensaje: colision.mensaje,
+                        actividad_conflicto: colision.actividad,
+                        sugerencias: colision.sugerencias || null,
+                        requiere_confirmacion: colision.requiere_confirmacion || false,
+                        advertencia: colision.advertencia || null,
+                        instruccion: 'Para continuar, vuelve a enviar la solicitud con confirmar_colision: true'
+                    });
+                }
+            }
+
+            // VALIDACIÓN #3: Alertas informativas para actividades NORMALES con fecha manual
+            let huboReprogramacion = false;
+            let infoReprogramacion = null;
+
+            if (!es_prioritaria && fecha_inicio) {
+                const colision = await colisionesService.detectarColisionesPrioritaria(
+                    usuarioDestino,
+                    fechaInicioPlaneada,
+                    duracion_minutos
+                );
+
+                if (colision.hayColision) {
+                    // Para actividades normales, reprogramar automáticamente después
+                    console.log('ℹ️ Actividad normal con colisión, reprogramando automáticamente');
+
+                    const huecoPosterior = await colisionesService.buscarHuecoPosterior(
+                        usuarioDestino,
+                        colision.actividad.fecha_fin,
+                        duracion_minutos
+                    );
+
+                    if (huecoPosterior) {
+                        const fechaOriginal = new Date(fechaInicioPlaneada);
+
+                        // Actualizar fecha de inicio planeada
+                        fechaInicioPlaneada = new Date(huecoPosterior.inicio);
+
+                        // Recalcular fin
+                        fechaFinPlaneada = reajusteService.agregarMinutosEfectivos(
+                            fechaInicioPlaneada,
+                            duracion_minutos
+                        );
+
+                        // Guardar info para retornar después de crear la actividad
+                        huboReprogramacion = true;
+                        infoReprogramacion = {
+                            actividad_conflicto: {
+                                descripcion: colision.actividad.descripcion,
+                                fecha_inicio: colision.actividad.fecha_inicio,
+                                fecha_fin: colision.actividad.fecha_fin
+                            },
+                            fecha_original: fechaOriginal,
+                            nueva_fecha: fechaInicioPlaneada
+                        };
+
+                        console.log('📅 Actividad reprogramada:', {
+                            original: fechaOriginal,
+                            nueva: fechaInicioPlaneada
+                        });
+                    }
+                }
+            }
 
             console.log('📅 Creando actividad:', {
                 usuarioDestino,
@@ -124,11 +314,15 @@ class ActividadesController {
                 fecha_inicio_recibida: fecha_inicio || 'NO ENVIADA (automático)',
                 fechaInicioPlaneada,
                 fechaFinPlaneada,
-                duracion_minutos
+                duracion_minutos,
+                es_prioritaria
             });
 
-            // Registrar huecos pasados si es necesario
+            // Registrar huecos pasados
             await actividadesService.registrarHuecosPasados(usuarioDestino, fechaInicioPlaneada);
+
+            // IMPORTANTE: Generar código DESPUÉS de registrar huecos para evitar duplicados
+            const codigo = await actividadesService.generarCodigoActividad();
 
             // Insertar actividad
             const insertQuery = `
@@ -146,8 +340,8 @@ class ActividadesController {
                 categoria_principal,
                 subcategoria,
                 descripcion,
-                usuarioDestino,      // Para quién es la actividad
-                usuarioLogueado,     // Quién la creó
+                usuarioDestino,
+                usuarioLogueado,
                 'individual',
                 es_prioritaria,
                 fechaInicioPlaneada,
@@ -168,11 +362,24 @@ class ActividadesController {
                 );
             }
 
-            res.status(201).json({
+            // Respuesta con información de reprogramación si aplica
+            const response = {
                 success: true,
-                message: 'Actividad creada exitosamente',
-                data: actividad
-            });
+                message: huboReprogramacion
+                    ? 'Actividad creada y reprogramada automáticamente por conflicto de horarios'
+                    : 'Actividad creada exitosamente',
+                data: actividad,
+                automatica: esAutomatica
+            };
+
+            if (huboReprogramacion) {
+                response.reprogramada = true;
+                response.actividad_conflicto = infoReprogramacion.actividad_conflicto;
+                response.fecha_solicitada = infoReprogramacion.fecha_original;
+                response.fecha_asignada = infoReprogramacion.nueva_fecha;
+            }
+
+            res.status(201).json(response);
 
         } catch (error) {
             console.error('Error creando actividad:', error);
@@ -186,6 +393,7 @@ class ActividadesController {
 
     /**
      * Crear actividad grupal (solo JEFE_MARKETING)
+     * V2: Con validaciones de colisiones completas
      */
     static async crearActividadGrupal(req, res) {
         try {
@@ -196,7 +404,8 @@ class ActividadesController {
                 descripcion,
                 duracion_minutos,
                 fecha_inicio,
-                participantes_ids
+                participantes_ids,
+                es_prioritaria = true // Ahora es configurable, por defecto true
             } = req.body;
 
             // Validar que sea jefe de marketing
@@ -207,7 +416,7 @@ class ActividadesController {
                 });
             }
 
-            // Validaciones
+            // Validaciones básicas
             if (!participantes_ids || participantes_ids.length === 0) {
                 return res.status(400).json({
                     success: false,
@@ -215,7 +424,46 @@ class ActividadesController {
                 });
             }
 
-            // Validar duración
+            // VALIDACIÓN #1: fecha_inicio es OBLIGATORIA para actividades grupales
+            if (!fecha_inicio) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Las actividades grupales requieren fecha y hora específica'
+                });
+            }
+
+            // VALIDACIÓN #2: Bloquear fechas al pasado
+            const fechaManual = new Date(fecha_inicio);
+            const ahora = new Date();
+
+            // Validar que la fecha sea válida
+            if (isNaN(fechaManual.getTime())) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Fecha inválida. Formato esperado: YYYY-MM-DDTHH:mm'
+                });
+            }
+
+            // Comparar con margen de 1 minuto para evitar problemas de sincronización
+            const MARGEN_SEGUNDOS = 60;
+            const diferencia = (fechaManual - ahora) / 1000; // segundos
+
+            if (diferencia < -MARGEN_SEGUNDOS) {
+                return res.status(400).json({
+                    success: false,
+                    message: `No se pueden programar actividades en el pasado. La fecha debe ser posterior a ${ahora.toLocaleString('es-PE', { timeZone: 'America/Lima' })}`
+                });
+            }
+
+            // VALIDACIÓN #2.5: Verificar horario laboral
+            const validacionHorario = validarHorarioLaboral(fechaManual);
+            if (!validacionHorario.valido) {
+                return res.status(400).json({
+                    success: false,
+                    message: validacionHorario.mensaje
+                });
+            }
+
             if (duracion_minutos <= 0) {
                 return res.status(400).json({
                     success: false,
@@ -223,7 +471,6 @@ class ActividadesController {
                 });
             }
 
-            // Validar duración máxima (30 días laborales)
             const MAX_MINUTOS = 14400;
             if (duracion_minutos > MAX_MINUTOS) {
                 const diasSolicitados = Math.round(duracion_minutos / 60 / 8);
@@ -247,20 +494,51 @@ class ActividadesController {
                 });
             }
 
-            // Obtener color por categoría principal
-            const color_hex = obtenerColorCategoria(categoria_principal);
-            const codigo = await actividadesService.generarCodigoActividad();
-
-            const fechaInicioPlaneada = new Date(fecha_inicio);
+            const fechaInicioPlaneada = fechaManual;
             const fechaFinPlaneada = reajusteService.agregarMinutosEfectivos(
                 fechaInicioPlaneada,
                 duracion_minutos
             );
 
+            // VALIDACIÓN #3: Detectar colisiones con TODOS los participantes
+            const colision = await colisionesService.detectarColisionesGrupal(
+                participantes_ids,
+                fechaInicioPlaneada,
+                duracion_minutos
+            );
+
+            if (colision.hayColision) {
+                // BLOQUEANTE: No se puede crear la grupal si hay colisiones con prioritarias
+                return res.status(409).json({
+                    success: false,
+                    tipo_colision: colision.tipo,
+                    bloqueante: colision.bloqueante,
+                    mensaje: colision.mensaje,
+                    conflictos: colision.conflictos,
+                    sugerencias: colision.sugerencias,
+                    mensaje_accion: 'Debes elegir otro horario para la actividad grupal'
+                });
+            }
+
+            // Obtener color y código
+            const color_hex = obtenerColorCategoria(categoria_principal);
+            const codigo = await actividadesService.generarCodigoActividad();
+
+            console.log('📅 Creando actividad grupal:', {
+                participantes: participantes_ids.length,
+                fecha_inicio: fechaInicioPlaneada,
+                fecha_fin: fechaFinPlaneada,
+                duracion_minutos,
+                es_prioritaria
+            });
+
             // Crear actividad para cada participante
             const actividadesCreadas = [];
 
             for (const participante_id of participantes_ids) {
+                // Registrar huecos pasados para cada participante
+                await actividadesService.registrarHuecosPasados(participante_id, fechaInicioPlaneada);
+
                 const insertQuery = `
                     INSERT INTO actividades_marketing (
                         codigo, categoria_principal, subcategoria, descripcion,
@@ -280,7 +558,7 @@ class ActividadesController {
                     user_id,
                     'grupal',
                     true,
-                    true, // Las actividades grupales son prioritarias
+                    es_prioritaria, // Ahora es configurable
                     participantes_ids,
                     fechaInicioPlaneada,
                     fechaFinPlaneada,
@@ -290,7 +568,7 @@ class ActividadesController {
 
                 actividadesCreadas.push(result.rows[0]);
 
-                // Reajustar actividades de cada participante
+                // Reajustar actividades de cada participante (siempre, porque se inserta forzadamente)
                 await reajusteService.reajustarActividades(
                     participante_id,
                     fechaInicioPlaneada,

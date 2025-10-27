@@ -26,13 +26,18 @@ class ActividadesService {
     /**
      * Obtener próximo slot disponible para un usuario
      *
-     * LÓGICA CORREGIDA V4 (DEFINITIVA):
+     * LÓGICA CORREGIDA V5 (DEFINITIVA):
      * - Encuentra el primer slot libre después de AHORA
      * - Respeta horarios laborales (8 AM - 6 PM, almuerzo 1-2 PM)
      * - Salta a siguiente día si es necesario
      * - NUNCA programa en el pasado, almuerzo, o fuera de jornada
+     * - Si se especifica duracionMinutos, busca un hueco que cumpla esa duración
+     *
+     * @param {number} usuarioId - ID del usuario
+     * @param {number} duracionMinutos - (Opcional) Duración requerida en minutos
+     * @returns {Object} { fecha, espacioDisponible } o solo fecha si no se especifica duración
      */
-    static async obtenerProximoSlotDisponible(usuarioId) {
+    static async obtenerProximoSlotDisponible(usuarioId, duracionMinutos = null) {
         const INICIO_JORNADA = 8;
         const FIN_JORNADA = 18;
         const ALMUERZO_INICIO = 13;
@@ -72,6 +77,15 @@ class ActividadesService {
         if (result.rows.length === 0) {
             // No tiene actividades - empezar desde AHORA (ya ajustado)
             console.log('📅 Sin actividades - Empezando ahora:', ahora);
+
+            // Si requiere validación de duración, retornar objeto con info
+            if (duracionMinutos) {
+                return {
+                    fecha: ahora,
+                    espacioDisponible: Infinity, // Espacio infinito
+                    esSuficiente: true
+                };
+            }
             return ahora;
         }
 
@@ -84,6 +98,14 @@ class ActividadesService {
         if (actividades.length === 0) {
             // Todas las actividades ya terminaron
             console.log('📅 Todas las actividades terminaron - Empezando ahora:', ahora);
+
+            if (duracionMinutos) {
+                return {
+                    fecha: ahora,
+                    espacioDisponible: Infinity,
+                    esSuficiente: true
+                };
+            }
             return ahora;
         }
 
@@ -96,7 +118,31 @@ class ActividadesService {
             // Si hay un hueco entre el cursor y el inicio de esta actividad
             if (cursorBusqueda < actividadActual.inicio) {
                 console.log('📅 Hueco encontrado entre:', cursorBusqueda, 'y', actividadActual.inicio);
-                return cursorBusqueda;
+
+                // Si requiere validación de duración, calcular espacio disponible
+                if (duracionMinutos) {
+                    const colisionesService = require('./colisionesService');
+                    const espacioDisponible = colisionesService.calcularMinutosEntre(
+                        cursorBusqueda,
+                        actividadActual.inicio
+                    );
+
+                    const esSuficiente = espacioDisponible >= duracionMinutos;
+
+                    console.log(`📊 Espacio disponible: ${espacioDisponible} min, Necesita: ${duracionMinutos} min, Suficiente: ${esSuficiente}`);
+
+                    if (esSuficiente) {
+                        return {
+                            fecha: cursorBusqueda,
+                            espacioDisponible: espacioDisponible,
+                            esSuficiente: true
+                        };
+                    }
+
+                    // No es suficiente, continuar buscando
+                } else {
+                    return cursorBusqueda;
+                }
             }
 
             // No hay hueco, mover el cursor al final de esta actividad
@@ -124,26 +170,30 @@ class ActividadesService {
 
         // No se encontró ningún hueco, devolver el cursor (ya ajustado)
         console.log('📅 Sin huecos - Empezando después de última actividad:', cursorBusqueda);
+
+        if (duracionMinutos) {
+            return {
+                fecha: cursorBusqueda,
+                espacioDisponible: Infinity, // Después de la última actividad, espacio infinito
+                esSuficiente: true
+            };
+        }
+
         return cursorBusqueda;
     }
 
     /**
      * Registrar huecos de tiempo pasado sin actividad
      *
-     * Cuando se crea una actividad que empieza AHORA, pero la última actividad
-     * terminó hace tiempo, registra ese hueco como "INACTIVO"
+     * VERSIÓN MEJORADA V2:
+     * - Threshold de 15 minutos (más sensible)
+     * - Categorización automática: ALMUERZO, BREAK, INACTIVO
+     * - Mejor detección de patrones
      */
     static async registrarHuecosPasados(usuarioId, fechaInicioNuevaActividad) {
         try {
             const ahora = new Date();
             const inicioNuevaActividad = new Date(fechaInicioNuevaActividad);
-
-            // Solo procesar si la nueva actividad empieza cerca de AHORA (no si es programada a futuro)
-            const diferenciaMinutos = Math.abs((inicioNuevaActividad - ahora) / 60000);
-            if (diferenciaMinutos > 60) {
-                // La actividad es programada a futuro, no registrar huecos
-                return null;
-            }
 
             // Buscar la última actividad que terminó ANTES de ahora
             const result = await query(`
@@ -152,6 +202,7 @@ class ActividadesService {
                 WHERE usuario_id = $1
                   AND activo = true
                   AND fecha_fin_planeada < NOW()
+                  AND tipo != 'sistema'
                 ORDER BY fecha_fin_planeada DESC
                 LIMIT 1
             `, [usuarioId]);
@@ -165,12 +216,20 @@ class ActividadesService {
             const finUltimaActividad = new Date(ultimaActividad.fecha_fin_planeada);
             const minutosSinActividad = (ahora - finUltimaActividad) / 60000;
 
-            // Si el hueco es mayor a 30 minutos, registrarlo
-            const MINUTOS_MINIMOS_HUECO = 30;
+            // THRESHOLD MEJORADO: 15 minutos (antes 30)
+            const MINUTOS_MINIMOS_HUECO = 15;
+
             if (minutosSinActividad > MINUTOS_MINIMOS_HUECO) {
                 console.log(`⚠️ Hueco detectado: ${Math.round(minutosSinActividad)} minutos desde ${finUltimaActividad} hasta ahora`);
 
-                // Crear registro de "INACTIVO"
+                // CATEGORIZACIÓN INTELIGENTE
+                const categoriaHueco = this.categorizarHueco(
+                    finUltimaActividad,
+                    ahora,
+                    minutosSinActividad
+                );
+
+                // Crear registro categorizado
                 const codigoHueco = await this.generarCodigoActividad();
                 await query(`
                     INSERT INTO actividades_marketing (
@@ -180,20 +239,23 @@ class ActividadesService {
                         duracion_planeada_minutos, duracion_real_minutos,
                         color_hex, estado, activo
                     ) VALUES (
-                        $1, 'SISTEMA', 'INACTIVO', 'Sin actividad registrada',
-                        $2, $2, 'sistema',
-                        $3, NOW(),
-                        $4, $4,
-                        '#94A3B8', 'completada', true
+                        $1, 'SISTEMA', $2, $3,
+                        $4, $4, 'sistema',
+                        $5, NOW(),
+                        $6, $6,
+                        $7, 'completada', true
                     )
                 `, [
                     codigoHueco,
+                    categoriaHueco.subcategoria,
+                    categoriaHueco.descripcion,
                     usuarioId,
                     finUltimaActividad,
-                    Math.round(minutosSinActividad)
+                    Math.round(minutosSinActividad),
+                    categoriaHueco.color
                 ]);
 
-                console.log(`✅ Hueco registrado: ${codigoHueco} (${Math.round(minutosSinActividad)} min)`);
+                console.log(`✅ Hueco registrado: ${codigoHueco} - ${categoriaHueco.subcategoria} (${Math.round(minutosSinActividad)} min)`);
                 return codigoHueco;
             }
 
@@ -203,6 +265,46 @@ class ActividadesService {
             // No lanzar error, solo loggearlo (no es crítico)
             return null;
         }
+    }
+
+    /**
+     * Categorizar hueco según duración y horario
+     */
+    static categorizarHueco(fechaInicio, fechaFin, minutosDuracion) {
+        const horaInicio = fechaInicio.getHours();
+        const horaFin = fechaFin.getHours();
+        const minutoInicio = fechaInicio.getMinutes();
+        const minutoFin = fechaFin.getMinutes();
+
+        // ALMUERZO: Si el hueco cae en horario 13:00-14:00
+        const esHorarioAlmuerzo = (
+            (horaInicio === 13 || (horaInicio === 12 && minutoInicio >= 45)) &&
+            (horaFin === 14 || (horaFin === 13 && minutoFin <= 15))
+        );
+
+        if (esHorarioAlmuerzo && minutosDuracion >= 45 && minutosDuracion <= 75) {
+            return {
+                subcategoria: 'ALMUERZO',
+                descripcion: 'Hora de almuerzo',
+                color: '#10B981' // Verde
+            };
+        }
+
+        // BREAK: Huecos cortos (15-30 minutos)
+        if (minutosDuracion >= 15 && minutosDuracion <= 30) {
+            return {
+                subcategoria: 'BREAK',
+                descripcion: 'Descanso breve',
+                color: '#F59E0B' // Ámbar
+            };
+        }
+
+        // INACTIVO: Huecos largos (más de 30 minutos)
+        return {
+            subcategoria: 'INACTIVO',
+            descripcion: 'Sin actividad registrada',
+            color: '#94A3B8' // Gris
+        };
     }
 
     /**

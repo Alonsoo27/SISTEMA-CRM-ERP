@@ -80,23 +80,39 @@ class ApiClient {
             };
 
             console.log(`📡 POST Request: ${url}`);
-            
+
             const response = await fetch(url, config);
-            
+
             if (!response.ok) {
-                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                // Intentar leer el body del error para pasarlo al catch
+                let errorData = null;
+                try {
+                    if (response.headers.get('content-type')?.includes('application/json')) {
+                        errorData = await response.json();
+                    }
+                } catch (e) {
+                    // Si no se puede parsear, continuar sin data
+                }
+
+                const error = new Error(`HTTP ${response.status}: ${response.statusText}`);
+                error.status = response.status;
+                error.response = { status: response.status, data: errorData };
+                throw error;
             }
 
             // Si es una respuesta JSON
             if (response.headers.get('content-type')?.includes('application/json')) {
                 return await response.json();
             }
-            
+
             // Si es otro tipo de contenido (como PDF), retornar response completo
             return response;
 
         } catch (error) {
-            console.error(`❌ Error en POST ${endpoint}:`, error);
+            // No loggear como error si es una colisión (409) - es parte del flujo normal
+            if (error.status !== 409) {
+                console.error(`❌ Error en POST ${endpoint}:`, error);
+            }
             throw this.handleError(error);
         }
     }
@@ -185,7 +201,7 @@ class ApiClient {
         if (error.name === 'TypeError' && error.message.includes('fetch')) {
             return new Error('Error de conexión con el servidor');
         }
-        
+
         if (error.message.includes('401')) {
             // Token expirado o no autorizado
             localStorage.removeItem('token');
@@ -193,19 +209,21 @@ class ApiClient {
             // No redirigir automáticamente, solo limpiar tokens
             return new Error('Sesión expirada');
         }
-        
+
         if (error.message.includes('403')) {
             return new Error('No tiene permisos para realizar esta acción');
         }
-        
+
         if (error.message.includes('404')) {
             return new Error('Recurso no encontrado');
         }
-        
+
         if (error.message.includes('500')) {
             return new Error('Error interno del servidor');
         }
-        
+
+        // IMPORTANTE: Preservar propiedades del error original (como response y status)
+        // para que el manejo de colisiones funcione correctamente
         return error;
     }
 
