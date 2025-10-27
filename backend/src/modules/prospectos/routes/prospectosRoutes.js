@@ -779,10 +779,10 @@ router.get('/seguimientos/completados',
 // RUTAS ADMINISTRATIVAS (Admin, Supervisor, Asesor)
 // ============================================================================
 
-router.post('/seguimientos/procesar-vencidos', 
+router.post('/seguimientos/procesar-vencidos',
     requireRole(GRUPOS_ROLES.VENTAS_COMPLETO),
     adminOperationsRateLimit,
-    ProspectosController.procesarSeguimientosVencidos
+    SeguimientosController.procesarSeguimientosVencidos
 );
 
 router.post('/seguimientos/corregir-null', 

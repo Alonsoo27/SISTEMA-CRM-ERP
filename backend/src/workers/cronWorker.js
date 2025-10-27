@@ -11,7 +11,7 @@
  */
 
 const cron = require('node-cron');
-const ProspectosController = require('../modules/prospectos/controllers/prospectosController');
+const SeguimientosController = require('../modules/prospectos/controllers/seguimientosController');
 
 console.log('🚀 Iniciando worker de cron jobs...');
 
@@ -46,7 +46,7 @@ cron.schedule('0 8-18 * * 1-5', async () => {
       }
     };
 
-    await ProspectosController.procesarSeguimientosVencidos(req, res);
+    await SeguimientosController.procesarSeguimientosVencidos(req, res);
 
   } catch (error) {
     console.error('❌ Error en procesamiento de seguimientos vencidos:', error);
@@ -76,7 +76,7 @@ cron.schedule('0 9-12 * * 6', async () => {
       }
     };
 
-    await ProspectosController.procesarSeguimientosVencidos(req, res);
+    await SeguimientosController.procesarSeguimientosVencidos(req, res);
 
   } catch (error) {
     console.error('❌ Error en procesamiento de seguimientos vencidos:', error);

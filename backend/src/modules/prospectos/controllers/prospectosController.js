@@ -3338,6 +3338,20 @@ static async obtenerPorId(req, res) {
                 });
             }
 
+            // ❌ VALIDAR: Asesor no puede retomar un prospecto que él mismo perdió
+            if (prospecto.asesor_anterior_id === asesor_id) {
+                await client.query('ROLLBACK');
+
+                logger.warn(`❌ Intento fallido: Asesor ${asesor_id} intentó retomar prospecto ${prospecto.codigo} que él mismo perdió anteriormente`);
+
+                return res.status(400).json({
+                    success: false,
+                    error: 'No puedes tomar un prospecto que perdiste anteriormente por falta de seguimiento',
+                    codigo: prospecto.codigo,
+                    mensaje: 'Este prospecto fue tuyo y se reasignó por vencimiento de seguimiento'
+                });
+            }
+
             // ✅ ASIGNAR EL PROSPECTO (salir de modo libre)
             const updateResult = await client.query(`
                 UPDATE prospectos
