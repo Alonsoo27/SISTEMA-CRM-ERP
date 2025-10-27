@@ -1621,40 +1621,68 @@ exports.cambiarEstado = async (req, res) => {
 
             if (nuevo_estado_detallado === 'vendido/enviado/recibido') {
                 try {
-                    // Obtener información completa de la venta para crear ticket de capacitación
+                    // 🆕 Obtener TODOS los productos de la venta (no solo el primero)
                     const infoVenta = await query(`
-                        SELECT 
-                            v.id, v.codigo as codigo_venta, 
+                        SELECT
+                            v.id, v.codigo as codigo_venta,
                             CONCAT(v.nombre_cliente, ' ', v.apellido_cliente) as cliente_nombre_completo,
                             v.cliente_telefono, v.cliente_email, v.asesor_id,
-                            vd.producto_id, vd.cantidad,
-                            p.codigo as codigo_producto, p.descripcion as descripcion_producto, p.marca
+                            JSON_AGG(
+                                JSON_BUILD_OBJECT(
+                                    'producto_id', vd.producto_id,
+                                    'cantidad', vd.cantidad,
+                                    'codigo_producto', p.codigo,
+                                    'descripcion_producto', p.descripcion,
+                                    'marca', p.marca,
+                                    'categoria_id', p.categoria_id,
+                                    'categoria_nombre', c.nombre
+                                ) ORDER BY vd.orden_linea
+                            ) as productos
                         FROM ventas v
                         LEFT JOIN venta_detalles vd ON v.id = vd.venta_id AND vd.activo = true
                         LEFT JOIN productos p ON vd.producto_id = p.id
+                        LEFT JOIN categorias c ON p.categoria_id = c.id
                         WHERE v.id = $1 AND v.activo = true
-                        ORDER BY vd.orden_linea ASC
-                        LIMIT 1
+                        GROUP BY v.id, v.codigo, v.nombre_cliente, v.apellido_cliente,
+                                 v.cliente_telefono, v.cliente_email, v.asesor_id
                     `, [ventaId]);
 
                     if (infoVenta.rows.length > 0) {
                         const venta = infoVenta.rows[0];
-                        
-                        // PASO 1: Crear ticket principal de soporte
+                        const productos = venta.productos || [];
+
+                        // 🆕 Obtener técnico por defecto (Juan Figueroa ID:20)
+                        const tecnicoDefecto = await query(`
+                            SELECT id FROM usuarios
+                            WHERE id = 20 AND estado = 'ACTIVO' AND deleted_at IS NULL
+                            LIMIT 1
+                        `);
+                        const tecnicoId = tecnicoDefecto.rows[0]?.id || null;
+
+                        // 🆕 Generar descripción con TODOS los productos
+                        const productosDescripcion = productos.map(p => p.descripcion_producto).join(', ');
+                        const cantidadProductos = productos.length;
+
+                        // PASO 1: Crear ticket principal de soporte CON TÉCNICO ASIGNADO
                         const ticketSoporte = await query(`
                             INSERT INTO tickets_soporte (
-                                venta_id, asesor_origen_id, tipo_ticket, estado,
+                                venta_id, asesor_origen_id, tecnico_asignado_id,
+                                tipo_ticket, estado,
                                 cliente_nombre, cliente_telefono, cliente_email,
                                 titulo, descripcion, created_by, updated_by
                             ) VALUES (
-                                $1, $2, 'CAPACITACION', 'PENDIENTE',
-                                $3, $4, $5, $6, $7, $8, $8
+                                $1, $2, $3, 'CAPACITACION', 'PENDIENTE',
+                                $4, $5, $6, $7, $8, $9, $9
                             ) RETURNING id, codigo
                         `, [
-                            venta.id, venta.asesor_id, venta.cliente_nombre_completo, 
-                            venta.cliente_telefono, venta.cliente_email || '',
-                            `Capacitación para ${venta.descripcion_producto || 'producto vendido'}`,
-                            `Cliente ${venta.cliente_nombre_completo} requiere capacitación para uso de ${venta.descripcion_producto || 'producto vendido'}`,
+                            venta.id,
+                            venta.asesor_id,
+                            tecnicoId,  // 🆕 Técnico asignado automáticamente
+                            venta.cliente_nombre_completo,
+                            venta.cliente_telefono,
+                            venta.cliente_email || '',
+                            `Capacitación para ${cantidadProductos} producto${cantidadProductos > 1 ? 's' : ''}`,
+                            `Cliente ${venta.cliente_nombre_completo} requiere capacitación para: ${productosDescripcion}`,
                             req.user.id
                         ]);
 
@@ -1662,33 +1690,48 @@ exports.cambiarEstado = async (req, res) => {
                             const ticket = ticketSoporte.rows[0];
                             codigoTicketCapacitacion = ticket.codigo;
 
-                            // PASO 2: Crear registro en capacitaciones vinculado al ticket
+                            // NOTA: Los tickets de CAPACITACIÓN no usan soporte_productos
+                            // (esa tabla es solo para REPARACION/MANTENIMIENTO)
+                            // La relación es: ticket → venta → venta_detalles → productos
+
+                            // PASO 2: Crear registro en capacitaciones (usar primer producto como referencia)
+                            const primerProducto = productos[0] || {};
                             const capacitacionResult = await query(`
                                 INSERT INTO soporte_capacitaciones (
-                                    venta_id, ticket_id, producto_id, 
+                                    venta_id, ticket_id, producto_id,
                                     cliente_nombre, cliente_telefono, cliente_email,
                                     producto_codigo, producto_descripcion, marca,
-                                    fecha_capacitacion_solicitada, estado, 
+                                    fecha_capacitacion_solicitada, estado,
                                     tipo_capacitacion, modalidad,
+                                    tecnico_asignado_id,
+                                    observaciones,
                                     created_by, updated_by
                                 ) VALUES (
                                     $1, $2, $3, $4, $5, $6, $7, $8, $9,
                                     CURRENT_DATE, 'PENDIENTE', 'USO_BASICO', 'PRESENCIAL',
-                                    $10, $10
+                                    $10, $11, $12, $12
                                 ) RETURNING id
                             `, [
-                                venta.id, ticket.id, venta.producto_id,
-                                venta.cliente_nombre_completo, venta.cliente_telefono, venta.cliente_email || '',
-                                venta.codigo_producto, venta.descripcion_producto, venta.marca,
+                                venta.id,
+                                ticket.id,
+                                primerProducto.producto_id,
+                                venta.cliente_nombre_completo,
+                                venta.cliente_telefono,
+                                venta.cliente_email || '',
+                                primerProducto.codigo_producto,
+                                primerProducto.descripcion_producto,
+                                primerProducto.marca,
+                                tecnicoId,  // Sincroniza con tickets_soporte
+                                `Capacitación para ${cantidadProductos} producto${cantidadProductos > 1 ? 's' : ''}: ${productosDescripcion}`,
                                 req.user.id
                             ]);
 
                             if (capacitacionResult.rows.length > 0) {
                                 ticketCapacitacionId = capacitacionResult.rows[0].id;
-                                
-                                if (isDevelopment) {
-                                    console.log(`✅ Ticket de capacitación creado: ${codigoTicketCapacitacion} para venta ${venta.codigo_venta}`);
-                                }
+
+                                console.log(`✅ Ticket ${codigoTicketCapacitacion} creado para venta ${venta.codigo_venta}`);
+                                console.log(`   📦 ${cantidadProductos} producto${cantidadProductos > 1 ? 's' : ''} incluido${cantidadProductos > 1 ? 's' : ''} en descripción`);
+                                console.log(`   👤 Técnico asignado: Juan Figueroa (ID: ${tecnicoId})`);
                             }
                         }
                     }
@@ -1810,11 +1853,49 @@ exports.eliminarVenta = async (req, res) => {
         }
 
         const result = await query(`
-            UPDATE ventas 
+            UPDATE ventas
             SET activo = false, updated_at = NOW(), updated_by = $1, fecha_eliminacion = NOW()
             WHERE id = $2 AND activo = true
             RETURNING codigo, CONCAT(nombre_cliente, ' ', COALESCE(apellido_cliente, '')) as cliente_nombre_completo
         `, [req.user.id, ventaId]);
+
+        // 🆕 GESTIÓN DE TICKETS DE SOPORTE ASOCIADOS
+        try {
+            // 1. Cancelar tickets PENDIENTES (no atendidos)
+            await query(`
+                UPDATE tickets_soporte
+                SET
+                    activo = false,
+                    estado = 'COMPLETADO',
+                    observaciones = CONCAT(
+                        COALESCE(observaciones, ''),
+                        '\n[SISTEMA] Ticket cancelado automáticamente por eliminación de venta ', $2, ' el ', NOW()::DATE
+                    ),
+                    updated_at = NOW()
+                WHERE venta_id = $1
+                  AND activo = true
+                  AND estado = 'PENDIENTE'
+            `, [ventaId, venta.codigo]);
+
+            // 2. Agregar nota a tickets YA COMPLETADOS (mantener como historial)
+            await query(`
+                UPDATE tickets_soporte
+                SET
+                    observaciones = CONCAT(
+                        COALESCE(observaciones, ''),
+                        '\n[INFO] La venta original ', $2, ' fue eliminada el ', NOW()::DATE, ' (ticket ya estaba completado)'
+                    ),
+                    updated_at = NOW()
+                WHERE venta_id = $1
+                  AND activo = true
+                  AND estado = 'COMPLETADO'
+            `, [ventaId, venta.codigo]);
+
+            console.log(`✅ Tickets de soporte procesados para venta ${venta.codigo}`);
+        } catch (ticketError) {
+            // Si falla, solo logear pero no afectar la eliminación de la venta
+            console.warn('⚠️ Error al procesar tickets de soporte:', ticketError.message);
+        }
 
         // Registrar en historial
         await query(`

@@ -22,6 +22,18 @@ class SoporteModel {
                 throw new Error('Datos requeridos faltantes: tipo_ticket y cliente_nombre son obligatorios');
             }
 
+            // 🆕 ASIGNAR TÉCNICO POR DEFECTO SOLO PARA CAPACITACIÓN
+            // REPARACIÓN/MANTENIMIENTO: Técnico se asigna manualmente desde el frontend
+            if (!datosTicket.tecnico_asignado_id && datosTicket.tipo_ticket === 'CAPACITACION') {
+                const tecnicoDefecto = await this.obtenerTecnicoDefecto();
+                if (tecnicoDefecto) {
+                    datosTicket.tecnico_asignado_id = tecnicoDefecto;
+                    console.log(`✅ Técnico por defecto asignado automáticamente: Juan Figueroa (ID: ${tecnicoDefecto})`);
+                } else {
+                    console.warn('⚠️ No se pudo asignar técnico por defecto para capacitación');
+                }
+            }
+
             // Preparar datos con valores por defecto
             const campos = [];
             const valores = [];
@@ -718,14 +730,22 @@ class SoporteModel {
             const producto = result.rows[0];
 
             // Si se marca como reparado y debe volver a almacén, crear ticket automático
+            // NOTA: Solo se crea ticket para productos de categoría "MAQUINA"
+            let ticketAlmacenInfo = null;
             if (datos.estado === 'REPARADO' && producto.debe_retornar_almacen) {
-                await this.crearTicketAlmacenAutomatico(id);
+                const resultTicket = await this.crearTicketAlmacenAutomatico(id);
+                ticketAlmacenInfo = {
+                    ticket_creado: resultTicket.ticket_creado || false,
+                    mensaje_ticket: resultTicket.message,
+                    razon: resultTicket.razon || null
+                };
             }
 
-            return { 
-                success: true, 
+            return {
+                success: true,
                 message: 'Producto actualizado exitosamente',
-                data: producto 
+                data: producto,
+                ticket_almacen: ticketAlmacenInfo
             };
         } catch (error) {
             console.error('Error al actualizar producto:', error);
@@ -1129,6 +1149,7 @@ class SoporteModel {
 
     /**
      * Crear ticket a almacén automáticamente
+     * IMPORTANTE: Solo se crea ticket si el producto es de categoría "MAQUINA"
      */
     static async crearTicketAlmacenAutomatico(productoId) {
         try {
@@ -1140,35 +1161,58 @@ class SoporteModel {
             try {
                 const sql = `SELECT crear_ticket_almacen_automatico($1) as resultado`;
                 const result = await query(sql, [productoId]);
-                
-                return { 
-                    success: true, 
+
+                return {
+                    success: true,
                     message: 'Ticket a almacén creado automáticamente',
-                    data: result.rows[0]?.resultado 
+                    data: result.rows[0]?.resultado
                 };
             } catch (rpcError) {
                 // Si la función no existe, implementar lógica básica
                 console.log('Función crear_ticket_almacen_automatico no disponible, usando implementación directa');
-                
-                // Obtener información del producto
+
+                // Obtener información del producto con su categoría
                 const sqlProducto = `
-                    SELECT sp.*, t.asesor_origen_id, t.tecnico_asignado_id
+                    SELECT
+                        sp.*,
+                        t.asesor_origen_id,
+                        t.tecnico_asignado_id,
+                        p.id as producto_id,
+                        p.codigo as producto_codigo,
+                        p.categoria_id,
+                        c.nombre as categoria_nombre
                     FROM soporte_productos sp
                     LEFT JOIN tickets_soporte t ON sp.ticket_id = t.id
+                    LEFT JOIN productos p ON sp.producto_id = p.id
+                    LEFT JOIN categorias c ON p.categoria_id = c.id
                     WHERE sp.id = $1 AND sp.activo = true
                 `;
                 const resultProducto = await query(sqlProducto, [productoId]);
-                
+
                 if (resultProducto.rows.length === 0) {
                     throw new Error('Producto no encontrado');
                 }
 
                 const producto = resultProducto.rows[0];
 
-                // Crear ticket a almacén
+                // VALIDACIÓN: Solo crear ticket si es categoría "MAQUINA"
+                if (producto.categoria_nombre !== 'MAQUINA') {
+                    console.log(`Ticket a almacén NO creado: Producto "${producto.producto_codigo}" es categoría "${producto.categoria_nombre}", no "MAQUINA"`);
+                    return {
+                        success: true,
+                        message: `Ticket a almacén no requerido: Producto de categoría "${producto.categoria_nombre}"`,
+                        ticket_creado: false,
+                        razon: 'Solo productos de categoría "MAQUINA" generan ticket automático a almacén',
+                        data: null
+                    };
+                }
+
+                console.log(`Creando ticket a almacén para producto "${producto.producto_codigo}" - Categoría: MAQUINA`);
+
+                // Crear ticket a almacén solo para productos categoría MAQUINA
                 const sqlTicketAlmacen = `
-                    INSERT INTO soporte_tickets_almacen 
-                    (soporte_producto_id, producto_id, almacen_destino_id, tecnico_envia_id, 
+                    INSERT INTO soporte_tickets_almacen
+                    (soporte_producto_id, producto_id, almacen_destino_id, tecnico_envia_id,
                      estado, fecha_envio, observaciones_envio, activo, created_at, updated_at)
                     VALUES ($1, $2, $3, $4, 'PENDIENTE', $5, $6, true, $7, $8)
                     RETURNING *
@@ -1179,23 +1223,24 @@ class SoporteModel {
                     'b86b6533-b492-4f16-9789-57f82d3cec77', // Almacén por defecto UUID
                     producto.tecnico_asignado_id,
                     new Date(),
-                    'Ticket generado automáticamente - producto reparado',
+                    'Ticket generado automáticamente - MAQUINA reparada',
                     new Date(),
                     new Date()
                 ]);
 
-                return { 
-                    success: true, 
-                    message: 'Ticket a almacén creado automáticamente',
-                    data: resultTicketAlmacen.rows[0] 
+                return {
+                    success: true,
+                    message: 'Ticket a almacén creado automáticamente para MAQUINA reparada',
+                    ticket_creado: true,
+                    data: resultTicketAlmacen.rows[0]
                 };
             }
         } catch (error) {
             console.error('Error al crear ticket automático a almacén:', error);
-            return { 
-                success: false, 
+            return {
+                success: false,
                 message: 'Error al crear ticket automático a almacén',
-                error: error.message 
+                error: error.message
             };
         }
     }
@@ -1493,6 +1538,102 @@ class SoporteModel {
     }
 
     // ====================================
+    // GESTIÓN DE TÉCNICOS
+    // ====================================
+
+    /**
+     * Obtener lista de técnicos disponibles
+     * Incluye: Usuarios del área SOPORTE (id=3) + Juan Figueroa (id=20) como excepción
+     */
+    static async obtenerTecnicosDisponibles() {
+        try {
+            const sql = `
+                SELECT
+                    u.id,
+                    u.nombre,
+                    u.apellido,
+                    u.nombre || ' ' || u.apellido as nombre_completo,
+                    u.email,
+                    u.telefono,
+                    u.estado,
+                    u.area_id,
+                    a.nombre as area_nombre,
+                    r.id as rol_id,
+                    r.nombre as rol_nombre,
+                    CASE
+                        WHEN u.id = 20 THEN true  -- Juan Figueroa como excepción
+                        ELSE false
+                    END as es_tecnico_excepcional
+                FROM usuarios u
+                LEFT JOIN areas a ON u.area_id = a.id
+                LEFT JOIN roles r ON u.rol_id = r.id
+                WHERE u.estado = 'ACTIVO'
+                  AND u.deleted_at IS NULL
+                  AND (
+                      u.area_id = 3  -- Área SOPORTE
+                      OR u.id = 20   -- Juan Figueroa (excepción)
+                  )
+                ORDER BY
+                    CASE WHEN u.id = 20 THEN 0 ELSE 1 END,  -- Juan primero
+                    u.nombre, u.apellido
+            `;
+
+            const result = await query(sql, []);
+
+            return {
+                success: true,
+                message: `${result.rows.length} técnicos disponibles`,
+                data: result.rows
+            };
+
+        } catch (error) {
+            console.error('Error al obtener técnicos disponibles:', error);
+            return {
+                success: false,
+                message: 'Error al obtener técnicos disponibles',
+                error: error.message,
+                data: []
+            };
+        }
+    }
+
+    /**
+     * Obtener técnico por defecto
+     * Retorna Juan Figueroa (ID: 20) si está activo
+     */
+    static async obtenerTecnicoDefecto() {
+        try {
+            const sql = `
+                SELECT
+                    u.id,
+                    u.nombre,
+                    u.apellido,
+                    u.estado
+                FROM usuarios u
+                WHERE u.id = 20  -- Juan Figueroa
+                  AND u.estado = 'ACTIVO'
+                  AND u.deleted_at IS NULL
+                LIMIT 1
+            `;
+
+            const result = await query(sql, []);
+
+            if (result.rows.length === 0) {
+                console.warn('Técnico por defecto (Juan Figueroa, ID: 20) no disponible');
+                return null;
+            }
+
+            const tecnico = result.rows[0];
+            console.log(`✅ Técnico por defecto: ${tecnico.nombre} ${tecnico.apellido} (ID: ${tecnico.id})`);
+            return tecnico.id;
+
+        } catch (error) {
+            console.error('Error al obtener técnico por defecto:', error);
+            return null;
+        }
+    }
+
+    // ====================================
     // INTEGRACIÓN CON VENTAS
     // ====================================
 
@@ -1515,6 +1656,9 @@ class SoporteModel {
 
             const venta = resultVenta.rows[0];
 
+            // 🆕 OBTENER TÉCNICO POR DEFECTO
+            const tecnicoDefecto = await this.obtenerTecnicoDefecto();
+
             // Crear ticket de soporte
             const datosTicket = {
                 venta_id: ventaId,
@@ -1527,6 +1671,7 @@ class SoporteModel {
                 cliente_email: venta.cliente_email,
                 titulo: datosAdicionales?.titulo || `Ticket automático para venta ${venta.codigo}`,
                 descripcion: datosAdicionales?.descripcion || `Ticket generado automáticamente desde venta ${venta.codigo}`,
+                tecnico_asignado_id: tecnicoDefecto, // 🆕 ASIGNAR TÉCNICO POR DEFECTO
                 created_by: usuarioId,
                 updated_by: usuarioId,
                 ...datosAdicionales

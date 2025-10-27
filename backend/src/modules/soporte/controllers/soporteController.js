@@ -1077,32 +1077,19 @@ class SoporteController {
      */
     static async obtenerTecnicos(req, res) {
         try {
-            const { query } = require('../../../config/database');
+            const resultado = await SoporteModel.obtenerTecnicosDisponibles();
 
-            const sql = `
-                SELECT u.id, u.nombre, u.apellido, u.email, u.activo,
-                       r.nombre as rol_nombre,
-                       CONCAT(u.nombre, ' ', u.apellido) as nombre_completo
-                FROM usuarios u
-                JOIN roles r ON u.rol_id = r.id
-                WHERE u.activo = true
-                  AND (r.nombre ILIKE '%tecnico%' OR r.nombre ILIKE '%soporte%' OR r.nombre = 'Técnico')
-                ORDER BY u.nombre, u.apellido
-            `;
+            if (!resultado.success) {
+                return res.status(500).json(resultado);
+            }
 
-            const result = await query(sql, []);
-
-            res.json({
-                success: true,
-                message: 'Técnicos obtenidos exitosamente',
-                data: result.rows || []
-            });
+            res.json(resultado);
 
         } catch (error) {
             console.error('Error en obtenerTecnicos:', error);
             res.status(500).json({
                 success: false,
-                message: 'Error interno del servidor al obtener técnicos',
+                message: 'Error al obtener técnicos',
                 error: error.message,
                 data: []
             });

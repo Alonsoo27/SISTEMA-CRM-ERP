@@ -272,8 +272,7 @@ class CapacitacionesController {
                 fecha_capacitacion_programada: fecha_programada || new Date().toISOString().split('T')[0],
                 estado: 'PROGRAMADA',
                 observaciones_tecnico: observaciones || null,
-                updated_by: user.id,
-                updated_at: new Date()
+                updated_by: user.id
             };
 
             // Construir query UPDATE dinámicamente
@@ -290,8 +289,8 @@ class CapacitacionesController {
             });
 
             const sqlUpdate = `
-                UPDATE soporte_capacitaciones 
-                SET ${campos.join(', ')}
+                UPDATE soporte_capacitaciones
+                SET ${campos.join(', ')}, updated_at = NOW()
                 WHERE id = $${contador}
                 RETURNING *
             `;
@@ -407,8 +406,7 @@ class CapacitacionesController {
                 fecha_seguimiento_programado: requiere_seguimiento ? fecha_seguimiento_programado : null,
                 tiempo_respuesta_capacitacion_horas: tiempoRespuestaHoras,
                 tiempo_respuesta_capacitacion_dias: tiempoRespuestaDias,
-                updated_by: user.id,
-                updated_at: new Date()
+                updated_by: user.id
             };
 
             // CORREGIDO: Actualizar usando PostgreSQL directo
@@ -425,8 +423,8 @@ class CapacitacionesController {
             });
 
             const sqlUpdate = `
-                UPDATE soporte_capacitaciones 
-                SET ${campos.join(', ')}
+                UPDATE soporte_capacitaciones
+                SET ${campos.join(', ')}, updated_at = NOW()
                 WHERE id = $${contador}
                 RETURNING *
             `;
@@ -507,8 +505,7 @@ class CapacitacionesController {
                 estado: 'REPROGRAMADA',
                 fecha_capacitacion_programada: nueva_fecha,
                 observaciones_tecnico: motivo_reprogramacion,
-                updated_by: user.id,
-                updated_at: new Date()
+                updated_by: user.id
             };
 
             // Agregar nueva modalidad solo si se proporciona
@@ -527,8 +524,8 @@ class CapacitacionesController {
             });
 
             const sqlUpdate = `
-                UPDATE soporte_capacitaciones 
-                SET ${campos.join(', ')}
+                UPDATE soporte_capacitaciones
+                SET ${campos.join(', ')}, updated_at = NOW()
                 WHERE id = $${contador}
                 RETURNING *
             `;
