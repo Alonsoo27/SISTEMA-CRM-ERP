@@ -834,22 +834,21 @@ class SeguimientosController {
             }
 
             // ============================================
-            // SISTEMA DE REASIGNACIÓN INTELIGENTE v2.0
+            // SISTEMA DE REASIGNACIÓN ALEATORIA
             // ============================================
             // LÓGICA: Buscar solo VENDEDOREs (rol_id = 7) disponibles
+            // - Selección ALEATORIA entre vendedores activos
             // - Prospectos de SUPER_ADMIN/ADMIN/JEFE_VENTAS → van a VENDEDOREs
             // - Prospectos de VENDEDOREs → van a otros VENDEDOREs
             // - Si no hay VENDEDOREs disponibles → MODO LIBRE automático
             // - EXCLUYE asesor ID 19 (EMPRESA S.A.C. - usuario ficticio)
             // ============================================
             const asesoresResult = await query(`
-                SELECT u.id, u.nombre, u.apellido,
-                       COUNT(p.id) as prospectos_count
+                SELECT u.id, u.nombre, u.apellido
                 FROM usuarios u
-                LEFT JOIN prospectos p ON u.id = p.asesor_id AND p.activo = true
                 WHERE u.rol_id = $1 AND u.activo = $2 AND u.id != $3 AND u.id != 19
-                GROUP BY u.id, u.nombre, u.apellido
-                ORDER BY prospectos_count ASC
+                ORDER BY RANDOM()
+                LIMIT 1
             `, [7, true, prospecto.asesor_id]); // rol_id = 7 (VENDEDOR)
             
             if (!asesoresResult.rows || asesoresResult.rows.length === 0) {
@@ -875,7 +874,7 @@ class SeguimientosController {
                 };
             }
             
-            // Seleccionar asesor con menos carga
+            // Seleccionar asesor aleatorio
             const asesorSeleccionado = asesoresResult.rows[0];
             
             // Actualizar prospecto
