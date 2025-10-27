@@ -942,11 +942,11 @@ class SeguimientosController {
      */
     static async activarModoLibre(prospecto_id) {
         try {
-            // Obtener todos los asesores de ventas
+            // Obtener todos los asesores de ventas (VENDEDORES activos, excluir usuario ficticio)
             const asesoresResult = await query(`
-                SELECT id FROM usuarios 
-                WHERE area_id = $1 AND activo = $2
-            `, [2, true]); // Área VENTAS
+                SELECT id FROM usuarios
+                WHERE rol_id = $1 AND activo = $2 AND id != 19
+            `, [7, true]); // rol_id = 7 (VENDEDOR)
             
             const asesor_ids = asesoresResult.rows?.map(a => a.id) || [];
             
