@@ -57,7 +57,8 @@ class CapacitacionesController {
                 EN_PROCESO: [],
                 COMPLETADA: [],
                 CANCELADA: [],
-                REPROGRAMADA: []
+                REPROGRAMADA: [],
+                NO_REQUERIDA: []
             };
 
             capacitaciones.forEach(cap => {
@@ -571,6 +572,102 @@ class CapacitacionesController {
         }
     }
 
+    /**
+     * Marcar capacitación como no requerida por el cliente
+     * PUT /api/soporte/capacitaciones/:id/no-requerida
+     */
+    static async marcarComoNoRequerida(req, res) {
+        try {
+            const { id } = req.params;
+            const { motivo } = req.body;
+            const { user } = req;
+
+            if (!id) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'ID de capacitación es requerido'
+                });
+            }
+
+            // CORREGIDO: Obtener capacitación actual usando PostgreSQL directo
+            const sqlCapacitacion = `SELECT * FROM soporte_capacitaciones WHERE id = $1`;
+            const resultCapacitacion = await query(sqlCapacitacion, [id]);
+
+            if (resultCapacitacion.rows.length === 0) {
+                return res.status(404).json({
+                    success: false,
+                    message: 'Capacitación no encontrada'
+                });
+            }
+
+            const capacitacionActual = resultCapacitacion.rows[0];
+
+            // Preparar observaciones con motivo
+            const observacionesActualizadas = `${capacitacionActual.observaciones_tecnico || ''}\n[${new Date().toISOString().split('T')[0]}] Cliente no requiere capacitación. Motivo: ${motivo || 'No especificado'}`.trim();
+
+            // CORREGIDO: Actualizar capacitación usando PostgreSQL directo
+            const sqlUpdate = `
+                UPDATE soporte_capacitaciones
+                SET estado = 'NO_REQUERIDA',
+                    observaciones_tecnico = $1,
+                    updated_by = $2,
+                    updated_at = NOW()
+                WHERE id = $3
+                RETURNING *
+            `;
+            const resultUpdate = await query(sqlUpdate, [observacionesActualizadas, user.id, id]);
+
+            if (resultUpdate.rows.length === 0) {
+                return res.status(404).json({
+                    success: false,
+                    message: 'Error al actualizar capacitación'
+                });
+            }
+
+            const capacitacionActualizada = resultUpdate.rows[0];
+
+            // Si está vinculado a un ticket, marcarlo también como NO_REQUERIDA
+            if (capacitacionActualizada.ticket_id) {
+                const observacionesTicket = `[${new Date().toISOString().split('T')[0]}] Cliente no requiere capacitación. Motivo: ${motivo || 'No especificado'}`;
+
+                await query(`
+                    UPDATE tickets_soporte
+                    SET estado = 'NO_REQUERIDA',
+                        observaciones = CONCAT(COALESCE(observaciones, ''), '\n', $1),
+                        updated_by = $2,
+                        updated_at = NOW()
+                    WHERE id = $3
+                `, [observacionesTicket, user.id, capacitacionActualizada.ticket_id]);
+            }
+
+            // Registrar en auditoría (si el servicio está disponible)
+            try {
+                await SoporteService.registrarAuditoria('CAPACITACION', id, 'NO_REQUERIDA', {
+                    motivo: motivo || 'No especificado',
+                    cliente: capacitacionActualizada.cliente_nombre
+                });
+            } catch (auditError) {
+                console.log('Servicio de auditoría no disponible:', auditError.message);
+            }
+
+            console.log(`ℹ️ Capacitación marcada como NO REQUERIDA para ${capacitacionActualizada.cliente_nombre}`);
+
+            res.json({
+                success: true,
+                message: 'Capacitación marcada como no requerida exitosamente',
+                data: capacitacionActualizada
+            });
+
+        } catch (error) {
+            console.error('Error en marcarComoNoRequerida:', error);
+            res.status(500).json({
+                success: false,
+                message: 'Error interno del servidor',
+                error: error.message
+            });
+        }
+    }
+
     // ====================================
     // REPORTES Y MÉTRICAS
     // ====================================
@@ -619,6 +716,7 @@ class CapacitacionesController {
                 pendientes: data.filter(c => c.estado === 'PENDIENTE').length,
                 canceladas: data.filter(c => c.estado === 'CANCELADA').length,
                 reprogramadas: data.filter(c => c.estado === 'REPROGRAMADA').length,
+                no_requeridas: data.filter(c => c.estado === 'NO_REQUERIDA').length,
                 
                 // Métricas de calidad
                 calificacion_promedio: 0,

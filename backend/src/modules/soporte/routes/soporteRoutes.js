@@ -7,6 +7,7 @@
 const express = require('express');
 const router = express.Router();
 const SoporteController = require('../controllers/soporteController');
+const CapacitacionesController = require('../controllers/capacitacionesController');
 const SoporteModel = require('../models/SoporteModel');
 const { authenticateToken } = require('../../../middleware/auth');
 
@@ -191,9 +192,17 @@ router.put('/capacitaciones/:id/reprogramar', manejarErrorAsync(async (req, res)
     req.body.estado = 'REPROGRAMADA';
     req.body.fecha_capacitacion_programada = req.body.nueva_fecha;
     req.body.motivo_reprogramacion = req.body.motivo_reprogramacion;
-    
+
     return SoporteController.actualizarTicket(req, res);
 }));
+
+/**
+ * @route   PUT /api/soporte/capacitaciones/:id/no-requerida
+ * @desc    Marcar capacitación como no requerida por el cliente
+ * @access  Private
+ * @body    motivo (opcional)
+ */
+router.put('/capacitaciones/:id/no-requerida', manejarErrorAsync(CapacitacionesController.marcarComoNoRequerida));
 
 // =====================================
 // RUTAS DE TICKETS A ALMACÉN
