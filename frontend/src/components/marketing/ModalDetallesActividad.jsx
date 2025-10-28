@@ -73,8 +73,7 @@ const ModalDetallesActividad = ({ actividad, onClose, onActividadActualizada }) 
 
     return (
         <div
-            className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4"
-            style={{ zIndex: 9999 }}
+            className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-[10000]"
             onClick={onClose}
         >
             <div
