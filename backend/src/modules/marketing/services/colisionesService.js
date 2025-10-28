@@ -370,6 +370,8 @@ class ColisionesService {
 
     /**
      * Buscar hueco posterior para un usuario
+     * NUEVA LÓGICA: Ignora actividades NORMALES (pueden ser desplazadas)
+     * Solo se detiene en PRIORITARIAS o GRUPALES
      */
     static async buscarHuecoPosterior(usuarioId, fechaInicio, duracionMinutos) {
         try {
@@ -377,20 +379,21 @@ class ColisionesService {
             const MAX_INTENTOS = 30; // Buscar hasta 30 días adelante
 
             for (let i = 0; i < MAX_INTENTOS; i++) {
-                // Buscar siguiente actividad después del cursor
+                // Buscar siguiente actividad PRIORITARIA o GRUPAL después del cursor
                 const result = await query(`
-                    SELECT fecha_inicio_planeada, fecha_fin_planeada
+                    SELECT fecha_inicio_planeada, fecha_fin_planeada, es_prioritaria, es_grupal
                     FROM actividades_marketing
                     WHERE usuario_id = $1
                       AND activo = true
                       AND estado IN ('pendiente', 'en_progreso')
                       AND fecha_inicio_planeada >= $2
+                      AND (es_prioritaria = true OR es_grupal = true)
                     ORDER BY fecha_inicio_planeada ASC
                     LIMIT 1
                 `, [usuarioId, cursor]);
 
                 if (result.rows.length === 0) {
-                    // No hay más actividades, hay espacio infinito
+                    // No hay más actividades prioritarias/grupales, hay espacio infinito
                     return {
                         inicio: cursor,
                         duracion: duracionMinutos // Espacio "infinito"
@@ -408,7 +411,7 @@ class ColisionesService {
                     };
                 }
 
-                // No hay espacio, mover cursor al fin de la siguiente actividad
+                // No hay espacio, mover cursor al fin de la siguiente actividad prioritaria/grupal
                 cursor = new Date(siguienteActividad.fecha_fin_planeada);
             }
 

@@ -227,7 +227,7 @@ class ActividadesController {
             }
 
             // Calcular fecha fin
-            const fechaFinPlaneada = reajusteService.agregarMinutosEfectivos(
+            let fechaFinPlaneada = reajusteService.agregarMinutosEfectivos(
                 new Date(fechaInicioPlaneada),
                 duracion_minutos
             );

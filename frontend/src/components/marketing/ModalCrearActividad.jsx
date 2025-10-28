@@ -449,18 +449,29 @@ const ModalColision = ({ colision, onConfirmar, onCancelar, onSeleccionarSlot, f
                     </div>
 
                     <div className="bg-gray-50 p-6 flex justify-end gap-3 border-t border-gray-200">
-                        <button
-                            onClick={onCancelar}
-                            className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-white transition"
-                        >
-                            Cancelar
-                        </button>
-                        <button
-                            onClick={onConfirmar}
-                            className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition"
-                        >
-                            🔪 Insertar ahora (cortar actividad)
-                        </button>
+                        {!colision.sugerencias?.previo && !colision.sugerencias?.posterior ? (
+                            <div className="w-full">
+                                <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-3">
+                                    <p className="text-sm text-red-800">
+                                        ⚠️ No hay espacios disponibles con suficiente duración.
+                                        Por favor, reduce la duración de la actividad o elige otro día.
+                                    </p>
+                                </div>
+                                <button
+                                    onClick={onCancelar}
+                                    className="w-full px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-white transition"
+                                >
+                                    Cerrar
+                                </button>
+                            </div>
+                        ) : (
+                            <button
+                                onClick={onCancelar}
+                                className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-white transition"
+                            >
+                                Cancelar
+                            </button>
+                        )}
                     </div>
                 </div>
             </div>
