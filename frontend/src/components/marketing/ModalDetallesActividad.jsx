@@ -3,6 +3,7 @@
 // ============================================
 
 import { useState, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import marketingService from '../../services/marketingService';
@@ -71,7 +72,7 @@ const ModalDetallesActividad = ({ actividad, onClose, onActividadActualizada }) 
 
     const badge = estadoBadges[actividad.estado] || estadoBadges.pendiente;
 
-    return (
+    return createPortal(
         <div
             className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-[10000]"
             onClick={onClose}
@@ -319,7 +320,8 @@ const ModalDetallesActividad = ({ actividad, onClose, onActividadActualizada }) 
                     onSuccess={handleTransferirSubmit}
                 />
             )}
-        </div>
+        </div>,
+        document.body
     );
 };
 
