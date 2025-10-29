@@ -7,11 +7,30 @@ import {
 } from 'lucide-react';
 import prospectosService from '../../../services/prospectosService';
 import { formatearVencimiento } from '../../../utils/formatearVencimiento';
+import ProspectoDetailsView from '../ProspectoDetailsView';
 
 const ProspectoList = ({ refreshTrigger = 0, onEdit, onView }) => {
   const [prospectosCache, setProspectosCache] = useState([]); // Todos los prospectos
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+
+  // Estados para ProspectoDetailsView
+  const [showProspectoDetails, setShowProspectoDetails] = useState(false);
+  const [prospectoParaDetalles, setProspectoParaDetalles] = useState(null);
+
+  // Obtener usuario actual
+  const usuarioActual = useMemo(() => {
+    try {
+      const user = JSON.parse(localStorage.getItem('user') || '{}');
+      return {
+        id: user.id,
+        rol: user.rol?.nombre || user.rol
+      };
+    } catch (error) {
+      console.error('Error al obtener usuario:', error);
+      return null;
+    }
+  }, []);
 
   // Estados para filtros y búsqueda (sin debounce, filtrado inmediato)
   const [filtros, setFiltros] = useState({
@@ -352,7 +371,7 @@ const ProspectoList = ({ refreshTrigger = 0, onEdit, onView }) => {
           <tbody className="bg-white divide-y divide-gray-200">
             {prospectosPaginados.map((prospecto) => {
               // 🔄 DETECTAR SI ES TRASPASADO
-              const esTraspasado = prospecto.traspasado_por_vencimiento === true;
+              const esTraspasado = prospecto.numero_reasignaciones >= 1;
 
               // 📅 FORMATEAR VENCIMIENTO
               const vencimientoInfo = (prospecto.estado !== 'Cerrado' && prospecto.estado !== 'Perdido' && prospecto.seguimiento_obligatorio)
@@ -408,7 +427,10 @@ const ProspectoList = ({ refreshTrigger = 0, onEdit, onView }) => {
                 <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                   <div className="flex items-center space-x-2">
                     <button
-                      onClick={() => onView?.(prospecto)}
+                      onClick={() => {
+                        setProspectoParaDetalles(prospecto);
+                        setShowProspectoDetails(true);
+                      }}
                       className="text-blue-600 hover:text-blue-900"
                       title="Ver detalles"
                     >
@@ -491,6 +513,18 @@ const ProspectoList = ({ refreshTrigger = 0, onEdit, onView }) => {
               : 'No se encontraron prospectos con los filtros aplicados.'}
           </p>
         </div>
+      )}
+
+      {/* Modal de detalles del prospecto */}
+      {showProspectoDetails && prospectoParaDetalles && (
+        <ProspectoDetailsView
+          prospecto={prospectoParaDetalles}
+          onClose={() => {
+            setShowProspectoDetails(false);
+            setProspectoParaDetalles(null);
+          }}
+          currentUser={usuarioActual}
+        />
       )}
     </div>
   );

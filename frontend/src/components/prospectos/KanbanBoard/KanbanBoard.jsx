@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import prospectosService from '../../../services/prospectosService';
 import VentaForm from '../../ventas/VentaForm/VentaForm'; // AGREGADO: Import del VentaForm
+import ProspectoDetailsView from '../ProspectoDetailsView'; // AGREGADO: Import de ProspectoDetailsView
 import { formatearVencimiento, ordenarProspectosPorVencimiento } from '../../../utils/formatearVencimiento';
 import { formatearFechaCorta as formatearFechaHelper } from '../../../utils/dateHelpers';
 
@@ -58,6 +59,10 @@ const KanbanBoard = ({
   // AGREGADO: Estados para VentaForm
   const [showVentaForm, setShowVentaForm] = useState(false);
   const [prospectoParaConversion, setProspectoParaConversion] = useState(null);
+
+  // AGREGADO: Estados para ProspectoDetailsView
+  const [showProspectoDetails, setShowProspectoDetails] = useState(false);
+  const [prospectoParaDetalles, setProspectoParaDetalles] = useState(null);
 
   // Configuración de estados con colores y metadatos
   const estadosConfig = {
@@ -511,6 +516,10 @@ const KanbanBoard = ({
   const handleMenuAction = async (accion, prospecto) => {
     try {
       switch (accion) {
+        case 'ver':
+          setProspectoParaDetalles(prospecto);
+          setShowProspectoDetails(true);
+          break;
         case 'editar':
           if (onProspectoSelect) {
             onProspectoSelect(prospecto);
@@ -746,7 +755,7 @@ const KanbanBoard = ({
     const isMenuOpen = menuAbierto === prospecto.id;
 
     // 🔄 DETECTAR SI ES TRASPASADO
-    const esTraspasado = prospecto.traspasado_por_vencimiento === true;
+    const esTraspasado = prospecto.numero_reasignaciones >= 1;
 
     // 📅 FORMATEAR VENCIMIENTO (solo para prospectos activos)
     const vencimientoInfo = (prospecto.estado !== 'Cerrado' && prospecto.estado !== 'Perdido' && prospecto.seguimiento_obligatorio)
@@ -796,6 +805,13 @@ const KanbanBoard = ({
             {isMenuOpen && (
               <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg z-20 border">
                 <div className="py-1">
+                  <button
+                    onClick={() => handleMenuAction('ver', prospecto)}
+                    className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center"
+                  >
+                    <Eye className="h-4 w-4 mr-2" />
+                    Ver prospecto
+                  </button>
                   <button
                     onClick={() => handleMenuAction('editar', prospecto)}
                     className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center"
@@ -1128,6 +1144,18 @@ const KanbanBoard = ({
           onSave={handleVentaCreatedFromConversion}
           onClose={handleVentaFormClose}
           tituloPersonalizado={`Convertir Prospecto "${prospectoParaConversion.nombre_cliente || 'Sin nombre'}" a Venta`}
+        />
+      )}
+
+      {/* AGREGADO: ProspectoDetailsView */}
+      {showProspectoDetails && prospectoParaDetalles && (
+        <ProspectoDetailsView
+          prospecto={prospectoParaDetalles}
+          onClose={() => {
+            setShowProspectoDetails(false);
+            setProspectoParaDetalles(null);
+          }}
+          currentUser={usuarioActual}
         />
       )}
     </div>

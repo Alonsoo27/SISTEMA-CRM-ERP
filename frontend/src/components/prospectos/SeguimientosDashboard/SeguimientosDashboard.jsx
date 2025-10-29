@@ -506,11 +506,13 @@ const SeguimientosDashboard = ({ asesorId = null, refreshTrigger = 0 }) => {
     const esVencido = tipo === 'vencido';
     const esCompletado = tipo === 'completado';
     const urgencia = seguimiento.urgencia || (esVencido ? null : obtenerUrgenciaSeguimiento(seguimiento.fecha_programada));
+    const esTraspasado = seguimiento.numero_reasignaciones >= 1;
 
     return (
       <div className={`bg-white rounded-lg border-l-4 p-4 shadow-sm hover:shadow-lg transition-all duration-200 transform hover:-translate-y-1 ${
-        esVencido ? 'border-l-red-500 bg-red-50' : 
-        esCompletado ? 'border-l-green-500 bg-green-50' : 
+        esVencido ? 'border-l-red-500 bg-red-50' :
+        esCompletado ? 'border-l-green-500 bg-green-50' :
+        esTraspasado ? 'border-l-amber-500 bg-amber-50' :
         urgencia ? `${urgencia.borderColor} ${urgencia.bgColor}` :
         'border-l-blue-500'
       }`}>
@@ -546,6 +548,13 @@ const SeguimientosDashboard = ({ asesorId = null, refreshTrigger = 0 }) => {
               {esVencido && seguimiento.horas_laborales_pasadas && (
                 <span className="px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-700 animate-pulse">
                   +{seguimiento.horas_laborales_pasadas}h laborales
+                </span>
+              )}
+
+              {esTraspasado && !esVencido && !esCompletado && (
+                <span className="px-2 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-700 border border-amber-300 flex items-center">
+                  <RefreshCw className="h-3 w-3 mr-1" />
+                  Traspasado
                 </span>
               )}
             </div>
