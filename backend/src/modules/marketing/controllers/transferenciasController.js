@@ -45,6 +45,28 @@ class TransferenciasController {
 
             const actividadOriginal = actividadResult.rows[0];
 
+            // 🔒 VALIDACIÓN: Verificar que el usuario destino esté activo
+            const usuarioDestinoResult = await query(
+                'SELECT id, nombre, apellido, activo FROM usuarios WHERE id = $1',
+                [usuario_destino_id]
+            );
+
+            if (usuarioDestinoResult.rows.length === 0) {
+                return res.status(404).json({
+                    success: false,
+                    message: 'El usuario destino no existe'
+                });
+            }
+
+            const usuarioDestino = usuarioDestinoResult.rows[0];
+            if (usuarioDestino.activo === false) {
+                return res.status(400).json({
+                    success: false,
+                    message: `No se puede transferir a ${usuarioDestino.nombre} ${usuarioDestino.apellido} porque está inactivo`,
+                    usuario_inactivo: true
+                });
+            }
+
             // Calcular duración
             let duracionFinal = duracion_nueva || actividadOriginal.duracion_planeada_minutos;
 

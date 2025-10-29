@@ -18,7 +18,8 @@ const {
     obtenerPermisosUsuario,
     actualizarPermisosUsuario,
     listarVendedores,
-    listarEquipoMarketing
+    listarEquipoMarketing,
+    desactivarUsuario
 } = require('../controllers/usuariosController');
 
 const { authenticateToken, requireRole, requireOwnership } = require('../../../middleware/auth');
@@ -91,6 +92,13 @@ router.delete('/:id',
     authenticateToken,
     requireRole(GRUPOS_ROLES.SOLO_ADMINISTRADORES),
     eliminarUsuario
+);
+
+// Desactivar usuario con traspaso automático de prospectos (solo SUPER_ADMIN)
+router.post('/:id/desactivar',
+    authenticateToken,
+    requireRole(GRUPOS_ROLES.SOLO_ADMINISTRADORES),
+    desactivarUsuario
 );
 
 // ============================================

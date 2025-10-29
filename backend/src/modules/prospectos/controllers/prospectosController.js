@@ -990,6 +990,30 @@ class ProspectosController {
                 });
             }
 
+            // 🔒 VALIDACIÓN: Si se está cambiando el asesor, verificar que el nuevo asesor esté activo
+            if (datosLimpios.asesor_id && datosLimpios.asesor_id !== prospectoExistente.asesor_id) {
+                const asesorResult = await query(
+                    'SELECT id, nombre, apellido, activo FROM usuarios WHERE id = $1',
+                    [datosLimpios.asesor_id]
+                );
+
+                if (!asesorResult.rows || asesorResult.rows.length === 0) {
+                    return res.status(404).json({
+                        success: false,
+                        error: 'El asesor seleccionado no existe'
+                    });
+                }
+
+                const asesor = asesorResult.rows[0];
+                if (asesor.activo === false) {
+                    return res.status(400).json({
+                        success: false,
+                        error: `No se puede asignar a ${asesor.nombre} ${asesor.apellido} porque está inactivo`,
+                        asesor_inactivo: true
+                    });
+                }
+            }
+
             logger.info(`🔧 Actualizando prospecto ${id}, campos:`, Object.keys(datosLimpios));
 
             // Construir query dinámico de UPDATE

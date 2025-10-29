@@ -655,6 +655,182 @@ const listarEquipoMarketing = async (req, res) => {
     }
 };
 
+// ============================================
+// DESACTIVAR USUARIO CON TRASPASO AUTOMÁTICO
+// ============================================
+const desactivarUsuario = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { motivo = 'Desactivación de usuario' } = req.body;
+
+        // 1. Verificar que el usuario existe y está activo
+        const usuarioResult = await query(`
+            SELECT u.*, r.nombre as rol_nombre
+            FROM usuarios u
+            LEFT JOIN roles r ON u.rol_id = r.id
+            WHERE u.id = $1 AND u.deleted_at IS NULL
+        `, [id]);
+
+        if (usuarioResult.rows.length === 0) {
+            return res.status(404).json({
+                success: false,
+                message: 'Usuario no encontrado'
+            });
+        }
+
+        const usuario = usuarioResult.rows[0];
+
+        if (usuario.activo === false) {
+            return res.status(400).json({
+                success: false,
+                message: 'El usuario ya está inactivo'
+            });
+        }
+
+        // 2. Contar prospectos activos del usuario
+        const prospectosResult = await query(`
+            SELECT COUNT(*) as total
+            FROM prospectos
+            WHERE asesor_id = $1
+            AND estado NOT IN ('Cerrado', 'Perdido', 'Convertido')
+            AND activo = true
+        `, [id]);
+
+        const totalProspectos = parseInt(prospectosResult.rows[0]?.total || 0);
+
+        // 3. Contar ventas activas del usuario
+        const ventasResult = await query(`
+            SELECT COUNT(*) as total
+            FROM ventas
+            WHERE asesor_id = $1
+            AND activo = true
+        `, [id]);
+
+        const totalVentas = parseInt(ventasResult.rows[0]?.total || 0);
+
+        // 4. Traspasar prospectos automáticamente
+        let prospectosTraspasados = 0;
+        if (totalProspectos > 0) {
+            // Obtener vendedores activos disponibles (excluir el usuario a desactivar y usuario ficticio)
+            const vendedoresResult = await query(`
+                SELECT id, nombre, apellido
+                FROM usuarios
+                WHERE rol_id = 7
+                AND activo = true
+                AND id != $1
+                AND id != 19
+                ORDER BY RANDOM()
+            `, [id]);
+
+            if (vendedoresResult.rows.length > 0) {
+                // Obtener los prospectos activos
+                const prospectosActivosResult = await query(`
+                    SELECT id, codigo, nombre_cliente
+                    FROM prospectos
+                    WHERE asesor_id = $1
+                    AND estado NOT IN ('Cerrado', 'Perdido', 'Convertido')
+                    AND activo = true
+                `, [id]);
+
+                const prospectosActivos = prospectosActivosResult.rows;
+                const vendedoresDisponibles = vendedoresResult.rows;
+
+                // Distribuir prospectos entre vendedores disponibles
+                for (let i = 0; i < prospectosActivos.length; i++) {
+                    const prospecto = prospectosActivos[i];
+                    const vendedorIndex = i % vendedoresDisponibles.length;
+                    const vendedor = vendedoresDisponibles[vendedorIndex];
+
+                    // Traspasar prospecto
+                    await query(`
+                        UPDATE prospectos
+                        SET asesor_id = $1,
+                            asesor_nombre = $2,
+                            numero_reasignaciones = numero_reasignaciones + 1,
+                            fecha_traspaso = NOW(),
+                            motivo_traspaso = $3
+                        WHERE id = $4
+                    `, [
+                        vendedor.id,
+                        `${vendedor.nombre} ${vendedor.apellido}`,
+                        `${motivo} - Usuario desactivado`,
+                        prospecto.id
+                    ]);
+
+                    // Crear seguimiento para el nuevo asesor
+                    const fechaProgramada = new Date();
+                    fechaProgramada.setDate(fechaProgramada.getDate() + 2);
+
+                    await query(`
+                        INSERT INTO seguimientos (
+                            prospecto_id, asesor_id, fecha_programada, fecha_limite,
+                            tipo, descripcion, completado, visible_para_asesor
+                        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                    `, [
+                        prospecto.id,
+                        vendedor.id,
+                        fechaProgramada.toISOString(),
+                        fechaProgramada.toISOString(),
+                        'Llamada',
+                        `Prospecto reasignado por desactivación de usuario ${usuario.nombre} ${usuario.apellido}`,
+                        false,
+                        true
+                    ]);
+
+                    prospectosTraspasados++;
+                }
+            } else {
+                // No hay vendedores disponibles - activar modo libre en todos los prospectos
+                await query(`
+                    UPDATE prospectos
+                    SET modo_libre = true,
+                        fecha_modo_libre = NOW(),
+                        numero_reasignaciones = numero_reasignaciones + 1,
+                        motivo_traspaso = $1
+                    WHERE asesor_id = $2
+                    AND estado NOT IN ('Cerrado', 'Perdido', 'Convertido')
+                    AND activo = true
+                `, [`${motivo} - Sin vendedores disponibles`, id]);
+
+                prospectosTraspasados = totalProspectos;
+            }
+        }
+
+        // 5. Marcar usuario como inactivo
+        await query(`
+            UPDATE usuarios
+            SET activo = false,
+                estado = 'INACTIVO',
+                updated_at = NOW()
+            WHERE id = $1
+        `, [id]);
+
+        // 6. Retornar resumen
+        res.json({
+            success: true,
+            message: 'Usuario desactivado exitosamente',
+            data: {
+                usuario_id: id,
+                nombre_completo: `${usuario.nombre} ${usuario.apellido}`,
+                email: usuario.email,
+                rol: usuario.rol_nombre,
+                prospectos_activos: totalProspectos,
+                prospectos_traspasados: prospectosTraspasados,
+                ventas_activas: totalVentas,
+                motivo: motivo
+            }
+        });
+
+    } catch (error) {
+        console.error('Error al desactivar usuario:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error al desactivar usuario',
+            error: error.message
+        });
+    }
+};
+
 module.exports = {
     listarUsuarios,
     obtenerUsuario,
@@ -668,5 +844,6 @@ module.exports = {
     obtenerPermisosUsuario,
     actualizarPermisosUsuario,
     listarVendedores,
-    listarEquipoMarketing
+    listarEquipoMarketing,
+    desactivarUsuario
 };

@@ -48,6 +48,21 @@ const convertirProspectoAVenta = async (config) => {
             throw new Error('prospecto_id y asesor_id son obligatorios');
         }
 
+        // 🔒 VALIDACIÓN: Verificar que el asesor esté activo
+        const asesorResult = await query(
+            'SELECT id, nombre, apellido, activo FROM usuarios WHERE id = $1',
+            [asesor_id]
+        );
+
+        if (!asesorResult.rows || asesorResult.rows.length === 0) {
+            throw new Error('El asesor especificado no existe');
+        }
+
+        const asesor = asesorResult.rows[0];
+        if (asesor.activo === false) {
+            throw new Error(`No se puede convertir con asesor ${asesor.nombre} ${asesor.apellido} porque está inactivo`);
+        }
+
         // Iniciar transacción PostgreSQL
         await query('BEGIN');
 
