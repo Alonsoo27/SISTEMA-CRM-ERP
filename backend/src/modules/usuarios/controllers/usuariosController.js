@@ -202,21 +202,24 @@ const actualizarUsuario = async (req, res) => {
             telefono,
             es_jefe,
             vende,
-            estado
+            estado,
+            activo
         } = req.body;
 
-        // Verificar que el usuario exista
-        const usuarioExiste = await query(
-            'SELECT id FROM usuarios WHERE id = $1 AND deleted_at IS NULL',
+        // Verificar que el usuario exista y obtener datos actuales
+        const usuarioExisteResult = await query(
+            'SELECT id, activo, rol_id, nombre, apellido FROM usuarios WHERE id = $1 AND deleted_at IS NULL',
             [id]
         );
 
-        if (usuarioExiste.rows.length === 0) {
+        if (usuarioExisteResult.rows.length === 0) {
             return res.status(404).json({
                 success: false,
                 message: 'Usuario no encontrado'
             });
         }
+
+        const usuarioActual = usuarioExisteResult.rows[0];
 
         // Si se cambia el email, verificar que no exista
         if (email) {
@@ -239,6 +242,114 @@ const actualizarUsuario = async (req, res) => {
         const telefono_clean = telefono === '' ? null : telefono;
         const rol_id_clean = rol_id === '' || rol_id === undefined ? null : rol_id;
 
+        // 🔄 DETECCIÓN AUTOMÁTICA: Si se está desactivando un VENDEDOR, traspasar prospectos
+        const seEstaDesactivando = usuarioActual.activo === true && activo === false;
+        const esVendedor = usuarioActual.rol_id === 7; // VENDEDOR
+
+        if (seEstaDesactivando && esVendedor) {
+            console.log(`🔄 Desactivación de vendedor detectada: ${usuarioActual.nombre} ${usuarioActual.apellido} (ID: ${id})`);
+
+            // Contar prospectos activos
+            const prospectosResult = await query(`
+                SELECT COUNT(*) as total
+                FROM prospectos
+                WHERE asesor_id = $1
+                AND estado NOT IN ('Cerrado', 'Perdido', 'Convertido')
+                AND activo = true
+            `, [id]);
+
+            const totalProspectos = parseInt(prospectosResult.rows[0]?.total || 0);
+
+            // Si tiene prospectos activos, traspasarlos
+            if (totalProspectos > 0) {
+                console.log(`📋 Traspasando ${totalProspectos} prospectos automáticamente...`);
+
+                // Obtener vendedores disponibles
+                const vendedoresResult = await query(`
+                    SELECT id, nombre, apellido
+                    FROM usuarios
+                    WHERE rol_id = 7
+                    AND activo = true
+                    AND id != $1
+                    AND id != 19
+                    ORDER BY RANDOM()
+                `, [id]);
+
+                if (vendedoresResult.rows.length > 0) {
+                    // Obtener prospectos activos
+                    const prospectosActivosResult = await query(`
+                        SELECT id, codigo, nombre_cliente
+                        FROM prospectos
+                        WHERE asesor_id = $1
+                        AND estado NOT IN ('Cerrado', 'Perdido', 'Convertido')
+                        AND activo = true
+                    `, [id]);
+
+                    const prospectosActivos = prospectosActivosResult.rows;
+                    const vendedoresDisponibles = vendedoresResult.rows;
+
+                    // Distribuir prospectos entre vendedores
+                    for (let i = 0; i < prospectosActivos.length; i++) {
+                        const prospecto = prospectosActivos[i];
+                        const vendedorIndex = i % vendedoresDisponibles.length;
+                        const vendedor = vendedoresDisponibles[vendedorIndex];
+
+                        // Traspasar prospecto
+                        await query(`
+                            UPDATE prospectos
+                            SET asesor_id = $1,
+                                asesor_nombre = $2,
+                                numero_reasignaciones = numero_reasignaciones + 1,
+                                fecha_traspaso = NOW(),
+                                motivo_traspaso = $3
+                            WHERE id = $4
+                        `, [
+                            vendedor.id,
+                            `${vendedor.nombre} ${vendedor.apellido}`,
+                            'Desactivación automática de usuario desde frontend',
+                            prospecto.id
+                        ]);
+
+                        // Crear seguimiento
+                        const fechaProgramada = new Date();
+                        fechaProgramada.setDate(fechaProgramada.getDate() + 2);
+
+                        await query(`
+                            INSERT INTO seguimientos (
+                                prospecto_id, asesor_id, fecha_programada, fecha_limite,
+                                tipo, descripcion, completado, visible_para_asesor
+                            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                        `, [
+                            prospecto.id,
+                            vendedor.id,
+                            fechaProgramada.toISOString(),
+                            fechaProgramada.toISOString(),
+                            'Llamada',
+                            `Prospecto reasignado por desactivación de ${usuarioActual.nombre} ${usuarioActual.apellido}`,
+                            false,
+                            true
+                        ]);
+
+                        console.log(`✅ ${prospecto.codigo} → ${vendedor.nombre} ${vendedor.apellido}`);
+                    }
+                } else {
+                    // Activar modo libre si no hay vendedores
+                    await query(`
+                        UPDATE prospectos
+                        SET modo_libre = true,
+                            fecha_modo_libre = NOW(),
+                            numero_reasignaciones = numero_reasignaciones + 1,
+                            motivo_traspaso = $1
+                        WHERE asesor_id = $2
+                        AND estado NOT IN ('Cerrado', 'Perdido', 'Convertido')
+                        AND activo = true
+                    `, ['Desactivación de usuario - Sin vendedores disponibles', id]);
+                }
+
+                console.log(`✅ ${totalProspectos} prospectos traspasados exitosamente`);
+            }
+        }
+
         // Actualizar usuario
         const result = await query(`
             UPDATE usuarios SET
@@ -251,10 +362,11 @@ const actualizarUsuario = async (req, res) => {
                 telefono = $7,
                 es_jefe = COALESCE($8, es_jefe),
                 vende = COALESCE($9, vende),
-                estado = COALESCE($10, estado)
-            WHERE id = $11 AND deleted_at IS NULL
+                estado = COALESCE($10, estado),
+                activo = COALESCE($11, activo)
+            WHERE id = $12 AND deleted_at IS NULL
             RETURNING id, email, nombre, apellido, nombre || ' ' || apellido as nombre_completo,
-                      rol_id, area_id, estado, updated_at
+                      rol_id, area_id, estado, activo, updated_at
         `, [
             email,
             nombre,
@@ -266,6 +378,7 @@ const actualizarUsuario = async (req, res) => {
             es_jefe,
             vende,
             estado,
+            activo,
             id
         ]);
 
