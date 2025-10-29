@@ -3,7 +3,7 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   Phone, Mail, Building, Calendar, DollarSign, User,
   MoreVertical, CheckCircle, XCircle, Clock, AlertCircle,
-  ExternalLink, Edit, Trash2, Filter, Package, ArrowRight, RefreshCw
+  ExternalLink, Edit, Trash2, Filter, Package, ArrowRight, RefreshCw, Eye
 } from 'lucide-react';
 import prospectosService from '../../../services/prospectosService';
 import VentaForm from '../../ventas/VentaForm/VentaForm'; // AGREGADO: Import del VentaForm
