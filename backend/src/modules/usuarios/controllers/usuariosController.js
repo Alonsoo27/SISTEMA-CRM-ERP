@@ -243,7 +243,10 @@ const actualizarUsuario = async (req, res) => {
         const rol_id_clean = rol_id === '' || rol_id === undefined ? null : rol_id;
 
         // 🔄 DETECCIÓN AUTOMÁTICA: Si se está desactivando un VENDEDOR, traspasar prospectos
-        const seEstaDesactivando = usuarioActual.activo === true && activo === false;
+        // Detectar desactivación por cambio de 'activo' O por cambio de 'estado' a 'INACTIVO'
+        const seEstaDesactivandoPorActivo = usuarioActual.activo === true && activo === false;
+        const seEstaDesactivandoPorEstado = estado === 'INACTIVO' && usuarioActual.activo === true;
+        const seEstaDesactivando = seEstaDesactivandoPorActivo || seEstaDesactivandoPorEstado;
         const esVendedor = usuarioActual.rol_id === 7; // VENDEDOR
 
         if (seEstaDesactivando && esVendedor) {
@@ -350,6 +353,12 @@ const actualizarUsuario = async (req, res) => {
             }
         }
 
+        // Si se desactivó por estado, asegurar que activo también sea false
+        let activoFinal = activo;
+        if (seEstaDesactivandoPorEstado && activo === undefined) {
+            activoFinal = false;
+        }
+
         // Actualizar usuario
         const result = await query(`
             UPDATE usuarios SET
@@ -378,7 +387,7 @@ const actualizarUsuario = async (req, res) => {
             es_jefe,
             vende,
             estado,
-            activo,
+            activoFinal,
             id
         ]);
 
