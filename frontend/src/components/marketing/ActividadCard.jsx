@@ -29,6 +29,11 @@ const ActividadCard = ({ actividad, onClick, onRecargar }) => {
         tiempo_adicional_minutos
     } = actividad;
 
+    // Detectar si la actividad está vencida
+    const ahora = new Date();
+    const fechaFin = new Date(fecha_fin_planeada);
+    const estaVencida = (estado === 'pendiente' || estado === 'en_progreso') && fechaFin < ahora;
+
     // Estilos según estado
     const estadoStyles = {
         pendiente: {
@@ -61,7 +66,13 @@ const ActividadCard = ({ actividad, onClick, onRecargar }) => {
         }
     };
 
-    const styles = estadoStyles[estado] || estadoStyles.pendiente;
+    // Si está vencida, usar estilos de alerta roja
+    const styles = estaVencida ? {
+        bg: 'bg-red-50',
+        border: 'border-red-500',
+        text: 'text-red-900',
+        extra: 'shadow-lg animate-pulse'
+    } : (estadoStyles[estado] || estadoStyles.pendiente);
 
     // Formatear hora
     const formatearHora = (fecha) => {
@@ -182,6 +193,12 @@ const ActividadCard = ({ actividad, onClick, onRecargar }) => {
 
             {/* Badges */}
             <div className="flex flex-wrap gap-1 mb-2">
+                {estaVencida && (
+                    <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-red-600 text-white animate-pulse">
+                        ⏰ VENCIDA
+                    </span>
+                )}
+
                 {es_grupal && (
                     <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-700">
                         👥 Grupal

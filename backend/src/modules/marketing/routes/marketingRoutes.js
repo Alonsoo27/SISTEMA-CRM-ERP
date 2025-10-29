@@ -278,4 +278,28 @@ router.get('/indicadores/categorias',
     IndicadoresController.obtenerAnalisisCategorias
 );
 
+// ============================================
+// NOTIFICACIONES Y ALERTAS
+// ============================================
+
+/**
+ * Obtener actividades vencidas de un usuario
+ * Roles: Marketing completo
+ */
+router.get('/actividades-vencidas/:usuarioId',
+    authenticateToken,
+    requireRole(GRUPOS_ROLES.MARKETING_COMPLETO),
+    ActividadesController.obtenerActividadesVencidas
+);
+
+/**
+ * Procesar huecos pendientes al final del día
+ * Roles: Marketing completo
+ */
+router.post('/procesar-huecos/:usuarioId',
+    authenticateToken,
+    requireRole(GRUPOS_ROLES.MARKETING_COMPLETO),
+    ActividadesController.procesarHuecosPendientes
+);
+
 module.exports = router;

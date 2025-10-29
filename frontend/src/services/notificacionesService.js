@@ -310,6 +310,8 @@ class NotificacionesService {
             oportunidad_alto_valor: '💰',
             nuevo_prospecto: '👤',
             prospecto_reasignado: '🔄',
+            actividad_marketing_vencida: '⏰',
+            actividad_marketing_urgente: '🚨',
             marketing: '📢',
             sistema: '⚙️',
             recordatorio: '📝',

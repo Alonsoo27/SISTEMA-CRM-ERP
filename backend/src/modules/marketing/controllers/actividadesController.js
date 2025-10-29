@@ -949,6 +949,241 @@ class ActividadesController {
             });
         }
     }
+
+    /**
+     * Obtener actividades vencidas (pendientes o en_progreso cuya hora ya pasó)
+     */
+    static async obtenerActividadesVencidas(req, res) {
+        try {
+            const { usuarioId } = req.params;
+            const { user_id, rol } = req.user;
+
+            // Validar permisos: solo puede ver sus propias actividades vencidas o si es jefe/superior
+            const esJefeOSuperior = ['JEFE_MARKETING', 'SUPER_ADMIN', 'GERENTE', 'ADMIN'].includes(rol);
+            if (!esJefeOSuperior && parseInt(user_id) !== parseInt(usuarioId)) {
+                return res.status(403).json({
+                    success: false,
+                    message: 'No tienes permiso para ver las actividades de este usuario'
+                });
+            }
+
+            const ahora = new Date();
+
+            // Buscar actividades vencidas
+            const result = await query(`
+                SELECT
+                    am.*,
+                    ta.categoria_principal,
+                    ta.subcategoria,
+                    ta.descripcion as descripcion_tipo,
+                    ta.color_hex,
+                    u.nombre || ' ' || u.apellido as usuario_nombre,
+                    creador.nombre || ' ' || creador.apellido as creado_por_nombre
+                FROM actividades_marketing am
+                LEFT JOIN tipos_actividad_marketing ta ON
+                    am.categoria_principal = ta.categoria_principal
+                    AND am.subcategoria = ta.subcategoria
+                LEFT JOIN usuarios u ON am.usuario_id = u.id
+                LEFT JOIN usuarios creador ON am.creado_por = creador.id
+                WHERE am.usuario_id = $1
+                  AND am.activo = true
+                  AND am.estado IN ('pendiente', 'en_progreso')
+                  AND am.fecha_fin_planeada < $2
+                  AND am.tipo != 'sistema'
+                ORDER BY am.fecha_fin_planeada ASC
+            `, [usuarioId, ahora]);
+
+            console.log(`⏰ Actividades vencidas encontradas para usuario ${usuarioId}:`, result.rows.length);
+
+            res.json({
+                success: true,
+                data: result.rows,
+                total: result.rows.length,
+                fecha_actual: ahora
+            });
+
+        } catch (error) {
+            console.error('Error obteniendo actividades vencidas:', error);
+            res.status(500).json({
+                success: false,
+                message: 'Error al obtener actividades vencidas',
+                error: process.env.NODE_ENV === 'development' ? error.message : undefined
+            });
+        }
+    }
+
+    /**
+     * Procesar huecos pendientes del día al finalizar jornada
+     * Se ejecuta automáticamente o manualmente al final del día
+     */
+    static async procesarHuecosPendientes(req, res) {
+        try {
+            const { usuarioId } = req.params;
+            const { fecha_referencia } = req.body; // Opcional: para procesar día específico
+
+            const fechaProcesar = fecha_referencia ? new Date(fecha_referencia) : new Date();
+
+            console.log(`🕐 Procesando huecos pendientes para usuario ${usuarioId} del día ${fechaProcesar.toDateString()}`);
+
+            // Determinar horarios según día de la semana
+            const diaSemana = fechaProcesar.getDay();
+            const esSabado = diaSemana === 6;
+            const esDomingo = diaSemana === 0;
+
+            if (esDomingo) {
+                return res.json({
+                    success: true,
+                    message: 'Los domingos no son día laboral',
+                    huecos_creados: []
+                });
+            }
+
+            const INICIO_JORNADA = esSabado ? 9 : 8;
+            const FIN_JORNADA = esSabado ? 12 : 18;
+            const ALMUERZO_INICIO = 13;
+            const ALMUERZO_FIN = 14;
+
+            // Buscar todas las actividades del día (excluyendo sistema)
+            const inicioDelDia = new Date(fechaProcesar);
+            inicioDelDia.setHours(INICIO_JORNADA, 0, 0, 0);
+
+            const finDelDia = new Date(fechaProcesar);
+            finDelDia.setHours(FIN_JORNADA, 0, 0, 0);
+
+            const actividadesResult = await query(`
+                SELECT
+                    fecha_inicio_planeada,
+                    fecha_fin_planeada,
+                    duracion_planeada_minutos,
+                    codigo,
+                    descripcion
+                FROM actividades_marketing
+                WHERE usuario_id = $1
+                  AND activo = true
+                  AND tipo != 'sistema'
+                  AND (
+                    (fecha_inicio_planeada >= $2 AND fecha_inicio_planeada < $3)
+                    OR (fecha_fin_planeada > $2 AND fecha_fin_planeada <= $3)
+                  )
+                ORDER BY fecha_inicio_planeada ASC
+            `, [usuarioId, inicioDelDia, finDelDia]);
+
+            const actividades = actividadesResult.rows.map(row => ({
+                inicio: new Date(row.fecha_inicio_planeada),
+                fin: new Date(row.fecha_fin_planeada),
+                codigo: row.codigo,
+                descripcion: row.descripcion
+            }));
+
+            console.log(`📋 Actividades encontradas del día: ${actividades.length}`);
+
+            // Encontrar huecos en el día
+            const huecos = [];
+            let cursorTiempo = inicioDelDia;
+
+            for (let i = 0; i < actividades.length; i++) {
+                const actividad = actividades[i];
+
+                // Si hay un hueco entre el cursor y el inicio de esta actividad
+                if (cursorTiempo < actividad.inicio) {
+                    const minutos = (actividad.inicio - cursorTiempo) / 60000;
+
+                    // Solo registrar huecos de al menos 15 minutos
+                    if (minutos >= 15) {
+                        huecos.push({
+                            inicio: new Date(cursorTiempo),
+                            fin: new Date(actividad.inicio),
+                            minutos: Math.round(minutos)
+                        });
+                    }
+                }
+
+                // Mover cursor al final de esta actividad
+                cursorTiempo = new Date(Math.max(cursorTiempo, actividad.fin));
+            }
+
+            // Último hueco: desde última actividad hasta fin de jornada
+            if (cursorTiempo < finDelDia) {
+                const minutos = (finDelDia - cursorTiempo) / 60000;
+
+                if (minutos >= 15) {
+                    huecos.push({
+                        inicio: new Date(cursorTiempo),
+                        fin: finDelDia,
+                        minutos: Math.round(minutos)
+                    });
+                }
+            }
+
+            console.log(`⚠️ Huecos detectados: ${huecos.length}`);
+
+            // Crear registros de huecos
+            const huecosCreados = [];
+
+            for (const hueco of huecos) {
+                // Categorizar hueco
+                const categoria = actividadesService.categorizarHueco(
+                    hueco.inicio,
+                    hueco.fin,
+                    hueco.minutos
+                );
+
+                // Generar código
+                const codigo = await actividadesService.generarCodigoActividad();
+
+                // Insertar hueco
+                await query(`
+                    INSERT INTO actividades_marketing (
+                        codigo, categoria_principal, subcategoria, descripcion,
+                        usuario_id, creado_por, tipo,
+                        fecha_inicio_planeada, fecha_fin_planeada,
+                        duracion_planeada_minutos, duracion_real_minutos,
+                        color_hex, estado, activo
+                    ) VALUES (
+                        $1, 'SISTEMA', $2, $3,
+                        $4, $4, 'sistema',
+                        $5, $6,
+                        $7, $7,
+                        $8, 'completada', true
+                    )
+                `, [
+                    codigo,
+                    categoria.subcategoria,
+                    categoria.descripcion,
+                    usuarioId,
+                    hueco.inicio,
+                    hueco.fin,
+                    hueco.minutos,
+                    categoria.color
+                ]);
+
+                huecosCreados.push({
+                    codigo,
+                    tipo: categoria.subcategoria,
+                    inicio: hueco.inicio,
+                    fin: hueco.fin,
+                    minutos: hueco.minutos
+                });
+
+                console.log(`✅ Hueco registrado: ${codigo} - ${categoria.subcategoria} (${hueco.minutos} min)`);
+            }
+
+            res.json({
+                success: true,
+                message: `Se procesaron ${huecosCreados.length} huecos del día`,
+                data: huecosCreados,
+                fecha_procesada: fechaProcesar
+            });
+
+        } catch (error) {
+            console.error('Error procesando huecos pendientes:', error);
+            res.status(500).json({
+                success: false,
+                message: 'Error al procesar huecos pendientes',
+                error: process.env.NODE_ENV === 'development' ? error.message : undefined
+            });
+        }
+    }
 }
 
 module.exports = ActividadesController;

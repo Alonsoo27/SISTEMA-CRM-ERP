@@ -484,8 +484,14 @@ const ActividadCardCompacta = ({ actividad, onClick, onRecargar, esParte1, esPar
         es_prioritaria,
         es_grupal,
         transferida_de,
-        duracion_planeada_minutos
+        duracion_planeada_minutos,
+        fecha_fin_planeada
     } = actividad;
+
+    // Detectar si la actividad está vencida
+    const ahora = new Date();
+    const fechaFin = new Date(fecha_fin_planeada);
+    const estaVencida = (estado === 'pendiente' || estado === 'en_progreso') && fechaFin < ahora;
 
     const estadoStyles = {
         pendiente: 'border-gray-300',
@@ -495,7 +501,8 @@ const ActividadCardCompacta = ({ actividad, onClick, onRecargar, esParte1, esPar
         cancelada: 'border-red-300 opacity-50'
     };
 
-    const styles = estadoStyles[estado] || estadoStyles.pendiente;
+    // Si está vencida, sobrescribir con borde rojo intenso
+    const styles = estaVencida ? 'border-red-600 shadow-lg animate-pulse' : (estadoStyles[estado] || estadoStyles.pendiente);
 
     // Indicador de parte de actividad
     let indicador = '';
@@ -533,10 +540,12 @@ const ActividadCardCompacta = ({ actividad, onClick, onRecargar, esParte1, esPar
                     <div className="flex-1 min-w-0">
                         <div className="text-[11px] font-bold truncate" style={{ color: color_hex }}>
                             {indicador && <span className="mr-0.5">{indicador}</span>}
+                            {estaVencida && <span className="mr-0.5 text-red-600">⏰</span>}
                             {descripcion}
                         </div>
                         <div className="text-[9px] text-gray-500 truncate mt-0.5">
                             {duracionTexto}
+                            {estaVencida && <span className="ml-1 text-red-600 font-bold">VENCIDA</span>}
                         </div>
                     </div>
                     <div className="flex flex-col gap-0.5">

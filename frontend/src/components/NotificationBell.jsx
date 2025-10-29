@@ -129,6 +129,9 @@ const NotificationBell = () => {
             'prospecto_reasignado': '🔄',
             'seguimiento_completado': '✅',
             'meta_alcanzada': '🎉',
+            'actividad_marketing_vencida': '⏰',
+            'actividad_marketing_urgente': '🚨',
+            'marketing': '📢',
             'sistema': '⚙️',
             'manual': '📝'
         };

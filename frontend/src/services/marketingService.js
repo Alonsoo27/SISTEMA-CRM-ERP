@@ -297,6 +297,27 @@ const marketingService = {
         }
         const response = await apiClient.get(url);
         return response.data;
+    },
+
+    // ============================================
+    // NOTIFICACIONES Y ALERTAS
+    // ============================================
+
+    /**
+     * Obtener actividades vencidas de un usuario
+     */
+    async obtenerActividadesVencidas(usuarioId) {
+        const response = await apiClient.get(`/marketing/actividades-vencidas/${usuarioId}`);
+        return response.data;
+    },
+
+    /**
+     * Procesar huecos pendientes del día
+     */
+    async procesarHuecosPendientes(usuarioId, fechaReferencia = null) {
+        const datos = fechaReferencia ? { fecha_referencia: fechaReferencia } : {};
+        const response = await apiClient.post(`/marketing/procesar-huecos/${usuarioId}`, datos);
+        return response.data;
     }
 };
 
