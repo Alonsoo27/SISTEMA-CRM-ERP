@@ -5,12 +5,9 @@
 import { useState } from 'react';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
-import marketingService from '../../services/marketingService';
 import ModalDetallesActividad from './ModalDetallesActividad';
 
 const ActividadCard = ({ actividad, onClick, onRecargar }) => {
-    const [showMenu, setShowMenu] = useState(false);
-    const [loading, setLoading] = useState(false);
     const [showModal, setShowModal] = useState(false);
 
     const {
@@ -84,68 +81,6 @@ const ActividadCard = ({ actividad, onClick, onRecargar }) => {
     const horas = Math.floor(duracionTotal / 60);
     const minutos = duracionTotal % 60;
 
-    // Acciones
-    const handleCompletar = async (e) => {
-        e.stopPropagation();
-
-        if (!window.confirm('¿Marcar esta actividad como completada?')) return;
-
-        setLoading(true);
-        try {
-            await marketingService.completarActividad(actividad.id);
-            if (onRecargar) onRecargar();
-        } catch (error) {
-            console.error('Error completando actividad:', error);
-            alert('Error al completar la actividad');
-        } finally {
-            setLoading(false);
-            setShowMenu(false);
-        }
-    };
-
-    const handleExtender = async (e) => {
-        e.stopPropagation();
-
-        const minutosExtra = prompt('¿Cuántos minutos adicionales necesitas?');
-        if (!minutosExtra || isNaN(minutosExtra)) return;
-
-        const motivo = prompt('Motivo de la extensión:');
-        if (!motivo) return;
-
-        setLoading(true);
-        try {
-            await marketingService.extenderActividad(actividad.id, parseInt(minutosExtra), motivo);
-            if (onRecargar) onRecargar();
-        } catch (error) {
-            console.error('Error extendiendo actividad:', error);
-            alert('Error al extender la actividad');
-        } finally {
-            setLoading(false);
-            setShowMenu(false);
-        }
-    };
-
-    const handleCancelar = async (e) => {
-        e.stopPropagation();
-
-        const motivo = prompt('Motivo de cancelación:');
-        if (!motivo) return;
-
-        if (!window.confirm('¿Estás seguro de cancelar esta actividad?')) return;
-
-        setLoading(true);
-        try {
-            await marketingService.cancelarActividad(actividad.id, motivo);
-            if (onRecargar) onRecargar();
-        } catch (error) {
-            console.error('Error cancelando actividad:', error);
-            alert('Error al cancelar la actividad');
-        } finally {
-            setLoading(false);
-            setShowMenu(false);
-        }
-    };
-
     const handleCardClick = () => {
         setShowModal(true);
         if (onClick) onClick();
@@ -164,8 +99,6 @@ const ActividadCard = ({ actividad, onClick, onRecargar }) => {
                 borderLeftColor: color_hex,
                 backgroundColor: `${color_hex}15` // Color de fondo al 15% de opacidad
             }}
-            onMouseEnter={() => setShowMenu(true)}
-            onMouseLeave={() => setShowMenu(false)}
         >
             {/* Tipo de actividad */}
             <div
@@ -233,48 +166,6 @@ const ActividadCard = ({ actividad, onClick, onRecargar }) => {
             <div className="absolute top-2 right-2">
                 <EstadoBadge estado={estado} />
             </div>
-
-            {/* Menú de acciones */}
-            {showMenu && estado !== 'completada' && estado !== 'cancelada' && (
-                <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-50 p-2">
-                    <div className="flex flex-col gap-1">
-                        {estado === 'en_progreso' && (
-                            <button
-                                onClick={handleCompletar}
-                                disabled={loading}
-                                className="px-3 py-2 text-sm text-left hover:bg-green-50 rounded flex items-center gap-2 text-green-700"
-                            >
-                                ✓ Completar
-                            </button>
-                        )}
-
-                        {(estado === 'en_progreso' || estado === 'pendiente') && (
-                            <button
-                                onClick={handleExtender}
-                                disabled={loading}
-                                className="px-3 py-2 text-sm text-left hover:bg-blue-50 rounded flex items-center gap-2 text-blue-700"
-                            >
-                                ⏱ Extender tiempo
-                            </button>
-                        )}
-
-                        <button
-                            onClick={handleCancelar}
-                            disabled={loading}
-                            className="px-3 py-2 text-sm text-left hover:bg-red-50 rounded flex items-center gap-2 text-red-700"
-                        >
-                            ✕ Cancelar
-                        </button>
-                    </div>
-                </div>
-            )}
-
-            {/* Loading overlay */}
-            {loading && (
-                <div className="absolute inset-0 bg-white bg-opacity-75 flex items-center justify-center rounded-lg">
-                    <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
-                </div>
-            )}
             </div>
 
             {/* Modal de detalles */}

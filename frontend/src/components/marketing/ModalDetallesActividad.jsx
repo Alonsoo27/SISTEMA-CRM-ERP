@@ -9,10 +9,16 @@ import { es } from 'date-fns/locale';
 import marketingService from '../../services/marketingService';
 import ModalEditarActividad from './ModalEditarActividad';
 import ModalTransferirActividad from './ModalTransferirActividad';
+import ModalCancelarActividad from './ModalCancelarActividad';
+import ModalExtenderActividad from './ModalExtenderActividad';
+import ModalCompletarActividad from './ModalCompletarActividad';
 
 const ModalDetallesActividad = ({ actividad, onClose, onActividadActualizada }) => {
     const [showModalEditar, setShowModalEditar] = useState(false);
     const [showModalTransferir, setShowModalTransferir] = useState(false);
+    const [showModalCancelar, setShowModalCancelar] = useState(false);
+    const [showModalExtender, setShowModalExtender] = useState(false);
+    const [showModalCompletar, setShowModalCompletar] = useState(false);
 
     // Obtener usuario del localStorage
     const user = useMemo(() => {
@@ -32,6 +38,9 @@ const ModalDetallesActividad = ({ actividad, onClose, onActividadActualizada }) 
     const esJefeOSuperior = ['JEFE_MARKETING', 'SUPER_ADMIN', 'GERENTE', 'ADMIN'].includes(user?.rol);
     const puedeEditar = esMarketing && actividad.estado !== 'completada' && actividad.estado !== 'cancelada';
     const puedeTransferir = esJefeOSuperior && actividad.estado !== 'completada' && actividad.estado !== 'cancelada';
+    const puedeCompletar = actividad.estado === 'en_progreso';
+    const puedeExtender = (actividad.estado === 'en_progreso' || actividad.estado === 'pendiente');
+    const puedeCancelar = esJefeOSuperior && actividad.estado !== 'completada' && actividad.estado !== 'cancelada';
 
     if (!actividad) return null;
 
@@ -48,6 +57,50 @@ const ModalDetallesActividad = ({ actividad, onClose, onActividadActualizada }) 
         await marketingService.transferirActividad(datos);
         alert('✅ Actividad transferida exitosamente');
         setShowModalTransferir(false);
+        if (onActividadActualizada) onActividadActualizada();
+        onClose();
+    };
+
+    const handleCompletar = () => {
+        setShowModalCompletar(true);
+    };
+
+    const handleCompletarSuccess = async () => {
+        try {
+            await marketingService.completarActividad(actividad.id);
+            alert('✅ Actividad completada exitosamente');
+            setShowModalCompletar(false);
+            if (onActividadActualizada) onActividadActualizada();
+            onClose();
+        } catch (error) {
+            console.error('Error completando actividad:', error);
+            alert('Error al completar la actividad');
+        }
+    };
+
+    const handleExtender = () => {
+        setShowModalExtender(true);
+    };
+
+    const handleExtenderSuccess = async ({ minutos, motivo }) => {
+        try {
+            await marketingService.extenderActividad(actividad.id, minutos, motivo);
+            alert('✅ Actividad extendida exitosamente');
+            setShowModalExtender(false);
+            if (onActividadActualizada) onActividadActualizada();
+            onClose();
+        } catch (error) {
+            console.error('Error extendiendo actividad:', error);
+            alert('Error al extender la actividad');
+        }
+    };
+
+    const handleCancelar = () => {
+        setShowModalCancelar(true);
+    };
+
+    const handleCancelarSuccess = () => {
+        setShowModalCancelar(false);
         if (onActividadActualizada) onActividadActualizada();
         onClose();
     };
@@ -274,11 +327,27 @@ const ModalDetallesActividad = ({ actividad, onClose, onActividadActualizada }) 
                 <div className="p-6 border-t border-gray-200 bg-gray-50">
                     <div className="flex justify-between items-center">
                         {/* Botones de acción */}
-                        <div className="flex gap-2">
+                        <div className="flex gap-2 flex-wrap">
+                            {puedeCompletar && (
+                                <button
+                                    onClick={handleCompletar}
+                                    className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition flex items-center gap-2"
+                                >
+                                    ✓ Completar
+                                </button>
+                            )}
+                            {puedeExtender && (
+                                <button
+                                    onClick={handleExtender}
+                                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition flex items-center gap-2"
+                                >
+                                    ⏱ Extender
+                                </button>
+                            )}
                             {puedeEditar && (
                                 <button
                                     onClick={() => setShowModalEditar(true)}
-                                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition flex items-center gap-2"
+                                    className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition flex items-center gap-2"
                                 >
                                     ✏️ Editar
                                 </button>
@@ -289,6 +358,14 @@ const ModalDetallesActividad = ({ actividad, onClose, onActividadActualizada }) 
                                     className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition flex items-center gap-2"
                                 >
                                     ↗️ Transferir
+                                </button>
+                            )}
+                            {puedeCancelar && (
+                                <button
+                                    onClick={handleCancelar}
+                                    className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition flex items-center gap-2"
+                                >
+                                    ✕ Cancelar
                                 </button>
                             )}
                         </div>
@@ -318,6 +395,30 @@ const ModalDetallesActividad = ({ actividad, onClose, onActividadActualizada }) 
                     actividad={actividad}
                     onClose={() => setShowModalTransferir(false)}
                     onSuccess={handleTransferirSubmit}
+                />
+            )}
+
+            {showModalCancelar && (
+                <ModalCancelarActividad
+                    actividad={actividad}
+                    onClose={() => setShowModalCancelar(false)}
+                    onSuccess={handleCancelarSuccess}
+                />
+            )}
+
+            {showModalExtender && (
+                <ModalExtenderActividad
+                    actividad={actividad}
+                    onClose={() => setShowModalExtender(false)}
+                    onSuccess={handleExtenderSuccess}
+                />
+            )}
+
+            {showModalCompletar && (
+                <ModalCompletarActividad
+                    actividad={actividad}
+                    onClose={() => setShowModalCompletar(false)}
+                    onSuccess={handleCompletarSuccess}
                 />
             )}
         </div>,
