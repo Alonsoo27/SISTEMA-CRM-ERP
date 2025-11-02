@@ -3,7 +3,7 @@
 // Sistema de planificación de actividades
 // ============================================
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import CalendarioActividades from '../components/marketing/CalendarioActividades/CalendarioActividades';
 import IndicadoresMarketing from '../components/marketing/Indicadores/IndicadoresMarketing';
 import ReportesMarketing from '../components/marketing/Reportes/ReportesMarketing';
@@ -11,9 +11,11 @@ import ModalCrearActividad from '../components/marketing/ModalCrearActividad';
 import ModalCargaMasiva from '../components/marketing/ModalCargaMasiva';
 import ModalActividadGrupal from '../components/marketing/ModalActividadGrupal';
 import ModalRegistrarAusencia from '../components/marketing/ModalRegistrarAusencia';
+import ModalGestionarVencida from '../components/marketing/ModalGestionarVencida';
 import SelectorVista from '../components/marketing/SelectorVista';
 import LeyendaColores from '../components/marketing/LeyendaColores';
 import marketingService from '../services/marketingService';
+import notificationService from '../services/notificationService';
 
 const MarketingPage = () => {
     // Obtener usuario del localStorage
@@ -44,6 +46,13 @@ const MarketingPage = () => {
     const [mostrarSelectorInicial, setMostrarSelectorInicial] = useState(false);
     const [calendarioKey, setCalendarioKey] = useState(0); // Para forzar recarga sin refresh
 
+    // Estados para sistema de actividades vencidas
+    const [actividadesVencidas, setActividadesVencidas] = useState([]); // Array de actividades vencidas pendientes
+    const [indiceActividadActual, setIndiceActividadActual] = useState(0); // Índice de la actividad que se está mostrando
+    const [modalVencidaAbierto, setModalVencidaAbierto] = useState(false);
+    const [actividadesPospuestas, setActividadesPospuestas] = useState(new Map()); // Map<actividadId, timestamp>
+    const pollingIntervalRef = useRef(null);
+
     // Permisos dinámicos basados en el rol
     const esMarketing = ['MARKETING_EJECUTOR', 'JEFE_MARKETING'].includes(user?.rol);
     const esJefe = user?.rol === 'JEFE_MARKETING';
@@ -63,7 +72,18 @@ const MarketingPage = () => {
     // Cargar equipo de marketing al montar
     useEffect(() => {
         cargarEquipo();
-    }, []);
+
+        // Solicitar permisos de notificaciones si es usuario de marketing
+        if (esMarketing) {
+            notificationService.ensurePermission().then(granted => {
+                if (granted) {
+                    console.log('✅ Notificaciones de escritorio habilitadas');
+                } else {
+                    console.log('ℹ️ Notificaciones de escritorio no habilitadas');
+                }
+            });
+        }
+    }, [esMarketing]);
 
     const cargarEquipo = async () => {
         try {
@@ -114,6 +134,172 @@ const MarketingPage = () => {
         // Recargar calendario sin refresh de página
         setCalendarioKey(prev => prev + 1);
     };
+
+    // ============================================
+    // SISTEMA DE POLLING PARA ACTIVIDADES VENCIDAS
+    // ============================================
+
+    /**
+     * Verifica si una actividad puede mostrarse (no está pospuesta o ya expiró el postpone)
+     */
+    const puedeMotrarActividad = useCallback((actividadId) => {
+        if (!actividadesPospuestas.has(actividadId)) {
+            return true;
+        }
+
+        const timestampPospuesto = actividadesPospuestas.get(actividadId);
+        const ahora = Date.now();
+        const cincoMinutos = 5 * 60 * 1000;
+
+        // Si ya pasaron 5 minutos desde que se pospuso, puede mostrarse
+        if (ahora - timestampPospuesto >= cincoMinutos) {
+            // Limpiar del Map
+            setActividadesPospuestas(prev => {
+                const nuevo = new Map(prev);
+                nuevo.delete(actividadId);
+                return nuevo;
+            });
+            return true;
+        }
+
+        return false;
+    }, [actividadesPospuestas]);
+
+    /**
+     * Detecta actividades vencidas que requieren gestión
+     */
+    const detectarActividadesVencidas = useCallback(async () => {
+        // Solo verificar si hay un usuario seleccionado y es de marketing
+        if (!usuarioSeleccionado || !esMarketing) {
+            return;
+        }
+
+        // Solo verificar para el usuario logueado (no mostrar alertas de otros usuarios)
+        if (usuarioSeleccionado !== user.id) {
+            return;
+        }
+
+        try {
+            const response = await marketingService.detectarActividadesVencidas(usuarioSeleccionado);
+
+            if (response.success && response.actividades && response.actividades.length > 0) {
+                // Filtrar TODAS las actividades que no estén pospuestas
+                const actividadesParaMostrar = response.actividades.filter(act =>
+                    puedeMotrarActividad(act.id)
+                );
+
+                // Si hay actividades pendientes y NO hay un modal abierto actualmente
+                if (actividadesParaMostrar.length > 0 && !modalVencidaAbierto) {
+                    console.log(`📋 ${actividadesParaMostrar.length} actividad(es) vencida(s) detectada(s)`);
+
+                    // 🔔 NOTIFICACIÓN DE ESCRITORIO
+                    if (actividadesParaMostrar.length === 1) {
+                        notificationService.notificarActividadVencida(actividadesParaMostrar[0]);
+                    } else {
+                        notificationService.notificarActividadesVencidas(actividadesParaMostrar.length);
+                    }
+
+                    setActividadesVencidas(actividadesParaMostrar);
+                    setIndiceActividadActual(0);
+                    setModalVencidaAbierto(true);
+                }
+            }
+        } catch (error) {
+            console.error('Error detectando actividades vencidas:', error);
+            // No mostrar error al usuario para no interrumpir su flujo
+        }
+    }, [usuarioSeleccionado, esMarketing, user.id, puedeMotrarActividad, modalVencidaAbierto]);
+
+    /**
+     * Gestionar actividad vencida con una acción específica
+     */
+    const handleGestionarVencida = async (accion, datos) => {
+        try {
+            const actividadActual = actividadesVencidas[indiceActividadActual];
+
+            const response = await marketingService.gestionarActividadVencida(
+                actividadActual.id,
+                accion,
+                datos
+            );
+
+            if (response.success) {
+                // Si la acción fue "posponer", registrar en el Map
+                if (accion === 'posponer') {
+                    setActividadesPospuestas(prev => {
+                        const nuevo = new Map(prev);
+                        nuevo.set(actividadActual.id, Date.now());
+                        return nuevo;
+                    });
+                }
+
+                // Recargar calendario
+                setCalendarioKey(prev => prev + 1);
+
+                // Verificar si hay más actividades pendientes
+                const siguienteIndice = indiceActividadActual + 1;
+                const hayMasActividades = siguienteIndice < actividadesVencidas.length;
+
+                if (hayMasActividades) {
+                    // Avanzar a la siguiente actividad inmediatamente
+                    console.log(`✅ Actividad ${indiceActividadActual + 1}/${actividadesVencidas.length} gestionada. Mostrando siguiente...`);
+                    setIndiceActividadActual(siguienteIndice);
+                    // El modal permanece abierto
+                } else {
+                    // No hay más actividades, cerrar modal
+                    console.log(`✅ Todas las actividades vencidas han sido gestionadas (${actividadesVencidas.length}/${actividadesVencidas.length})`);
+                    setModalVencidaAbierto(false);
+                    setActividadesVencidas([]);
+                    setIndiceActividadActual(0);
+
+                    // Mostrar mensaje de éxito final
+                    alert('✓ Todas las actividades vencidas han sido gestionadas');
+                }
+            }
+        } catch (error) {
+            console.error('Error gestionando actividad vencida:', error);
+            throw error; // Re-throw para que el modal maneje el error
+        }
+    };
+
+    // ============================================
+    // EFECTO: Iniciar/detener polling
+    // ============================================
+
+    useEffect(() => {
+        // Solo iniciar polling si:
+        // 1. Hay un usuario seleccionado
+        // 2. Es el usuario logueado (no alertar por otros usuarios)
+        // 3. Es usuario de marketing
+        const debeIniciarPolling = usuarioSeleccionado === user.id && esMarketing;
+
+        if (debeIniciarPolling) {
+            // Verificar inmediatamente al cargar
+            detectarActividadesVencidas();
+
+            // Luego verificar cada 30 segundos
+            pollingIntervalRef.current = setInterval(() => {
+                detectarActividadesVencidas();
+            }, 30000); // 30 segundos
+
+            console.log('✅ Polling de actividades vencidas iniciado');
+        } else {
+            // Limpiar polling si cambia de usuario o no aplica
+            if (pollingIntervalRef.current) {
+                clearInterval(pollingIntervalRef.current);
+                pollingIntervalRef.current = null;
+                console.log('⏸️ Polling de actividades vencidas detenido');
+            }
+        }
+
+        // Cleanup al desmontar o cambiar dependencias
+        return () => {
+            if (pollingIntervalRef.current) {
+                clearInterval(pollingIntervalRef.current);
+                pollingIntervalRef.current = null;
+            }
+        };
+    }, [usuarioSeleccionado, user.id, esMarketing, detectarActividadesVencidas]);
 
     // Mostrar loading mientras carga el equipo
     if (loading) {
@@ -444,6 +630,21 @@ const MarketingPage = () => {
                 <ModalRegistrarAusencia
                     onClose={() => setModalAusenciaAbierto(false)}
                     onSuccess={handleActividadCreada}
+                />
+            )}
+
+            {/* Modal para gestionar actividades vencidas */}
+            {modalVencidaAbierto && actividadesVencidas.length > 0 && (
+                <ModalGestionarVencida
+                    actividad={actividadesVencidas[indiceActividadActual]}
+                    indiceActual={indiceActividadActual + 1}
+                    totalActividades={actividadesVencidas.length}
+                    onClose={() => {
+                        setModalVencidaAbierto(false);
+                        setActividadesVencidas([]);
+                        setIndiceActividadActual(0);
+                    }}
+                    onSuccess={handleGestionarVencida}
                 />
             )}
         </div>
