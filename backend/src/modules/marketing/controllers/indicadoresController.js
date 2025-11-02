@@ -4,6 +4,7 @@
 // ============================================
 
 const { query } = require('../../../config/database');
+const { GRUPOS_ROLES } = require('../../../config/roles');
 
 class IndicadoresController {
     /**
@@ -13,6 +14,16 @@ class IndicadoresController {
         try {
             const { usuarioId } = req.params;
             const { periodo = 'mes_actual' } = req.query;
+            const userSolicitante = req.user;
+
+            // Validar que solo puede ver sus propios datos (excepto jefes y ejecutivos)
+            if (parseInt(usuarioId) !== userSolicitante.id &&
+                !GRUPOS_ROLES.JEFES_Y_EJECUTIVOS.includes(userSolicitante.rol)) {
+                return res.status(403).json({
+                    success: false,
+                    message: 'No tienes permiso para ver indicadores de otro usuario'
+                });
+            }
 
             // Calcular rango de fechas según período
             const { fechaInicio, fechaFin } = calcularRangoFechas(periodo);
@@ -101,6 +112,35 @@ class IndicadoresController {
 
             const extensiones = parseInt(extensionesResult.rows[0]?.total || 0);
 
+            // Actividades vencidas (crítico)
+            const vencidasResult = await query(`
+                SELECT COUNT(*) as total
+                FROM actividades_marketing
+                WHERE usuario_id = $1
+                AND activo = true
+                AND fue_vencida = true
+                AND created_at BETWEEN $2 AND $3
+            `, [usuarioId, fechaInicio, fechaFin]);
+
+            const actividadesVencidas = parseInt(vencidasResult.rows[0]?.total || 0);
+
+            // Actividades transferidas (indica carga desbalanceada)
+            const transferidasResult = await query(`
+                SELECT COUNT(*) as total
+                FROM actividades_marketing
+                WHERE usuario_id = $1
+                AND activo = true
+                AND transferida_de IS NOT NULL
+                AND created_at BETWEEN $2 AND $3
+            `, [usuarioId, fechaInicio, fechaFin]);
+
+            const actividadesTransferidas = parseInt(transferidasResult.rows[0]?.total || 0);
+
+            // Tasa de vencimiento (%)
+            const tasaVencimiento = totales.total > 0
+                ? ((actividadesVencidas / totales.total) * 100).toFixed(1)
+                : 0;
+
             res.json({
                 success: true,
                 data: {
@@ -111,7 +151,10 @@ class IndicadoresController {
                     tasaCompletitud: parseFloat(tasaCompletitud),
                     prioritariasCompletadas,
                     tiempoPromedio,
-                    extensiones
+                    extensiones,
+                    actividadesVencidas,
+                    actividadesTransferidas,
+                    tasaVencimiento: parseFloat(tasaVencimiento)
                 }
             });
 
@@ -132,18 +175,30 @@ class IndicadoresController {
         try {
             const { usuarioId } = req.params;
             const { periodo = 'mes_actual' } = req.query;
+            const userSolicitante = req.user;
+
+            // Validar que solo puede ver sus propios datos (excepto jefes y ejecutivos)
+            if (parseInt(usuarioId) !== userSolicitante.id &&
+                !GRUPOS_ROLES.JEFES_Y_EJECUTIVOS.includes(userSolicitante.rol)) {
+                return res.status(403).json({
+                    success: false,
+                    message: 'No tienes permiso para ver indicadores de otro usuario'
+                });
+            }
 
             const { fechaInicio, fechaFin } = calcularRangoFechas(periodo);
 
-            // Tiempo total planeado vs real
+            // Tiempo total planeado vs real (solo actividades completadas)
             const tiemposResult = await query(`
                 SELECT
                     SUM(duracion_planeada_minutos) as total_planeado,
-                    SUM(COALESCE(duracion_real_minutos, duracion_planeada_minutos)) as total_real,
+                    SUM(duracion_real_minutos) as total_real,
                     SUM(tiempo_adicional_minutos) as total_adicional
                 FROM actividades_marketing
                 WHERE usuario_id = $1
                 AND activo = true
+                AND estado = 'completada'
+                AND duracion_real_minutos IS NOT NULL
                 AND created_at BETWEEN $2 AND $3
             `, [usuarioId, fechaInicio, fechaFin]);
 
@@ -162,6 +217,7 @@ class IndicadoresController {
                 FROM actividades_marketing
                 WHERE usuario_id = $1
                 AND activo = true
+                AND estado = 'completada'
                 AND duracion_real_minutos > duracion_planeada_minutos
                 AND created_at BETWEEN $2 AND $3
             `, [usuarioId, fechaInicio, fechaFin]);
@@ -218,17 +274,18 @@ class IndicadoresController {
                     SUM(CASE WHEN am.estado = 'pendiente' THEN 1 ELSE 0 END) as pendientes,
                     SUM(CASE WHEN am.estado = 'en_progreso' THEN 1 ELSE 0 END) as en_progreso,
                     AVG(CASE
-                        WHEN am.duracion_real_minutos IS NOT NULL
+                        WHEN am.duracion_real_minutos IS NOT NULL AND am.estado = 'completada'
                         THEN am.duracion_real_minutos::float / NULLIF(am.duracion_planeada_minutos, 0)
-                        ELSE 1
+                        ELSE NULL
                     END) * 100 as eficiencia_promedio
                 FROM usuarios u
                 INNER JOIN actividades_marketing am ON u.id = am.usuario_id
                 WHERE am.activo = true
                 AND am.created_at BETWEEN $1 AND $2
                 AND u.deleted_at IS NULL
+                AND u.activo = true
                 GROUP BY u.id, u.nombre, u.apellido
-                ORDER BY completadas DESC, eficiencia_promedio ASC
+                ORDER BY completadas DESC, total_actividades DESC
                 LIMIT 10
             `, [fechaInicio, fechaFin]);
 
@@ -255,7 +312,9 @@ class IndicadoresController {
                     fechaFin,
                     ranking: rankingResult.rows.map(r => ({
                         ...r,
-                        eficiencia_promedio: parseFloat(r.eficiencia_promedio || 100).toFixed(1)
+                        eficiencia_promedio: r.eficiencia_promedio
+                            ? parseFloat(r.eficiencia_promedio).toFixed(1)
+                            : 'N/A'
                     })),
                     globales: {
                         miembrosActivos: parseInt(globales.miembros_activos || 0),
@@ -291,8 +350,8 @@ class IndicadoresController {
                     categoria_principal,
                     COUNT(*) as total_actividades,
                     SUM(CASE WHEN estado = 'completada' THEN 1 ELSE 0 END) as completadas,
-                    SUM(duracion_planeada_minutos) as minutos_totales,
-                    AVG(duracion_planeada_minutos) as duracion_promedio,
+                    SUM(COALESCE(duracion_real_minutos, duracion_planeada_minutos)) as minutos_totales,
+                    AVG(COALESCE(duracion_real_minutos, duracion_planeada_minutos)) as duracion_promedio,
                     SUM(CASE WHEN tiempo_adicional_minutos > 0 THEN 1 ELSE 0 END) as con_extensiones
                 FROM actividades_marketing
                 WHERE activo = true

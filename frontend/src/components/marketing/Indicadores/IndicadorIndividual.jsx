@@ -10,7 +10,16 @@ const IndicadorIndividual = ({ datos }) => {
         return null;
     }
 
-    const { totales, tasaCompletitud, prioritariasCompletadas, tiempoPromedio, extensiones } = datos;
+    const {
+        totales,
+        tasaCompletitud,
+        prioritariasCompletadas,
+        tiempoPromedio,
+        extensiones,
+        actividadesVencidas,
+        actividadesTransferidas,
+        tasaVencimiento
+    } = datos;
     console.log('✅ IndicadorIndividual renderizando con:', { totales, tasaCompletitud });
 
     return (
@@ -123,9 +132,31 @@ const IndicadorIndividual = ({ datos }) => {
                     <span className="text-sm text-gray-600">⏰ Tiempo promedio (real)</span>
                     <span className="text-sm font-bold text-gray-900">{tiempoPromedio.real} min</span>
                 </div>
-                <div className="flex justify-between items-center">
+                <div className="flex justify-between items-center pb-2 border-b">
                     <span className="text-sm text-gray-600">➕ Extensiones solicitadas</span>
                     <span className="text-sm font-bold text-gray-900">{extensiones}</span>
+                </div>
+
+                {/* Indicadores críticos */}
+                <div className="flex justify-between items-center pb-2 border-b">
+                    <span className="text-sm text-gray-600 flex items-center gap-1">
+                        ⚠️ Actividades vencidas
+                    </span>
+                    <span className={`text-sm font-bold ${
+                        actividadesVencidas > 0 ? 'text-red-600' : 'text-green-600'
+                    }`}>
+                        {actividadesVencidas} ({tasaVencimiento}%)
+                    </span>
+                </div>
+                <div className="flex justify-between items-center">
+                    <span className="text-sm text-gray-600 flex items-center gap-1">
+                        🔄 Actividades transferidas
+                    </span>
+                    <span className={`text-sm font-bold ${
+                        actividadesTransferidas > 0 ? 'text-amber-600' : 'text-gray-900'
+                    }`}>
+                        {actividadesTransferidas}
+                    </span>
                 </div>
             </div>
         </div>

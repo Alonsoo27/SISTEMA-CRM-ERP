@@ -3,17 +3,44 @@
 // Dashboard de métricas y análisis
 // ============================================
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import marketingService from '../../../services/marketingService';
 import IndicadorIndividual from './IndicadorIndividual';
 import IndicadorTiempo from './IndicadorTiempo';
 import IndicadorEquipo from './IndicadorEquipo';
 import IndicadorCategorias from './IndicadorCategorias';
 
-const IndicadoresMarketing = ({ usuarioId, esJefe }) => {
+const IndicadoresMarketing = ({ usuarioId: usuarioIdProp, esJefe }) => {
+    // Obtener usuario logueado
+    const user = useMemo(() => {
+        try {
+            const userData = JSON.parse(localStorage.getItem('user') || '{}');
+            return {
+                id: userData.id,
+                nombre: userData.nombre_completo || `${userData.nombre || ''} ${userData.apellido || ''}`.trim(),
+                rol: userData.rol?.nombre || userData.rol
+            };
+        } catch (error) {
+            console.error('Error al obtener usuario:', error);
+            return { id: null, nombre: '', rol: '' };
+        }
+    }, []);
+
+    // Permisos
+    const esMarketing = ['MARKETING_EJECUTOR', 'JEFE_MARKETING'].includes(user?.rol);
+    const esEjecutivo = ['SUPER_ADMIN', 'ADMIN', 'GERENTE'].includes(user?.rol);
+    const puedeVerOtros = esJefe || esEjecutivo;
+
+    // Usuario seleccionado en el selector (solo para jefes y ejecutivos)
+    const [usuarioSeleccionado, setUsuarioSeleccionado] = useState(
+        esMarketing && !puedeVerOtros ? user.id : usuarioIdProp
+    );
+
+    // Estados de carga
     const [periodo, setPeriodo] = useState('mes_actual');
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
+    const [equipoMarketing, setEquipoMarketing] = useState([]);
 
     // Estados para cada indicador
     const [datosIndividual, setDatosIndividual] = useState(null);
@@ -21,28 +48,45 @@ const IndicadoresMarketing = ({ usuarioId, esJefe }) => {
     const [datosEquipo, setDatosEquipo] = useState(null);
     const [datosCategorias, setDatosCategorias] = useState(null);
 
+    // Cargar equipo de marketing si puede ver otros
+    useEffect(() => {
+        if (puedeVerOtros) {
+            cargarEquipo();
+        }
+    }, [puedeVerOtros]);
+
+    const cargarEquipo = async () => {
+        try {
+            const response = await marketingService.obtenerEquipoMarketing();
+            const equipoData = Array.isArray(response) ? response : (response.data || []);
+            setEquipoMarketing(equipoData);
+        } catch (err) {
+            console.error('Error cargando equipo:', err);
+        }
+    };
+
     // Cargar todos los indicadores
     useEffect(() => {
         cargarIndicadores();
-    }, [periodo, usuarioId]);
+    }, [periodo, usuarioSeleccionado]);
 
     const cargarIndicadores = async () => {
-        if (!usuarioId) {
-            console.log('⚠️ No hay usuarioId, abortando carga de indicadores');
+        if (!usuarioSeleccionado) {
+            console.log('⚠️ No hay usuario seleccionado, abortando carga de indicadores');
             return;
         }
 
-        console.log('📊 Iniciando carga de indicadores para usuario:', usuarioId, 'período:', periodo);
+        console.log('📊 Iniciando carga de indicadores para usuario:', usuarioSeleccionado, 'período:', periodo);
         setLoading(true);
         setError(null);
 
         try {
             // Cargar en paralelo
             const [individual, tiempo, equipo, categorias] = await Promise.all([
-                marketingService.obtenerIndicadoresIndividual(usuarioId, periodo),
-                marketingService.obtenerAnalisisTiempo(usuarioId, periodo),
+                marketingService.obtenerIndicadoresIndividual(usuarioSeleccionado, periodo),
+                marketingService.obtenerAnalisisTiempo(usuarioSeleccionado, periodo),
                 marketingService.obtenerIndicadoresEquipo(periodo),
-                marketingService.obtenerAnalisisCategorias(periodo, usuarioId)
+                marketingService.obtenerAnalisisCategorias(periodo, usuarioSeleccionado)
             ]);
 
             console.log('✅ Datos recibidos:', {
@@ -133,18 +177,49 @@ const IndicadoresMarketing = ({ usuarioId, esJefe }) => {
                     </p>
                 </div>
 
-                {/* Selector de período */}
-                <select
-                    value={periodo}
-                    onChange={(e) => setPeriodo(e.target.value)}
-                    className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                >
-                    <option value="semana_actual">Esta semana</option>
-                    <option value="mes_actual">Este mes</option>
-                    <option value="trimestre_actual">Este trimestre</option>
-                    <option value="anio_actual">Este año</option>
-                    <option value="personalizado">Personalizado</option>
-                </select>
+                <div className="flex items-center gap-4">
+                    {/* Selector de usuario - Solo para jefes y ejecutivos */}
+                    {puedeVerOtros && (
+                        <div className="flex items-center gap-2">
+                            <label className="text-sm font-medium text-gray-700">
+                                Ver indicadores de:
+                            </label>
+                            <select
+                                value={usuarioSeleccionado || ''}
+                                onChange={(e) => setUsuarioSeleccionado(parseInt(e.target.value))}
+                                className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 min-w-[220px]"
+                            >
+                                {/* Si eres de marketing (jefe), puedes ver "Mis indicadores" */}
+                                {esMarketing && (
+                                    <option value={user.id}>Mis indicadores</option>
+                                )}
+
+                                {/* Mostrar equipo de marketing */}
+                                {equipoMarketing
+                                    .filter(m => ['MARKETING_EJECUTOR', 'JEFE_MARKETING'].includes(m.rol))
+                                    .filter(m => !esMarketing || m.id !== user.id)
+                                    .map(miembro => (
+                                        <option key={miembro.id} value={miembro.id}>
+                                            {miembro.nombre_completo}
+                                        </option>
+                                    ))
+                                }
+                            </select>
+                        </div>
+                    )}
+
+                    {/* Selector de período */}
+                    <select
+                        value={periodo}
+                        onChange={(e) => setPeriodo(e.target.value)}
+                        className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    >
+                        <option value="semana_actual">Esta semana</option>
+                        <option value="mes_actual">Este mes</option>
+                        <option value="trimestre_actual">Este trimestre</option>
+                        <option value="anio_actual">Este año</option>
+                    </select>
+                </div>
             </div>
 
             {/* Grid de indicadores - 2x2 */}
