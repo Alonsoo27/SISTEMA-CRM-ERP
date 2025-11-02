@@ -325,13 +325,15 @@ class ActividadesController {
             const codigo = await actividadesService.generarCodigoActividad();
 
             // Insertar actividad
+            const esProgramada = !!fecha_inicio; // true si se especificó fecha_inicio, false si fue automática
+
             const insertQuery = `
                 INSERT INTO actividades_marketing (
                     codigo, categoria_principal, subcategoria, descripcion,
-                    usuario_id, creado_por, tipo, es_prioritaria,
+                    usuario_id, creado_por, tipo, es_prioritaria, es_programada,
                     fecha_inicio_planeada, fecha_fin_planeada, duracion_planeada_minutos,
                     color_hex, estado
-                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 'pendiente')
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, 'pendiente')
                 RETURNING *
             `;
 
@@ -344,6 +346,7 @@ class ActividadesController {
                 usuarioLogueado,
                 'individual',
                 es_prioritaria,
+                esProgramada,
                 fechaInicioPlaneada,
                 fechaFinPlaneada,
                 duracion_minutos,
@@ -542,10 +545,10 @@ class ActividadesController {
                 const insertQuery = `
                     INSERT INTO actividades_marketing (
                         codigo, categoria_principal, subcategoria, descripcion,
-                        usuario_id, creado_por, tipo, es_grupal, es_prioritaria,
+                        usuario_id, creado_por, tipo, es_grupal, es_prioritaria, es_programada,
                         participantes_ids, fecha_inicio_planeada, fecha_fin_planeada,
                         duracion_planeada_minutos, color_hex, estado
-                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, 'pendiente')
+                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, 'pendiente')
                     RETURNING *
                 `;
 
@@ -559,6 +562,7 @@ class ActividadesController {
                     'grupal',
                     true,
                     es_prioritaria, // Ahora es configurable
+                    true, // Las actividades grupales SIEMPRE son programadas (fecha_inicio obligatoria)
                     participantes_ids,
                     fechaInicioPlaneada,
                     fechaFinPlaneada,
@@ -906,13 +910,13 @@ class ActividadesController {
     }
 
     /**
-     * Cancelar actividad
+     * Cancelar actividad (con opción de optimización de calendario)
      */
     static async cancelarActividad(req, res) {
         try {
             const { id } = req.params;
             const { user_id } = req.user;
-            const { motivo } = req.body;
+            const { motivo, optimizar_calendario = false } = req.body;
 
             const result = await query(`
                 UPDATE actividades_marketing SET
@@ -934,10 +938,20 @@ class ActividadesController {
                 });
             }
 
+            const actividadCancelada = result.rows[0];
+
+            // Si se solicita optimización de calendario, adelantar actividades posteriores
+            let resultadoOptimizacion = null;
+            if (optimizar_calendario) {
+                const optimizacionService = require('../services/optimizacionService');
+                resultadoOptimizacion = await optimizacionService.ejecutarOptimizacion(id);
+            }
+
             res.json({
                 success: true,
                 message: 'Actividad cancelada exitosamente',
-                data: result.rows[0]
+                data: actividadCancelada,
+                optimizacion: resultadoOptimizacion
             });
 
         } catch (error) {
@@ -1180,6 +1194,163 @@ class ActividadesController {
             res.status(500).json({
                 success: false,
                 message: 'Error al procesar huecos pendientes',
+                error: process.env.NODE_ENV === 'development' ? error.message : undefined
+            });
+        }
+    }
+
+    /**
+     * Analizar optimización de calendario antes de cancelar
+     * Retorna qué actividades se adelantarían sin ejecutar el adelantamiento
+     */
+    static async analizarOptimizacion(req, res) {
+        try {
+            const { id } = req.params;
+            const optimizacionService = require('../services/optimizacionService');
+
+            const analisis = await optimizacionService.analizarOptimizacion(id);
+
+            res.json({
+                success: true,
+                data: analisis
+            });
+
+        } catch (error) {
+            console.error('Error analizando optimización:', error);
+            res.status(500).json({
+                success: false,
+                message: 'Error al analizar optimización',
+                error: process.env.NODE_ENV === 'development' ? error.message : undefined
+            });
+        }
+    }
+
+    /**
+     * Detectar actividades vencidas que requieren gestión
+     */
+    static async detectarActividadesVencidas(req, res) {
+        try {
+            const { usuarioId } = req.params;
+            const { user_id, rol } = req.user;
+
+            // Validar permisos
+            const esJefeOSuperior = ['JEFE_MARKETING', 'SUPER_ADMIN', 'GERENTE', 'ADMIN'].includes(rol);
+            if (!esJefeOSuperior && parseInt(user_id) !== parseInt(usuarioId)) {
+                return res.status(403).json({
+                    success: false,
+                    message: 'No tienes permiso para ver las actividades de este usuario'
+                });
+            }
+
+            const gestionVencidasService = require('../services/gestionVencidasService');
+            const resultado = await gestionVencidasService.detectarActividadesRequierenGestion(usuarioId);
+
+            res.json(resultado);
+
+        } catch (error) {
+            console.error('Error detectando actividades vencidas:', error);
+            res.status(500).json({
+                success: false,
+                message: 'Error al detectar actividades vencidas',
+                error: process.env.NODE_ENV === 'development' ? error.message : undefined
+            });
+        }
+    }
+
+    /**
+     * Detectar actividades próximas a vencer (15 minutos antes)
+     * Para notificaciones preventivas
+     */
+    static async detectarActividadesProximasVencer(req, res) {
+        try {
+            const { usuarioId } = req.params;
+            const { user_id, rol } = req.user;
+            const { minutosAntes = 15 } = req.query; // Por defecto 15 minutos
+
+            // Validar permisos
+            const esJefeOSuperior = ['JEFE_MARKETING', 'SUPER_ADMIN', 'GERENTE', 'ADMIN'].includes(rol);
+            if (!esJefeOSuperior && parseInt(user_id) !== parseInt(usuarioId)) {
+                return res.status(403).json({
+                    success: false,
+                    message: 'No tienes permiso para ver las actividades de este usuario'
+                });
+            }
+
+            // Calcular ventana de tiempo
+            const ahora = new Date();
+            const tiempoLimite = new Date(ahora.getTime() + (minutosAntes * 60 * 1000));
+
+            // Buscar actividades que vencen entre ahora y los próximos X minutos
+            const result = await query(`
+                SELECT
+                    id,
+                    codigo,
+                    categoria_principal,
+                    subcategoria,
+                    descripcion,
+                    estado,
+                    fecha_fin_planeada,
+                    duracion_planeada_minutos,
+                    es_prioritaria,
+                    color_hex,
+                    EXTRACT(EPOCH FROM (fecha_fin_planeada - NOW())) / 60 AS minutos_restantes
+                FROM actividades_marketing
+                WHERE usuario_id = $1
+                AND activo = true
+                AND estado IN ('pendiente', 'en_progreso')
+                AND fecha_fin_planeada > NOW()
+                AND fecha_fin_planeada <= $2
+                ORDER BY fecha_fin_planeada ASC
+            `, [usuarioId, tiempoLimite]);
+
+            res.json({
+                success: true,
+                actividades: result.rows,
+                minutosVentana: minutosAntes,
+                cantidad: result.rows.length
+            });
+
+        } catch (error) {
+            console.error('Error detectando actividades próximas a vencer:', error);
+            res.status(500).json({
+                success: false,
+                message: 'Error al detectar actividades próximas a vencer',
+                error: process.env.NODE_ENV === 'development' ? error.message : undefined
+            });
+        }
+    }
+
+    /**
+     * Gestionar actividad vencida
+     */
+    static async gestionarActividadVencida(req, res) {
+        try {
+            const { id } = req.params;
+            const { user_id } = req.user;
+            const { accion, datos } = req.body;
+
+            if (!accion) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'La acción es obligatoria'
+                });
+            }
+
+            const gestionVencidasService = require('../services/gestionVencidasService');
+            const resultado = await gestionVencidasService.gestionarActividadVencida(
+                id,
+                user_id,
+                accion,
+                datos || {}
+            );
+
+            res.json(resultado);
+
+        } catch (error) {
+            console.error('Error gestionando actividad vencida:', error);
+            res.status(500).json({
+                success: false,
+                message: error.message || 'Error al gestionar actividad vencida',
                 error: process.env.NODE_ENV === 'development' ? error.message : undefined
             });
         }

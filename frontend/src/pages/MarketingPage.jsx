@@ -53,6 +53,10 @@ const MarketingPage = () => {
     const [actividadesPospuestas, setActividadesPospuestas] = useState(new Map()); // Map<actividadId, timestamp>
     const pollingIntervalRef = useRef(null);
 
+    // Estados para notificaciones preventivas (15 min antes)
+    const [actividadesNotificadas, setActividadesNotificadas] = useState(new Set()); // Set<actividadId> para evitar duplicados
+    const pollingPreventivoRef = useRef(null);
+
     // Permisos dinámicos basados en el rol
     const esMarketing = ['MARKETING_EJECUTOR', 'JEFE_MARKETING'].includes(user?.rol);
     const esJefe = user?.rol === 'JEFE_MARKETING';
@@ -73,17 +77,15 @@ const MarketingPage = () => {
     useEffect(() => {
         cargarEquipo();
 
-        // Solicitar permisos de notificaciones si es usuario de marketing
-        if (esMarketing) {
-            notificationService.ensurePermission().then(granted => {
-                if (granted) {
-                    console.log('✅ Notificaciones de escritorio habilitadas');
-                } else {
-                    console.log('ℹ️ Notificaciones de escritorio no habilitadas');
-                }
-            });
-        }
-    }, [esMarketing]);
+        // Solicitar permisos de notificaciones a TODOS los usuarios que entran al módulo
+        notificationService.ensurePermission().then(granted => {
+            if (granted) {
+                console.log('✅ Notificaciones de escritorio habilitadas');
+            } else {
+                console.log('ℹ️ Notificaciones de escritorio no habilitadas');
+            }
+        });
+    }, []);
 
     const cargarEquipo = async () => {
         try {
@@ -211,6 +213,44 @@ const MarketingPage = () => {
     }, [usuarioSeleccionado, esMarketing, user.id, puedeMotrarActividad, modalVencidaAbierto]);
 
     /**
+     * Detectar actividades próximas a vencer (notificación preventiva 15 min antes)
+     */
+    const detectarActividadesProximasVencer = useCallback(async () => {
+        // Solo verificar si hay un usuario seleccionado y es de marketing
+        if (!usuarioSeleccionado || !esMarketing) {
+            return;
+        }
+
+        // Solo verificar para el usuario logueado (no mostrar alertas de otros usuarios)
+        if (usuarioSeleccionado !== user.id) {
+            return;
+        }
+
+        try {
+            const response = await marketingService.detectarActividadesProximasVencer(usuarioSeleccionado, 15);
+
+            if (response.success && response.actividades && response.actividades.length > 0) {
+                response.actividades.forEach(actividad => {
+                    // Solo notificar si no ha sido notificada antes
+                    if (!actividadesNotificadas.has(actividad.id)) {
+                        const minutosRestantes = Math.round(actividad.minutos_restantes);
+                        console.log(`⏰ Actividad próxima a vencer: "${actividad.descripcion}" en ${minutosRestantes} minutos`);
+
+                        // Notificar en escritorio
+                        notificationService.notificarActividadProximaVencer(actividad, minutosRestantes);
+
+                        // Marcar como notificada
+                        setActividadesNotificadas(prev => new Set(prev).add(actividad.id));
+                    }
+                });
+            }
+        } catch (error) {
+            console.error('Error detectando actividades próximas a vencer:', error);
+            // No mostrar error al usuario para no interrumpir su flujo
+        }
+    }, [usuarioSeleccionado, esMarketing, user.id, actividadesNotificadas]);
+
+    /**
      * Gestionar actividad vencida con una acción específica
      */
     const handleGestionarVencida = async (accion, datos) => {
@@ -263,7 +303,7 @@ const MarketingPage = () => {
     };
 
     // ============================================
-    // EFECTO: Iniciar/detener polling
+    // EFECTO: Iniciar/detener polling (vencidas)
     // ============================================
 
     useEffect(() => {
@@ -300,6 +340,41 @@ const MarketingPage = () => {
             }
         };
     }, [usuarioSeleccionado, user.id, esMarketing, detectarActividadesVencidas]);
+
+    // ============================================
+    // EFECTO: Polling preventivo (15 min antes de vencer)
+    // ============================================
+
+    useEffect(() => {
+        const debeIniciarPolling = usuarioSeleccionado === user.id && esMarketing;
+
+        if (debeIniciarPolling) {
+            // Verificar inmediatamente al cargar
+            detectarActividadesProximasVencer();
+
+            // Luego verificar cada 2 minutos (más frecuente para alertas preventivas)
+            pollingPreventivoRef.current = setInterval(() => {
+                detectarActividadesProximasVencer();
+            }, 120000); // 2 minutos
+
+            console.log('✅ Polling preventivo (15 min antes) iniciado');
+        } else {
+            // Limpiar polling si cambia de usuario o no aplica
+            if (pollingPreventivoRef.current) {
+                clearInterval(pollingPreventivoRef.current);
+                pollingPreventivoRef.current = null;
+                console.log('⏸️ Polling preventivo detenido');
+            }
+        }
+
+        // Cleanup al desmontar o cambiar dependencias
+        return () => {
+            if (pollingPreventivoRef.current) {
+                clearInterval(pollingPreventivoRef.current);
+                pollingPreventivoRef.current = null;
+            }
+        };
+    }, [usuarioSeleccionado, user.id, esMarketing, detectarActividadesProximasVencer]);
 
     // Mostrar loading mientras carga el equipo
     if (loading) {

@@ -135,6 +135,43 @@ router.delete('/actividades/:id',
     ActividadesController.cancelarActividad
 );
 
+/**
+ * Analizar optimización de calendario
+ * Retorna qué actividades se adelantarían al cancelar una actividad
+ */
+router.get('/actividades/:id/analizar-optimizacion',
+    authenticateToken,
+    requireRole(GRUPOS_ROLES.MARKETING_COMPLETO),
+    ActividadesController.analizarOptimizacion
+);
+
+/**
+ * Detectar actividades vencidas que requieren gestión
+ */
+router.get('/actividades-vencidas/:usuarioId/detectar',
+    authenticateToken,
+    requireRole(GRUPOS_ROLES.MARKETING_COMPLETO),
+    ActividadesController.detectarActividadesVencidas
+);
+
+/**
+ * Detectar actividades próximas a vencer (notificaciones preventivas)
+ */
+router.get('/actividades-proximas-vencer/:usuarioId/detectar',
+    authenticateToken,
+    requireRole(GRUPOS_ROLES.MARKETING_COMPLETO),
+    ActividadesController.detectarActividadesProximasVencer
+);
+
+/**
+ * Gestionar actividad vencida
+ */
+router.post('/actividades/:id/gestionar-vencida',
+    authenticateToken,
+    requireRole(GRUPOS_ROLES.MARKETING_COMPLETO),
+    ActividadesController.gestionarActividadVencida
+);
+
 // ============================================
 // VISTAS DE CALENDARIO
 // ============================================

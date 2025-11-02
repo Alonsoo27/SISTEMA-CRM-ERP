@@ -98,11 +98,23 @@ const marketingService = {
     },
 
     /**
+     * Analizar optimización de calendario
+     * Retorna qué actividades se adelantarían al cancelar
+     */
+    async analizarOptimizacion(id) {
+        const response = await apiClient.get(`/marketing/actividades/${id}/analizar-optimizacion`);
+        return response.data;
+    },
+
+    /**
      * Cancelar actividad
      */
-    async cancelarActividad(id, motivo) {
+    async cancelarActividad(id, motivo, optimizarCalendario = false) {
         const response = await apiClient.delete(`/marketing/actividades/${id}`, {
-            data: { motivo }
+            data: {
+                motivo,
+                optimizar_calendario: optimizarCalendario
+            }
         });
         return response.data;
     },
@@ -308,6 +320,41 @@ const marketingService = {
      */
     async obtenerActividadesVencidas(usuarioId) {
         const response = await apiClient.get(`/marketing/actividades-vencidas/${usuarioId}`);
+        return response.data;
+    },
+
+    /**
+     * Detectar actividades que requieren gestión inmediata
+     * Retorna actividades vencidas clasificadas por ventana de tiempo
+     */
+    async detectarActividadesVencidas(usuarioId) {
+        const response = await apiClient.get(`/marketing/actividades-vencidas/${usuarioId}/detectar`);
+        return response.data;
+    },
+
+    /**
+     * Detectar actividades próximas a vencer (notificaciones preventivas)
+     * @param {number} usuarioId - ID del usuario
+     * @param {number} minutosAntes - Minutos antes del vencimiento (por defecto 15)
+     */
+    async detectarActividadesProximasVencer(usuarioId, minutosAntes = 15) {
+        const response = await apiClient.get(`/marketing/actividades-proximas-vencer/${usuarioId}/detectar`, {
+            params: { minutosAntes }
+        });
+        return response.data;
+    },
+
+    /**
+     * Gestionar actividad vencida con una acción específica
+     * @param {number} actividadId - ID de la actividad vencida
+     * @param {string} accion - completar, extender, posponer, completar_retroactivo, reprogramar, completar_fuera_tiempo, cancelar
+     * @param {object} datos - Datos adicionales según la acción (minutos_adicionales, motivo, hora_fin_real, etc)
+     */
+    async gestionarActividadVencida(actividadId, accion, datos) {
+        const response = await apiClient.post(`/marketing/actividades/${actividadId}/gestionar-vencida`, {
+            accion,
+            datos
+        });
         return response.data;
     },
 
