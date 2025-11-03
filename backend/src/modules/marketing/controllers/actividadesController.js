@@ -907,14 +907,16 @@ class ActividadesController {
 
     /**
      * Completar actividad
+     * NOTA: Permite completar en cualquier momento (antes o después del vencimiento)
+     * útil para completar anticipadamente o registrar completadas fuera de tiempo
      */
     static async completarActividad(req, res) {
         try {
             const { id } = req.params;
 
-            // VALIDACIÓN: No permitir completar actividades pasadas sin gestión
+            // Verificar que la actividad existe
             const actividadCheck = await query(
-                'SELECT fecha_fin_planeada, estado FROM actividades_marketing WHERE id = $1',
+                'SELECT id, estado FROM actividades_marketing WHERE id = $1',
                 [id]
             );
 
@@ -925,16 +927,8 @@ class ActividadesController {
                 });
             }
 
-            const actividad = actividadCheck.rows[0];
-            const ahora = new Date();
-            const fechaFinPlaneada = new Date(actividad.fecha_fin_planeada);
-
-            if (fechaFinPlaneada < ahora) {
-                return res.status(400).json({
-                    success: false,
-                    message: 'No se puede completar una actividad que ya venció. Usa el sistema de gestión de vencidas.'
-                });
-            }
+            // VALIDACIÓN REMOVIDA: Ahora se permite completar en cualquier momento
+            // Esto es consistente con el frontend que permite completar actividades vencidas
 
             const result = await query(`
                 UPDATE actividades_marketing SET
