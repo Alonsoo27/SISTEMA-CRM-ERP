@@ -649,13 +649,14 @@ class CargaMasivaController {
                         duracion: actividad.duracion_minutos
                     });
 
-                    const codigo = await actividadesService.generarCodigoActividad();
-                    console.log(`✅ Código generado: ${codigo}`);
-
                     // Crear actividad para cada usuario asignado
                     for (const usuario of actividad.usuarios) {
                         try {
                             console.log(`👤 Procesando para usuario ${usuario.id} (${usuario.email})`);
+
+                            // GENERAR CÓDIGO ÚNICO PARA CADA USUARIO (evita duplicados)
+                            const codigo = await actividadesService.generarCodigoActividad();
+                            console.log(`✅ Código generado: ${codigo}`);
 
                             // Obtener próximo slot disponible
                             const fechaInicio = await actividadesService.obtenerProximoSlotDisponible(usuario.id);
