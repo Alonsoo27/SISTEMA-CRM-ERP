@@ -8,17 +8,45 @@ const { query } = require('../../../config/database');
 class ActividadesService {
     /**
      * Generar código único para actividad
+     * CORREGIDO: Usa MAX() para evitar race conditions
      */
     static async generarCodigoActividad() {
         const año = new Date().getFullYear();
-        const result = await query(`
-            SELECT COUNT(*) as total
-            FROM actividades_marketing
-            WHERE EXTRACT(YEAR FROM created_at) = $1
-        `, [año]);
+        const prefijo = `ACT-MKT-${año}-`;
 
-        const total = parseInt(result.rows[0].total) + 1;
-        const codigo = `ACT-MKT-${año}-${String(total).padStart(4, '0')}`;
+        // Buscar el último código del año actual
+        const result = await query(`
+            SELECT codigo
+            FROM actividades_marketing
+            WHERE codigo LIKE $1
+            ORDER BY codigo DESC
+            LIMIT 1
+        `, [`${prefijo}%`]);
+
+        let siguienteNumero = 1;
+
+        if (result.rows.length > 0) {
+            const ultimoCodigo = result.rows[0].codigo;
+            // Extraer el número del código (ej: "ACT-MKT-2025-0010" → 10)
+            const match = ultimoCodigo.match(/ACT-MKT-\d{4}-(\d+)$/);
+            if (match) {
+                siguienteNumero = parseInt(match[1]) + 1;
+            }
+        }
+
+        const codigo = `${prefijo}${String(siguienteNumero).padStart(4, '0')}`;
+
+        // Verificar que no exista (por si acaso)
+        const existeResult = await query(`
+            SELECT 1 FROM actividades_marketing WHERE codigo = $1
+        `, [codigo]);
+
+        if (existeResult.rows.length > 0) {
+            // Si existe, intentar con el siguiente número
+            console.log(`⚠️ Código ${codigo} ya existe, incrementando...`);
+            siguienteNumero++;
+            return `${prefijo}${String(siguienteNumero).padStart(4, '0')}`;
+        }
 
         return codigo;
     }
