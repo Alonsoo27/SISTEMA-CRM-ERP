@@ -79,8 +79,14 @@ const ModalTransferirActividad = ({ actividad, onClose, onSuccess }) => {
     const usuarioSeleccionado = equipoMarketing.find(u => u.id === parseInt(formData.usuario_destino_id));
 
     return (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-lg shadow-2xl max-w-lg w-full">
+        <div
+            className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+            onClick={onClose}
+        >
+            <div
+                className="bg-white rounded-lg shadow-2xl max-w-lg w-full"
+                onClick={(e) => e.stopPropagation()}
+            >
                 {/* Header */}
                 <div className="flex justify-between items-center p-6 border-b border-gray-200">
                     <h2 className="text-2xl font-bold text-gray-900">

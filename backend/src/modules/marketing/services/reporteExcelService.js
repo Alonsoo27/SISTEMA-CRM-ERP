@@ -140,7 +140,7 @@ class ReporteExcelService {
         currentRow += 2;
 
         const desglose = [
-            ['Estado', 'Cantidad', 'Porcentaje', 'Icono'],
+            ['Estado', 'Cantidad', 'Porcentaje', 'Simbolo'],
             ['Completadas', datos.metricas.totales.completadas, `${((datos.metricas.totales.completadas / datos.metricas.totales.total) * 100).toFixed(1)}%`, '✅'],
             ['En Progreso', datos.metricas.totales.en_progreso, `${((datos.metricas.totales.en_progreso / datos.metricas.totales.total) * 100).toFixed(1)}%`, '🔄'],
             ['Pendientes', datos.metricas.totales.pendientes, `${((datos.metricas.totales.pendientes / datos.metricas.totales.total) * 100).toFixed(1)}%`, '⏳'],
