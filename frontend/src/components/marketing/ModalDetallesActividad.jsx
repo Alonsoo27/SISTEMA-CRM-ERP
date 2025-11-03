@@ -44,7 +44,7 @@ const ModalDetallesActividad = ({ actividad, onClose, onActividadActualizada }) 
                                            !actividad.fue_vencida;
 
     // Permisos con validación temporal
-    const puedeEditar = !esActividadPasada && esMarketing && actividad.estado !== 'completada' && actividad.estado !== 'cancelada';
+    const puedeEditar = !esActividadPasada && (esMarketing || esJefeOSuperior) && actividad.estado !== 'completada' && actividad.estado !== 'cancelada';
     const puedeTransferir = !esActividadPasada && esJefeOSuperior && actividad.estado !== 'completada' && actividad.estado !== 'cancelada';
     // PERMITIR COMPLETAR EN CUALQUIER MOMENTO (incluso si venció) - útil para completar anticipadamente o fuera de tiempo
     const puedeCompletar = (esMarketing || esJefeOSuperior) && actividad.estado === 'en_progreso';
