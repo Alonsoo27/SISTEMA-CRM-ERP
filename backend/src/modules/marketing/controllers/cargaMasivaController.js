@@ -148,6 +148,7 @@ class CargaMasivaController {
 
             // Extraer categorías principales únicas
             const categoriasPrincipales = [...new Set(categoriasResult.rows.map(c => c.categoria_principal))];
+            const todasSubcategorias = [...new Set(categoriasResult.rows.map(c => c.subcategoria))];
 
             // Crear mapeo de subcategorías por categoría principal
             const subcategoriasPorCategoria = {};
@@ -158,6 +159,30 @@ class CargaMasivaController {
                 if (!subcategoriasPorCategoria[cat.categoria_principal].includes(cat.subcategoria)) {
                     subcategoriasPorCategoria[cat.categoria_principal].push(cat.subcategoria);
                 }
+            });
+
+            // ============================================
+            // CREAR HOJA OCULTA PARA VALIDACIONES
+            // ============================================
+            const validacionesSheet = workbook.addWorksheet('_Validaciones');
+            validacionesSheet.state = 'hidden'; // Ocultar la hoja
+
+            // Agregar lista de usuarios (columna A)
+            validacionesSheet.getCell('A1').value = 'Usuarios';
+            nombresUsuarios.forEach((nombre, index) => {
+                validacionesSheet.getCell(`A${index + 2}`).value = nombre;
+            });
+
+            // Agregar lista de categorías (columna B)
+            validacionesSheet.getCell('B1').value = 'Categorias';
+            categoriasPrincipales.forEach((cat, index) => {
+                validacionesSheet.getCell(`B${index + 2}`).value = cat;
+            });
+
+            // Agregar lista de subcategorías (columna C)
+            validacionesSheet.getCell('C1').value = 'Subcategorias';
+            todasSubcategorias.forEach((sub, index) => {
+                validacionesSheet.getCell(`C${index + 2}`).value = sub;
             });
 
             // Agregar 100 filas vacías con fórmula de auto-orden para facilitar el llenado
@@ -177,23 +202,22 @@ class CargaMasivaController {
                 newRow.getCell(1).value = { formula: `ROW()-1` };
 
                 // Aplicar validación dropdown para Categoría Principal (columna C)
+                // Usar referencia a hoja oculta en vez de lista inline
                 newRow.getCell(3).dataValidation = {
                     type: 'list',
                     allowBlank: true,
-                    formulae: [`"${categoriasPrincipales.join(',')}"`],
+                    formulae: [`_Validaciones!$B$2:$B$${categoriasPrincipales.length + 1}`],
                     showErrorMessage: true,
                     errorStyle: 'error',
                     errorTitle: 'Categoría inválida',
                     error: 'Por favor selecciona una categoría de la lista'
                 };
 
-                // Para subcategorías, como no podemos hacer validación dependiente fácilmente en Excel,
-                // agregamos todas las subcategorías posibles
-                const todasSubcategorias = [...new Set(categoriasResult.rows.map(c => c.subcategoria))];
+                // Para subcategorías, usar referencia a hoja oculta
                 newRow.getCell(4).dataValidation = {
                     type: 'list',
                     allowBlank: true,
-                    formulae: [`"${todasSubcategorias.join(',')}"`],
+                    formulae: [`_Validaciones!$C$2:$C$${todasSubcategorias.length + 1}`],
                     showErrorMessage: true,
                     errorStyle: 'warning',
                     errorTitle: 'Subcategoría',
@@ -201,11 +225,11 @@ class CargaMasivaController {
                 };
 
                 // Aplicar validación dropdown para Usuarios Asignados (columna F)
-                // Nota: Excel permite seleccionar múltiples valores separados por coma manualmente
+                // Usar referencia a hoja oculta en vez de lista inline
                 newRow.getCell(6).dataValidation = {
                     type: 'list',
                     allowBlank: true,
-                    formulae: [`"${nombresUsuarios.join(',')}"`],
+                    formulae: [`_Validaciones!$A$2:$A$${nombresUsuarios.length + 1}`],
                     showErrorMessage: true,
                     errorStyle: 'error',
                     errorTitle: 'Usuario no válido',
