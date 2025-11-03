@@ -95,7 +95,22 @@ const ModalCargaMasiva = ({ onClose, onSuccess }) => {
 
         } catch (err) {
             console.error('Error procesando carga masiva:', err);
-            setError(err.message || 'Error al procesar el archivo');
+
+            // Mejorar el mensaje de error para el usuario
+            let mensajeError = 'Error al procesar el archivo';
+
+            if (err.message) {
+                mensajeError = err.message;
+            } else if (err.error) {
+                mensajeError = err.error;
+            }
+
+            // Si hay detalles adicionales en modo desarrollo, mostrarlos en consola
+            if (err.detalles) {
+                console.error('Detalles del error:', err.detalles);
+            }
+
+            setError(mensajeError);
             setResultado(err);
         } finally {
             setProcessando(false);

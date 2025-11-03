@@ -106,6 +106,23 @@ const obtenerUsuario = async (req, res) => {
 };
 
 // ============================================
+// MAPEO: ROL → ÁREA (Validación automática)
+// ============================================
+const ROL_AREA_MAP = {
+    1: 6,   // SUPER_ADMIN → SISTEMAS
+    2: 5,   // GERENTE → GERENCIA
+    3: 1,   // JEFE_VENTAS → VENTAS
+    4: 2,   // JEFE_MARKETING → MARKETING
+    5: 3,   // JEFE_SOPORTE → SOPORTE
+    6: 4,   // JEFE_ALMACEN → ALMACEN
+    7: 1,   // VENDEDOR → VENTAS
+    8: 2,   // MARKETING_EJECUTOR → MARKETING
+    9: 3,   // SOPORTE_TECNICO → SOPORTE
+    10: 4,  // ALMACENERO → ALMACEN
+    11: 8   // ADMIN → ADMINISTRACIÓN
+};
+
+// ============================================
 // CREAR NUEVO USUARIO
 // ============================================
 const crearUsuario = async (req, res) => {
@@ -130,6 +147,26 @@ const crearUsuario = async (req, res) => {
                 message: 'Faltan campos requeridos: email, password, nombre, apellido, rol_id'
             });
         }
+
+        // ✅ VALIDACIÓN: Verificar que el área corresponda al rol
+        const areaEsperada = ROL_AREA_MAP[parseInt(rol_id)];
+        const areaRecibida = area_id ? parseInt(area_id) : null;
+
+        if (areaEsperada && areaRecibida && areaRecibida !== areaEsperada) {
+            // Obtener nombres para mensaje más claro
+            const areaEsperadaNombre = await query('SELECT nombre FROM areas WHERE id = $1', [areaEsperada]);
+            const areaRecibidaNombre = await query('SELECT nombre FROM areas WHERE id = $1', [areaRecibida]);
+
+            return res.status(400).json({
+                success: false,
+                message: `El rol seleccionado debe pertenecer al área "${areaEsperadaNombre.rows[0]?.nombre || areaEsperada}", pero se intentó asignar a "${areaRecibidaNombre.rows[0]?.nombre || areaRecibida}". Por favor, selecciona el rol correcto.`
+            });
+        }
+
+        // Si no viene área o viene incorrecta, asignar automáticamente la correcta
+        const areaFinal = areaEsperada || areaRecibida || null;
+        console.log(`✅ Usuario creado con rol_id: ${rol_id}, area_id asignada: ${areaFinal}`);
+
 
         // Verificar que el email no exista
         const existeEmail = await query(
@@ -163,7 +200,7 @@ const crearUsuario = async (req, res) => {
             nombre,
             apellido,
             rol_id,
-            area_id || null,
+            areaFinal || null,  // ✅ Usar área validada/asignada automáticamente
             jefe_id || null,
             telefono || null,
             es_jefe || false,
@@ -237,10 +274,30 @@ const actualizarUsuario = async (req, res) => {
         }
 
         // Convertir strings vacías a null para campos numéricos
-        const area_id_clean = area_id === '' || area_id === undefined ? null : area_id;
         const jefe_id_clean = jefe_id === '' || jefe_id === undefined ? null : jefe_id;
         const telefono_clean = telefono === '' ? null : telefono;
         const rol_id_clean = rol_id === '' || rol_id === undefined ? null : rol_id;
+
+        // ✅ VALIDACIÓN: Si se está cambiando el rol, validar que el área corresponda
+        const rolFinal = rol_id_clean || usuarioActual.rol_id;
+        const areaEsperada = ROL_AREA_MAP[parseInt(rolFinal)];
+        const areaRecibida = area_id && area_id !== '' ? parseInt(area_id) : null;
+
+        let area_id_clean;
+        if (areaEsperada && areaRecibida && areaRecibida !== areaEsperada) {
+            // Obtener nombres para mensaje más claro
+            const areaEsperadaNombre = await query('SELECT nombre FROM areas WHERE id = $1', [areaEsperada]);
+            const areaRecibidaNombre = await query('SELECT nombre FROM areas WHERE id = $1', [areaRecibida]);
+
+            return res.status(400).json({
+                success: false,
+                message: `El rol seleccionado debe pertenecer al área "${areaEsperadaNombre.rows[0]?.nombre || areaEsperada}", pero se intentó asignar a "${areaRecibidaNombre.rows[0]?.nombre || areaRecibida}". Por favor, selecciona el rol correcto.`
+            });
+        }
+
+        // Asignar área automáticamente según el rol (o mantener si no hay rol)
+        area_id_clean = areaEsperada || areaRecibida || null;
+        console.log(`✅ Usuario actualizado: rol_id: ${rolFinal}, area_id asignada: ${area_id_clean}`);
 
         // 🔄 DETECCIÓN AUTOMÁTICA: Si se está desactivando un VENDEDOR, traspasar prospectos
         // Detectar desactivación por cambio de 'activo' O por cambio de 'estado' a 'INACTIVO'

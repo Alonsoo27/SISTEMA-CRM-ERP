@@ -66,35 +66,69 @@ class CargaMasivaController {
             headerRow.height = 25;
 
             // ============================================
+            // OBTENER USUARIOS DE MARKETING
+            // ============================================
+            const usuariosResult = await query(`
+                SELECT
+                    u.id,
+                    u.nombre,
+                    u.apellido,
+                    CONCAT(u.nombre, ' ', u.apellido) as nombre_completo,
+                    u.email,
+                    r.nombre as rol
+                FROM usuarios u
+                LEFT JOIN roles r ON u.rol_id = r.id
+                WHERE r.nombre IN ('MARKETING_EJECUTOR', 'JEFE_MARKETING')
+                  AND u.activo = true
+                  AND u.deleted_at IS NULL
+                ORDER BY u.nombre, u.apellido
+            `);
+
+            const usuariosMarketing = usuariosResult.rows;
+
+            if (usuariosMarketing.length === 0) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'No hay usuarios de marketing disponibles para generar la plantilla'
+                });
+            }
+
+            // Crear lista de nombres para dropdown
+            const nombresUsuarios = usuariosMarketing.map(u => u.nombre_completo);
+
+            // ============================================
             // AGREGAR FILAS DE EJEMPLO
             // ============================================
+            const primerUsuario = usuariosMarketing[0].nombre_completo;
+            const segundoUsuario = usuariosMarketing.length > 1 ? usuariosMarketing[1].nombre_completo : primerUsuario;
+
             const ejemplos = [
                 {
                     orden: 1,
-                    descripcion: 'Capacitación en provincia',
-                    categoria_principal: 'CAPACITACIONES',
-                    subcategoria: 'PERSONAL',
-                    duracion_minutos: 1080,
-                    usuarios_asignados: 'juan@example.com',
-                    notas: 'Incluye viaje y hotel'
+                    descripcion: 'Postear contenido en Instagram y Facebook',
+                    categoria_principal: 'COMMUNITY MANAGER',
+                    subcategoria: 'POSTEO DE CONTENIDOS RRSS',
+                    duracion_minutos: 60,
+                    usuarios_asignados: primerUsuario,
+                    notas: 'Publicar carrusel de nuevos productos'
                 },
                 {
                     orden: 2,
-                    descripcion: 'Diseñar banner para Facebook',
-                    categoria_principal: 'REDES SOCIALES',
-                    subcategoria: 'DISEÑO',
-                    duracion_minutos: 120,
-                    usuarios_asignados: 'maria@example.com',
-                    notas: ''
+                    descripcion: 'Diseñar flyers para campaña de verano',
+                    categoria_principal: 'DISEÑO',
+                    subcategoria: 'FLYERS',
+                    duracion_minutos: 180,
+                    usuarios_asignados: segundoUsuario,
+                    notas: 'Incluir logo actualizado'
                 },
                 {
                     orden: 3,
-                    descripcion: 'Reunión con equipo de marketing',
+                    descripcion: 'Reunión semanal de marketing',
                     categoria_principal: 'REUNIONES',
-                    subcategoria: 'INTERNA',
-                    duracion_minutos: 60,
-                    usuarios_asignados: 'juan@example.com, maria@example.com',
-                    notas: 'Actividad grupal'
+                    subcategoria: 'MARKETING',
+                    duracion_minutos: 90,
+                    usuarios_asignados: `${primerUsuario}, ${segundoUsuario}`,
+                    notas: 'Actividad grupal - Revisión de métricas'
                 }
             ];
 
@@ -165,6 +199,18 @@ class CargaMasivaController {
                     errorTitle: 'Subcategoría',
                     error: 'Verifica que la subcategoría corresponda a la categoría principal seleccionada'
                 };
+
+                // Aplicar validación dropdown para Usuarios Asignados (columna F)
+                // Nota: Excel permite seleccionar múltiples valores separados por coma manualmente
+                newRow.getCell(6).dataValidation = {
+                    type: 'list',
+                    allowBlank: true,
+                    formulae: [`"${nombresUsuarios.join(',')}"`],
+                    showErrorMessage: true,
+                    errorStyle: 'error',
+                    errorTitle: 'Usuario no válido',
+                    error: 'Selecciona un usuario de la lista. Para múltiples usuarios, sepáralos con coma (,)'
+                };
             }
 
             // ============================================
@@ -216,14 +262,15 @@ class CargaMasivaController {
                 ['5. DURACIÓN (MINUTOS):', 'Duración en minutos (ej: 60 = 1 hora, 120 = 2 horas, 1080 = 18 horas).'],
                 ['', 'El sistema respeta automáticamente los horarios laborales al programar.'],
                 ['', ''],
-                ['6. USUARIOS ASIGNADOS:', 'Emails de usuarios separados por coma (,) para actividades grupales.'],
-                ['', 'Ejemplo: juan@example.com, maria@example.com'],
+                ['6. USUARIOS ASIGNADOS:', 'Selecciona del dropdown el nombre del usuario. Para actividades grupales, separa con coma (,).'],
+                ['', 'Ejemplo: Juan Pérez, María García'],
+                ['', 'Consulta la hoja "Usuarios de Marketing" para ver la lista completa.'],
                 ['', ''],
                 ['7. NOTAS:', 'Información adicional (opcional).'],
                 ['', ''],
                 ['⚠️ IMPORTANTE:', ''],
-                ['', '• Los emails deben existir en la base de datos'],
-                ['', '• Los usuarios deben ser del área de marketing (MARKETING_EJECUTOR o JEFE_MARKETING)'],
+                ['', '• Los nombres deben escribirse EXACTAMENTE como aparecen en el dropdown'],
+                ['', '• Solo puedes asignar usuarios del área de marketing'],
                 ['', '• Las categorías y subcategorías deben coincidir exactamente con las disponibles'],
                 ['', '• El sistema calculará automáticamente las fechas según disponibilidad de cada usuario'],
                 ['', '• No es necesario calcular fechas manualmente'],
@@ -270,6 +317,41 @@ class CargaMasivaController {
                     color: cat.color_hex
                 });
             });
+
+            // ============================================
+            // AGREGAR HOJA DE USUARIOS DE MARKETING
+            // ============================================
+            const usuariosSheet = workbook.addWorksheet('Usuarios de Marketing');
+            usuariosSheet.columns = [
+                { header: 'Nombre Completo', key: 'nombre_completo', width: 30 },
+                { header: 'Email', key: 'email', width: 35 },
+                { header: 'Rol', key: 'rol', width: 20 }
+            ];
+
+            const userHeaderRow = usuariosSheet.getRow(1);
+            userHeaderRow.font = { bold: true, size: 12, color: { argb: 'FFFFFFFF' } };
+            userHeaderRow.fill = {
+                type: 'pattern',
+                pattern: 'solid',
+                fgColor: { argb: 'FF6C63FF' }
+            };
+
+            usuariosMarketing.forEach(user => {
+                usuariosSheet.addRow({
+                    nombre_completo: user.nombre_completo,
+                    email: user.email,
+                    rol: user.rol === 'JEFE_MARKETING' ? 'Jefe de Marketing' : 'Ejecutor de Marketing'
+                });
+            });
+
+            // Agregar nota informativa
+            usuariosSheet.addRow({});
+            usuariosSheet.addRow({});
+            const notaRow = usuariosSheet.addRow({
+                nombre_completo: '💡 Usa los nombres de la columna "Nombre Completo" en la plantilla principal'
+            });
+            notaRow.font = { italic: true, color: { argb: 'FF0066CC' } };
+            usuariosSheet.mergeCells(`A${notaRow.number}:C${notaRow.number}`);
 
             // ============================================
             // ENVIAR ARCHIVO
@@ -320,6 +402,38 @@ class CargaMasivaController {
                 });
             }
 
+            // ============================================
+            // OBTENER MAPEO DE USUARIOS (Nombre → Email/ID)
+            // ============================================
+            const usuariosResult = await query(`
+                SELECT
+                    u.id,
+                    u.nombre,
+                    u.apellido,
+                    CONCAT(u.nombre, ' ', u.apellido) as nombre_completo,
+                    u.email,
+                    r.nombre as rol
+                FROM usuarios u
+                LEFT JOIN roles r ON u.rol_id = r.id
+                WHERE r.nombre IN ('MARKETING_EJECUTOR', 'JEFE_MARKETING')
+                  AND u.activo = true
+                  AND u.deleted_at IS NULL
+                ORDER BY u.nombre, u.apellido
+            `);
+
+            // Crear mapeo: nombreCompleto → {id, email, rol}
+            const usuariosMap = new Map();
+            usuariosResult.rows.forEach(user => {
+                usuariosMap.set(user.nombre_completo.toLowerCase().trim(), {
+                    id: user.id,
+                    email: user.email,
+                    nombre_completo: user.nombre_completo,
+                    rol: user.rol
+                });
+            });
+
+            console.log('📋 Usuarios de marketing disponibles:', usuariosResult.rows.length);
+
             // Leer el archivo Excel
             const workbook = new ExcelJS.Workbook();
             await workbook.xlsx.load(req.file.buffer);
@@ -343,15 +457,35 @@ class CargaMasivaController {
                 // Saltar header
                 if (rowNumber === 1) return;
 
+                // Leer valores crudos de las celdas
+                const rawOrden = row.getCell(1).value;
+                const rawDescripcion = row.getCell(2).value;
+                const rawCategoria = row.getCell(3).value;
+                const rawSubcategoria = row.getCell(4).value;
+                const rawDuracion = row.getCell(5).value;
+                const rawUsuarios = row.getCell(6).value;
+                const rawNotas = row.getCell(7).value;
+
+                // Convertir usuarios_asignados a string de forma segura
+                let usuariosAsignados = null;
+                if (rawUsuarios !== null && rawUsuarios !== undefined) {
+                    // Si es un objeto con fórmula, extraer el resultado
+                    if (typeof rawUsuarios === 'object' && rawUsuarios.result !== undefined) {
+                        usuariosAsignados = String(rawUsuarios.result || '').trim();
+                    } else {
+                        usuariosAsignados = String(rawUsuarios).trim();
+                    }
+                }
+
                 const fila = {
                     rowNumber,
-                    orden: row.getCell(1).value,
-                    descripcion: row.getCell(2).value,
-                    categoria_principal: row.getCell(3).value,
-                    subcategoria: row.getCell(4).value,
-                    duracion_minutos: row.getCell(5).value,
-                    usuarios_asignados: row.getCell(6).value,
-                    notas: row.getCell(7).value
+                    orden: rawOrden,
+                    descripcion: rawDescripcion,
+                    categoria_principal: rawCategoria,
+                    subcategoria: rawSubcategoria,
+                    duracion_minutos: rawDuracion,
+                    usuarios_asignados: usuariosAsignados,
+                    notas: rawNotas
                 };
 
                 // Validar que no esté vacía
@@ -400,27 +534,47 @@ class CargaMasivaController {
                     continue;
                 }
 
-                // Validar usuarios
-                const emails = fila.usuarios_asignados.split(',').map(e => e.trim());
+                // Validar usuarios - convertir a string si no lo es
+                let usuariosString = fila.usuarios_asignados;
+
+                // Verificar que sea un string válido antes de hacer split
+                if (!usuariosString || typeof usuariosString !== 'string') {
+                    erroresFila.push('Usuarios asignados debe ser texto (nombres separados por coma)');
+                    errores.push({
+                        fila: fila.rowNumber,
+                        errores: erroresFila
+                    });
+                    continue;
+                }
+
+                // Separar por coma y limpiar espacios
+                const nombresUsuarios = usuariosString.split(',').map(n => n.trim()).filter(n => n.length > 0);
+
+                if (nombresUsuarios.length === 0) {
+                    erroresFila.push('No se encontraron nombres válidos en usuarios asignados');
+                    errores.push({
+                        fila: fila.rowNumber,
+                        errores: erroresFila
+                    });
+                    continue;
+                }
+
                 const usuariosValidos = [];
 
-                for (const email of emails) {
-                    const userResult = await query(
-                        `SELECT u.id, r.nombre as rol
-                         FROM usuarios u
-                         LEFT JOIN roles r ON u.rol_id = r.id
-                         WHERE u.email = $1 AND u.deleted_at IS NULL AND u.activo = true`,
-                        [email]
-                    );
+                // Buscar cada nombre en el mapeo
+                for (const nombreUsuario of nombresUsuarios) {
+                    const nombreNormalizado = nombreUsuario.toLowerCase().trim();
 
-                    if (userResult.rows.length === 0) {
-                        erroresFila.push(`Usuario no encontrado: ${email}`);
-                    } else if (!['MARKETING_EJECUTOR', 'JEFE_MARKETING'].includes(userResult.rows[0].rol)) {
-                        erroresFila.push(`Usuario ${email} no es del área de marketing`);
+                    // Buscar en el Map
+                    const usuario = usuariosMap.get(nombreNormalizado);
+
+                    if (!usuario) {
+                        erroresFila.push(`Usuario no encontrado: "${nombreUsuario}". Verifica que el nombre sea exacto.`);
                     } else {
                         usuariosValidos.push({
-                            id: userResult.rows[0].id,
-                            email: email
+                            id: usuario.id,
+                            email: usuario.email,
+                            nombre_completo: usuario.nombre_completo
                         });
                     }
                 }
@@ -461,45 +615,70 @@ class CargaMasivaController {
             // ============================================
             const actividadesCreadas = [];
 
-            for (const actividad of actividades) {
-                const codigo = await actividadesService.generarCodigoActividad();
+            for (let i = 0; i < actividades.length; i++) {
+                const actividad = actividades[i];
 
-                // Crear actividad para cada usuario asignado
-                for (const usuario of actividad.usuarios) {
-                    // Obtener próximo slot disponible
-                    const fechaInicio = await actividadesService.obtenerProximoSlotDisponible(usuario.id);
-                    const fechaFin = reajusteService.agregarMinutosEfectivos(fechaInicio, actividad.duracion_minutos);
+                try {
+                    console.log(`📝 Procesando actividad ${i + 1}/${actividades.length}:`, {
+                        descripcion: actividad.descripcion,
+                        usuarios: actividad.usuarios.length,
+                        duracion: actividad.duracion_minutos
+                    });
 
-                    const insertQuery = `
-                        INSERT INTO actividades_marketing (
-                            codigo, categoria_principal, subcategoria, descripcion,
-                            usuario_id, creado_por, tipo, es_grupal,
-                            participantes_ids, fecha_inicio_planeada, fecha_fin_planeada,
-                            duracion_planeada_minutos, color_hex, estado, notas
-                        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, 'pendiente', $14)
-                        RETURNING *
-                    `;
+                    const codigo = await actividadesService.generarCodigoActividad();
+                    console.log(`✅ Código generado: ${codigo}`);
 
-                    const participantesIds = actividad.es_grupal ? actividad.usuarios.map(u => u.id) : null;
+                    // Crear actividad para cada usuario asignado
+                    for (const usuario of actividad.usuarios) {
+                        try {
+                            console.log(`👤 Procesando para usuario ${usuario.id} (${usuario.email})`);
 
-                    const result = await query(insertQuery, [
-                        codigo,
-                        actividad.categoria_principal,
-                        actividad.subcategoria,
-                        actividad.descripcion,
-                        usuario.id,
-                        user_id,
-                        actividad.es_grupal ? 'grupal' : 'individual',
-                        actividad.es_grupal,
-                        participantesIds,
-                        fechaInicio,
-                        fechaFin,
-                        actividad.duracion_minutos,
-                        actividad.color_hex,
-                        actividad.notas
-                    ]);
+                            // Obtener próximo slot disponible
+                            const fechaInicio = await actividadesService.obtenerProximoSlotDisponible(usuario.id);
+                            console.log(`📅 Slot disponible: ${fechaInicio}`);
 
-                    actividadesCreadas.push(result.rows[0]);
+                            const fechaFin = reajusteService.agregarMinutosEfectivos(fechaInicio, actividad.duracion_minutos);
+                            console.log(`📅 Fecha fin calculada: ${fechaFin}`);
+
+                            const insertQuery = `
+                                INSERT INTO actividades_marketing (
+                                    codigo, categoria_principal, subcategoria, descripcion,
+                                    usuario_id, creado_por, tipo, es_grupal,
+                                    participantes_ids, fecha_inicio_planeada, fecha_fin_planeada,
+                                    duracion_planeada_minutos, color_hex, estado, notas
+                                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, 'pendiente', $14)
+                                RETURNING *
+                            `;
+
+                            const participantesIds = actividad.es_grupal ? actividad.usuarios.map(u => u.id) : null;
+
+                            const result = await query(insertQuery, [
+                                codigo,
+                                actividad.categoria_principal,
+                                actividad.subcategoria,
+                                actividad.descripcion,
+                                usuario.id,
+                                user_id,
+                                actividad.es_grupal ? 'grupal' : 'individual',
+                                actividad.es_grupal,
+                                participantesIds,
+                                fechaInicio,
+                                fechaFin,
+                                actividad.duracion_minutos,
+                                actividad.color_hex,
+                                actividad.notas
+                            ]);
+
+                            console.log(`✅ Actividad creada ID: ${result.rows[0].id}`);
+                            actividadesCreadas.push(result.rows[0]);
+                        } catch (userError) {
+                            console.error(`❌ Error creando actividad para usuario ${usuario.email}:`, userError);
+                            throw new Error(`Error creando actividad para ${usuario.email}: ${userError.message}`);
+                        }
+                    }
+                } catch (actError) {
+                    console.error(`❌ Error procesando actividad ${i + 1}:`, actError);
+                    throw new Error(`Error en actividad "${actividad.descripcion}": ${actError.message}`);
                 }
             }
 
@@ -512,11 +691,14 @@ class CargaMasivaController {
             });
 
         } catch (error) {
-            console.error('Error procesando carga masiva:', error);
+            console.error('❌ Error procesando carga masiva:', error);
+            console.error('Stack trace:', error.stack);
+
             res.status(500).json({
                 success: false,
                 message: 'Error al procesar carga masiva',
-                error: process.env.NODE_ENV === 'development' ? error.message : undefined
+                error: process.env.NODE_ENV === 'development' ? error.message : undefined,
+                detalles: process.env.NODE_ENV === 'development' ? error.stack : undefined
             });
         }
     }

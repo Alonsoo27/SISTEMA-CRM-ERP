@@ -19,6 +19,23 @@ const AdministracionUsuariosPage = () => {
     const [modulos, setModulos] = useState([]);
     const [permisosUsuario, setPermisosUsuario] = useState([]);
 
+    // ============================================
+    // MAPEO AUTOMÁTICO: ROL → ÁREA
+    // ============================================
+    const ROL_AREA_MAP = {
+        1: 6,   // SUPER_ADMIN → SISTEMAS
+        2: 5,   // GERENTE → GERENCIA
+        3: 1,   // JEFE_VENTAS → VENTAS
+        4: 2,   // JEFE_MARKETING → MARKETING
+        5: 3,   // JEFE_SOPORTE → SOPORTE
+        6: 4,   // JEFE_ALMACEN → ALMACEN
+        7: 1,   // VENDEDOR → VENTAS
+        8: 2,   // MARKETING_EJECUTOR → MARKETING
+        9: 3,   // SOPORTE_TECNICO → SOPORTE
+        10: 4,  // ALMACENERO → ALMACEN
+        11: 8   // ADMIN → ADMINISTRACIÓN
+    };
+
     // Obtener usuario actual para verificar permisos
     const usuarioActual = JSON.parse(localStorage.getItem('user') || '{}');
     const puedeCrear = canCreateIn(usuarioActual, 'usuarios');
@@ -42,6 +59,22 @@ const AdministracionUsuariosPage = () => {
     useEffect(() => {
         cargarDatos();
     }, []);
+
+    // ============================================
+    // FUNCIÓN: Manejar cambio de rol (con asignación automática de área)
+    // ============================================
+    const handleRolChange = (e) => {
+        const nuevoRolId = parseInt(e.target.value);
+        const areaCorrespondiente = ROL_AREA_MAP[nuevoRolId];
+
+        console.log(`🔄 Rol cambiado a: ${nuevoRolId}, Área asignada automáticamente: ${areaCorrespondiente || 'ninguna'}`);
+
+        setFormData({
+            ...formData,
+            rol_id: nuevoRolId,
+            area_id: areaCorrespondiente || ''  // Asignar área automáticamente
+        });
+    };
 
     const cargarDatos = async () => {
         try {
@@ -542,7 +575,7 @@ const AdministracionUsuariosPage = () => {
                                                 <label className="block text-sm font-medium mb-1">Rol *</label>
                                                 <select
                                                     value={formData.rol_id}
-                                                    onChange={(e) => setFormData({ ...formData, rol_id: e.target.value })}
+                                                    onChange={handleRolChange}
                                                     className="w-full px-3 py-2 border rounded-lg"
                                                     required
                                                 >
@@ -553,13 +586,19 @@ const AdministracionUsuariosPage = () => {
                                                 </select>
                                             </div>
                                             <div>
-                                                <label className="block text-sm font-medium mb-1">Área</label>
+                                                <label className="block text-sm font-medium mb-1">
+                                                    Área {formData.rol_id && <span className="text-xs text-gray-500">(asignada automáticamente)</span>}
+                                                </label>
                                                 <select
                                                     value={formData.area_id}
                                                     onChange={(e) => setFormData({ ...formData, area_id: e.target.value })}
-                                                    className="w-full px-3 py-2 border rounded-lg"
+                                                    className="w-full px-3 py-2 border rounded-lg bg-gray-100"
+                                                    disabled={!!formData.rol_id}
+                                                    title={formData.rol_id ? "El área se asigna automáticamente según el rol" : "Selecciona primero un rol"}
                                                 >
-                                                    <option value="">Seleccionar...</option>
+                                                    <option value="">
+                                                        {formData.rol_id ? 'Área asignada por rol...' : 'Selecciona primero un rol...'}
+                                                    </option>
                                                     {areas.map(area => (
                                                         <option key={area.id} value={area.id}>{area.nombre}</option>
                                                     ))}

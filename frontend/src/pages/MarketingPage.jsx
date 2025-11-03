@@ -184,7 +184,18 @@ const MarketingPage = () => {
         try {
             const response = await marketingService.detectarActividadesVencidas(usuarioSeleccionado);
 
-            if (response.success && response.actividades && response.actividades.length > 0) {
+            // Validar que la respuesta existe y tiene el formato esperado
+            if (!response) {
+                console.warn('⚠️ detectarActividadesVencidas retornó undefined');
+                return;
+            }
+
+            if (!response.success) {
+                console.warn('⚠️ detectarActividadesVencidas falló:', response.message || 'Sin mensaje');
+                return;
+            }
+
+            if (response.actividades && response.actividades.length > 0) {
                 // Filtrar TODAS las actividades que no estén pospuestas
                 const actividadesParaMostrar = response.actividades.filter(act =>
                     puedeMotrarActividad(act.id)
@@ -229,7 +240,18 @@ const MarketingPage = () => {
         try {
             const response = await marketingService.detectarActividadesProximasVencer(usuarioSeleccionado, 15);
 
-            if (response.success && response.actividades && response.actividades.length > 0) {
+            // Validar que la respuesta existe y tiene el formato esperado
+            if (!response) {
+                console.warn('⚠️ detectarActividadesProximasVencer retornó undefined');
+                return;
+            }
+
+            if (!response.success) {
+                console.warn('⚠️ detectarActividadesProximasVencer falló:', response.message || 'Sin mensaje');
+                return;
+            }
+
+            if (response.actividades && response.actividades.length > 0) {
                 response.actividades.forEach(actividad => {
                     // Solo notificar si no ha sido notificada antes
                     if (!actividadesNotificadas.has(actividad.id)) {
