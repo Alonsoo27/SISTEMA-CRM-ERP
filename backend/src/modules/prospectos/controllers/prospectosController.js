@@ -3376,16 +3376,18 @@ static async obtenerPorId(req, res) {
                 });
             }
 
-            // ✅ ASIGNAR EL PROSPECTO (salir de modo libre)
+            // ✅ ASIGNAR EL PROSPECTO (salir de modo libre) con auditoría
             const updateResult = await client.query(`
                 UPDATE prospectos
                 SET modo_libre = false,
                     asesor_id = $1,
                     asesor_nombre = $2,
-                    fecha_modo_libre = NULL
-                WHERE id = $3
+                    fecha_modo_libre = NULL,
+                    fecha_traspaso = NOW(),
+                    motivo_traspaso = $3
+                WHERE id = $4
                 RETURNING *
-            `, [asesor_id, asesor_nombre, id]);
+            `, [asesor_id, asesor_nombre, 'tomado_de_modo_libre', id]);
 
             const prospectoActualizado = updateResult.rows[0];
 

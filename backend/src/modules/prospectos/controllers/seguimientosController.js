@@ -855,10 +855,14 @@ class SeguimientosController {
                 // Si no hay VENDEDOREs disponibles, activar MODO LIBRE
                 await query(`
                     UPDATE prospectos
-                    SET modo_libre = $1, fecha_modo_libre = CURRENT_TIMESTAMP,
-                        numero_reasignaciones = $2
-                    WHERE id = $3
-                `, [true, prospecto.numero_reasignaciones + 1, prospecto.id]);
+                    SET asesor_anterior_id = asesor_id,
+                        modo_libre = $1,
+                        fecha_modo_libre = CURRENT_TIMESTAMP,
+                        numero_reasignaciones = $2,
+                        fecha_traspaso = NOW(),
+                        motivo_traspaso = $3
+                    WHERE id = $4
+                `, [true, prospecto.numero_reasignaciones + 1, 'sin_vendedores_disponibles', prospecto.id]);
 
                 logger.info(`🔄 Prospecto ${prospecto.codigo} activado en MODO LIBRE (sin vendedores disponibles)`, {
                     service: 'seguimientos-avanzado',
@@ -877,16 +881,23 @@ class SeguimientosController {
             // Seleccionar asesor aleatorio
             const asesorSeleccionado = asesoresResult.rows[0];
             
-            // Actualizar prospecto
+            // Actualizar prospecto con auditoría completa
             await query(`
                 UPDATE prospectos
-                SET asesor_id = $1, asesor_nombre = $2, numero_reasignaciones = $3, seguimiento_vencido = $4
-                WHERE id = $5
+                SET asesor_anterior_id = asesor_id,
+                    asesor_id = $1,
+                    asesor_nombre = $2,
+                    numero_reasignaciones = $3,
+                    seguimiento_vencido = $4,
+                    fecha_traspaso = NOW(),
+                    motivo_traspaso = $5
+                WHERE id = $6
             `, [
                 asesorSeleccionado.id,
                 `${asesorSeleccionado.nombre} ${asesorSeleccionado.apellido}`,
                 prospecto.numero_reasignaciones + 1,
                 true,
+                motivo,
                 prospecto_id
             ]);
 
@@ -950,12 +961,17 @@ class SeguimientosController {
             
             const asesor_ids = asesoresResult.rows?.map(a => a.id) || [];
             
-            // Activar modo libre en prospecto
+            // Activar modo libre en prospecto con auditoría
             await query(`
-                UPDATE prospectos 
-                SET modo_libre = $1, fecha_modo_libre = $2, numero_reasignaciones = numero_reasignaciones + 1
-                WHERE id = $3
-            `, [true, new Date().toISOString(), prospecto_id]);
+                UPDATE prospectos
+                SET asesor_anterior_id = asesor_id,
+                    modo_libre = $1,
+                    fecha_modo_libre = $2,
+                    numero_reasignaciones = numero_reasignaciones + 1,
+                    fecha_traspaso = NOW(),
+                    motivo_traspaso = $3
+                WHERE id = $4
+            `, [true, new Date().toISOString(), 'modo_libre_activado', prospecto_id]);
             
             // Crear registro en tabla modo_libre (si existe la tabla)
             try {
