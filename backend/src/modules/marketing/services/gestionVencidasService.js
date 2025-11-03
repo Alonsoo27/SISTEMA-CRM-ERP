@@ -11,6 +11,7 @@ class GestionVencidasService {
     /**
      * Detectar actividades que requieren gestión
      * Retorna actividades vencidas que aún no han sido gestionadas
+     * INCLUYE: en_progreso Y pendientes que nunca se iniciaron
      */
     static async detectarActividadesRequierenGestion(usuarioId) {
         try {
@@ -23,7 +24,7 @@ class GestionVencidasService {
                 FROM actividades_marketing am
                 WHERE am.usuario_id = $1
                   AND am.activo = true
-                  AND am.estado = 'en_progreso'
+                  AND am.estado IN ('en_progreso', 'pendiente')
                   AND am.fecha_fin_planeada < $2
                   AND (am.fue_vencida = false OR am.fue_vencida IS NULL)
                   AND am.tipo != 'sistema'

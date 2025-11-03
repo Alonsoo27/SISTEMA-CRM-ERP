@@ -9,6 +9,7 @@ const helmet = require('helmet');
 const morgan = require('morgan');
 const { testConnection } = require('./src/config/database');
 const { getFaltasService } = require('./src/services/FaltasAutomaticasService');
+const { inicializarScheduler } = require('./src/config/scheduler');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -502,6 +503,16 @@ app.listen(PORT, async () => {
         console.log(`   - Checkout Automático: ${estadoFaltas.horarios.checkout_automatico} (L-V)`);
         console.log(`   - Detección de Faltas: ${estadoFaltas.horarios.deteccion_faltas} (L-V)`);
         console.log(`   - Timezone: ${estadoFaltas.timezone}`);
+    } catch (error) {
+        console.log(`   - Estado: Error ❌ (${error.message})`);
+    }
+
+    // Inicializar scheduler de tareas programadas (proceso nocturno marketing)
+    console.log(`\n🌙 SCHEDULER DE TAREAS PROGRAMADAS:`);
+    try {
+        inicializarScheduler();
+        console.log(`   - Estado: Activo ✅`);
+        console.log(`   - Proceso Nocturno Marketing: 11:59 PM diariamente`);
     } catch (error) {
         console.log(`   - Estado: Error ❌ (${error.message})`);
     }

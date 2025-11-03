@@ -45,6 +45,17 @@ class TransferenciasController {
 
             const actividadOriginal = actividadResult.rows[0];
 
+            // VALIDACIÓN: No permitir transferir actividades pasadas
+            const ahora = new Date();
+            const fechaFinPlaneada = new Date(actividadOriginal.fecha_fin_planeada);
+
+            if (fechaFinPlaneada < ahora) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'No se puede transferir una actividad que ya venció.'
+                });
+            }
+
             // 🔒 VALIDACIÓN: Verificar que el usuario destino esté activo
             const usuarioDestinoResult = await query(
                 'SELECT id, nombre, apellido, activo FROM usuarios WHERE id = $1',
@@ -71,7 +82,6 @@ class TransferenciasController {
             let duracionFinal = duracion_nueva || actividadOriginal.duracion_planeada_minutos;
 
             // Si la actividad ya comenzó, calcular tiempo restante
-            const ahora = new Date();
             const inicioPlaneado = new Date(actividadOriginal.fecha_inicio_planeada);
 
             if (ahora > inicioPlaneado && !duracion_nueva) {

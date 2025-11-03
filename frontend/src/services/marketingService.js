@@ -365,6 +365,76 @@ const marketingService = {
         const datos = fechaReferencia ? { fecha_referencia: fechaReferencia } : {};
         const response = await apiClient.post(`/marketing/procesar-huecos/${usuarioId}`, datos);
         return response.data;
+    },
+
+    // ============================================
+    // REPORTES CORPORATIVOS
+    // ============================================
+
+    /**
+     * Obtener datos para reporte de productividad (JSON)
+     */
+    async obtenerDatosReporteProductividad(usuarioId, periodo = 'mes_actual') {
+        const response = await apiClient.get(`/marketing/reportes/productividad/${usuarioId}/datos`, {
+            params: { periodo }
+        });
+        return response.data;
+    },
+
+    /**
+     * Descargar reporte de productividad en PDF
+     */
+    async descargarReporteProductividadPDF(usuarioId, periodo = 'mes_actual') {
+        const response = await fetch(
+            `${apiClient.baseURL}/marketing/reportes/productividad/${usuarioId}/pdf?periodo=${periodo}`,
+            {
+                method: 'GET',
+                headers: apiClient.getHeaders()
+            }
+        );
+
+        if (!response.ok) {
+            const error = await response.json();
+            throw error;
+        }
+
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `Reporte_Productividad_${periodo}.pdf`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        window.URL.revokeObjectURL(url);
+    },
+
+    /**
+     * Descargar reporte de productividad en Excel
+     */
+    async descargarReporteProductividadExcel(usuarioId, periodo = 'mes_actual') {
+        const response = await fetch(
+            `${apiClient.baseURL}/marketing/reportes/productividad/${usuarioId}/excel?periodo=${periodo}`,
+            {
+                method: 'GET',
+                headers: apiClient.getHeaders()
+            }
+        );
+
+        if (!response.ok) {
+            const error = await response.json();
+            throw error;
+        }
+
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `Reporte_Productividad_${periodo}.xlsx`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        window.URL.revokeObjectURL(url);
     }
 };
 

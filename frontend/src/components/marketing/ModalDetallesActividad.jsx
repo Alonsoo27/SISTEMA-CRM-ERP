@@ -33,14 +33,23 @@ const ModalDetallesActividad = ({ actividad, onClose, onActividadActualizada }) 
         }
     }, []);
 
-    // Permisos
+    // Permisos y validaciones temporales
     const esMarketing = ['MARKETING_EJECUTOR', 'JEFE_MARKETING'].includes(user?.rol);
     const esJefeOSuperior = ['JEFE_MARKETING', 'SUPER_ADMIN', 'GERENTE', 'ADMIN'].includes(user?.rol);
-    const puedeEditar = esMarketing && actividad.estado !== 'completada' && actividad.estado !== 'cancelada';
-    const puedeTransferir = esJefeOSuperior && actividad.estado !== 'completada' && actividad.estado !== 'cancelada';
-    const puedeCompletar = actividad.estado === 'en_progreso';
-    const puedeExtender = (actividad.estado === 'en_progreso' || actividad.estado === 'pendiente');
-    const puedeCancelar = esJefeOSuperior && actividad.estado !== 'completada' && actividad.estado !== 'cancelada';
+
+    // Detectar si la actividad está en el pasado (ya venció)
+    const esActividadPasada = new Date(actividad.fecha_fin_planeada) < new Date();
+    const esActividadVencidaNoGestionada = esActividadPasada &&
+                                           (actividad.estado === 'pendiente' || actividad.estado === 'en_progreso') &&
+                                           !actividad.fue_vencida;
+
+    // Permisos con validación temporal
+    const puedeEditar = !esActividadPasada && esMarketing && actividad.estado !== 'completada' && actividad.estado !== 'cancelada';
+    const puedeTransferir = !esActividadPasada && esJefeOSuperior && actividad.estado !== 'completada' && actividad.estado !== 'cancelada';
+    const puedeCompletar = !esActividadPasada && actividad.estado === 'en_progreso';
+    const puedeExtender = !esActividadPasada && (actividad.estado === 'en_progreso' || actividad.estado === 'pendiente');
+    const puedeCancelar = esJefeOSuperior && actividad.estado !== 'completada' && actividad.estado !== 'cancelada'; // Cancelar no tiene restricción temporal
+    const puedeReprogramar = esActividadVencidaNoGestionada && esJefeOSuperior; // Solo jefes pueden reprogramar actividades pasadas no gestionadas
 
     if (!actividad) return null;
 
@@ -176,6 +185,50 @@ const ModalDetallesActividad = ({ actividad, onClose, onActividadActualizada }) 
 
                 {/* Body */}
                 <div className="p-6 space-y-6">
+                    {/* Banner de advertencia para actividades pasadas */}
+                    {esActividadPasada && (
+                        <div className={`p-4 rounded-lg border ${
+                            esActividadVencidaNoGestionada
+                                ? 'bg-red-50 border-red-300'
+                                : 'bg-gray-50 border-gray-300'
+                        }`}>
+                            <div className="flex items-start gap-3">
+                                <span className="text-2xl">
+                                    {esActividadVencidaNoGestionada ? '⚠️' : 'ℹ️'}
+                                </span>
+                                <div className="flex-1">
+                                    {esActividadVencidaNoGestionada ? (
+                                        <>
+                                            <div className="font-bold text-red-900 mb-1">
+                                                Actividad Vencida No Gestionada
+                                            </div>
+                                            <div className="text-sm text-red-800">
+                                                Esta actividad venció y no fue gestionada correctamente.
+                                                {esJefeOSuperior ? (
+                                                    <span className="font-semibold"> Como jefe, puedes reprogramarla como PARTE 2 o cancelarla.</span>
+                                                ) : (
+                                                    <span> Contacta a tu jefe para que la gestione.</span>
+                                                )}
+                                            </div>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <div className="font-bold text-gray-900 mb-1">
+                                                Actividad Pasada
+                                            </div>
+                                            <div className="text-sm text-gray-700">
+                                                Esta actividad ya pasó. No se puede extender, completar, editar ni transferir.
+                                                {actividad.estado === 'no_realizada' && (
+                                                    <span className="font-semibold"> Fue marcada como no realizada automáticamente.</span>
+                                                )}
+                                            </div>
+                                        </>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
                     {/* Horarios */}
                     <div className="grid grid-cols-2 gap-4">
                         <div className="bg-blue-50 p-4 rounded-lg">
@@ -366,6 +419,15 @@ const ModalDetallesActividad = ({ actividad, onClose, onActividadActualizada }) 
                                     className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition flex items-center gap-2"
                                 >
                                     ✕ Cancelar
+                                </button>
+                            )}
+                            {puedeReprogramar && (
+                                <button
+                                    onClick={() => alert('Reprogramar actividad como PARTE 2 (próximamente)')}
+                                    className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition flex items-center gap-2"
+                                    title="Solo jefes pueden reprogramar actividades vencidas no gestionadas"
+                                >
+                                    🔄 Reprogramar PARTE 2
                                 </button>
                             )}
                         </div>

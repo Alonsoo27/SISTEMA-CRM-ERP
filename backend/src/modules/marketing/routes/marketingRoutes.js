@@ -12,6 +12,8 @@ const TiposActividadController = require('../controllers/tiposActividadControlle
 const CalendarioController = require('../controllers/calendarioController');
 const CargaMasivaController = require('../controllers/cargaMasivaController');
 const IndicadoresController = require('../controllers/indicadoresController');
+const ProcesoNocturnoController = require('../controllers/procesoNocturnoController');
+const ReportesController = require('../controllers/reportesController');
 
 // Middleware
 const { authenticateToken, requireRole } = require('../../../middleware/auth');
@@ -337,6 +339,65 @@ router.post('/procesar-huecos/:usuarioId',
     authenticateToken,
     requireRole(GRUPOS_ROLES.MARKETING_COMPLETO),
     ActividadesController.procesarHuecosPendientes
+);
+
+// ============================================
+// PROCESO NOCTURNO
+// ============================================
+
+/**
+ * Ejecutar proceso nocturno manualmente
+ * Marca como no_realizada las actividades vencidas nunca gestionadas
+ * Solo: SUPER_ADMIN
+ */
+router.post('/proceso-nocturno/ejecutar',
+    authenticateToken,
+    requireRole([ROLES.SUPER_ADMIN]),
+    ProcesoNocturnoController.ejecutarManualmente
+);
+
+/**
+ * Obtener historial de ejecuciones del proceso nocturno
+ * Solo: JEFE_MARKETING, SUPER_ADMIN, GERENTE, ADMIN
+ */
+router.get('/proceso-nocturno/historial',
+    authenticateToken,
+    requireRole([ROLES.JEFE_MARKETING, ROLES.SUPER_ADMIN, ROLES.GERENTE, ROLES.ADMIN]),
+    ProcesoNocturnoController.obtenerHistorial
+);
+
+// ============================================
+// REPORTES CORPORATIVOS
+// ============================================
+
+/**
+ * Obtener datos para reporte de productividad personal (JSON)
+ * Roles: Marketing completo
+ */
+router.get('/reportes/productividad/:usuarioId/datos',
+    authenticateToken,
+    requireRole(GRUPOS_ROLES.MARKETING_COMPLETO),
+    ReportesController.obtenerDatosProductividadPersonal
+);
+
+/**
+ * Generar reporte de productividad personal en PDF
+ * Roles: Marketing completo
+ */
+router.get('/reportes/productividad/:usuarioId/pdf',
+    authenticateToken,
+    requireRole(GRUPOS_ROLES.MARKETING_COMPLETO),
+    ReportesController.generarReporteProductividadPDF
+);
+
+/**
+ * Generar reporte de productividad personal en Excel
+ * Roles: Marketing completo
+ */
+router.get('/reportes/productividad/:usuarioId/excel',
+    authenticateToken,
+    requireRole(GRUPOS_ROLES.MARKETING_COMPLETO),
+    ReportesController.generarReporteProductividadExcel
 );
 
 module.exports = router;

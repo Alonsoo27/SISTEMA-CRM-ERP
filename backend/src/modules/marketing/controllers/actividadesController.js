@@ -756,6 +756,17 @@ class ActividadesController {
 
             const actividad = actividadActual.rows[0];
 
+            // VALIDACIÓN: No permitir editar actividades pasadas
+            const ahora = new Date();
+            const fechaFinPlaneada = new Date(actividad.fecha_fin_planeada);
+
+            if (fechaFinPlaneada < ahora) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'No se puede editar una actividad que ya venció.'
+                });
+            }
+
             // Calcular nueva fecha fin si cambia duración
             let nuevaFechaFin = actividad.fecha_fin_planeada;
             if (duracion_minutos && duracion_minutos !== actividad.duracion_planeada_minutos) {
@@ -828,6 +839,30 @@ class ActividadesController {
                 });
             }
 
+            // VALIDACIÓN: No permitir extender actividades pasadas
+            const actividadCheck = await query(
+                'SELECT fecha_fin_planeada, estado FROM actividades_marketing WHERE id = $1',
+                [id]
+            );
+
+            if (actividadCheck.rows.length === 0) {
+                return res.status(404).json({
+                    success: false,
+                    message: 'Actividad no encontrada'
+                });
+            }
+
+            const actividadValidacion = actividadCheck.rows[0];
+            const ahora = new Date();
+            const fechaFinPlaneada = new Date(actividadValidacion.fecha_fin_planeada);
+
+            if (fechaFinPlaneada < ahora) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'No se puede extender una actividad que ya venció. Usa el sistema de gestión de vencidas.'
+                });
+            }
+
             // Registrar extensión
             await query(`
                 INSERT INTO extensiones_actividades (actividad_id, usuario_id, minutos_adicionales, motivo)
@@ -876,6 +911,30 @@ class ActividadesController {
     static async completarActividad(req, res) {
         try {
             const { id } = req.params;
+
+            // VALIDACIÓN: No permitir completar actividades pasadas sin gestión
+            const actividadCheck = await query(
+                'SELECT fecha_fin_planeada, estado FROM actividades_marketing WHERE id = $1',
+                [id]
+            );
+
+            if (actividadCheck.rows.length === 0) {
+                return res.status(404).json({
+                    success: false,
+                    message: 'Actividad no encontrada'
+                });
+            }
+
+            const actividad = actividadCheck.rows[0];
+            const ahora = new Date();
+            const fechaFinPlaneada = new Date(actividad.fecha_fin_planeada);
+
+            if (fechaFinPlaneada < ahora) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'No se puede completar una actividad que ya venció. Usa el sistema de gestión de vencidas.'
+                });
+            }
 
             const result = await query(`
                 UPDATE actividades_marketing SET
