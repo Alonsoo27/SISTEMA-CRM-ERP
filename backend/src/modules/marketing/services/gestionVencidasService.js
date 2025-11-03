@@ -50,6 +50,65 @@ class GestionVencidasService {
                 };
             });
 
+            // ============================================
+            // CREAR NOTIFICACIONES EN LA CAMPANA
+            // ============================================
+            if (actividades.length > 0) {
+                try {
+                    // Crear notificación consolidada si hay varias actividades
+                    const prioridad = actividades.some(a => a.ventana === 'muy_vencida') ? 'critica' :
+                                     actividades.some(a => a.ventana === 'vencida') ? 'alta' : 'media';
+
+                    const titulo = actividades.length === 1
+                        ? `⚠️ Actividad Vencida: ${actividades[0].codigo}`
+                        : `⚠️ ${actividades.length} Actividades Vencidas`;
+
+                    const mensaje = actividades.length === 1
+                        ? `Tu actividad "${actividades[0].descripcion}" venció hace ${actividades[0].minutos_vencimiento} minutos y requiere gestión inmediata.`
+                        : `Tienes ${actividades.length} actividades que vencieron y requieren tu atención inmediata.`;
+
+                    // Verificar si ya existe una notificación reciente para evitar duplicados
+                    const notifExistente = await query(`
+                        SELECT id FROM notificaciones
+                        WHERE usuario_id = $1
+                          AND tipo = 'actividad_vencida_marketing'
+                          AND created_at > NOW() - INTERVAL '5 minutes'
+                        LIMIT 1
+                    `, [usuarioId]);
+
+                    if (notifExistente.rows.length === 0) {
+                        await query(`
+                            INSERT INTO notificaciones (
+                                usuario_id, tipo, titulo, mensaje, prioridad,
+                                datos_extra, accion_url, accion_texto, created_at
+                            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())
+                        `, [
+                            usuarioId,
+                            'actividad_vencida_marketing',
+                            titulo,
+                            mensaje,
+                            prioridad,
+                            JSON.stringify({
+                                actividades_vencidas: actividades.map(a => ({
+                                    id: a.id,
+                                    codigo: a.codigo,
+                                    descripcion: a.descripcion,
+                                    minutos_vencimiento: a.minutos_vencimiento,
+                                    ventana: a.ventana
+                                }))
+                            }),
+                            '/marketing',
+                            'Gestionar Actividades'
+                        ]);
+
+                        console.log(`✅ Notificación de campana creada para usuario ${usuarioId}: ${actividades.length} actividad(es) vencida(s)`);
+                    }
+                } catch (notifError) {
+                    console.error('Error creando notificación de campana:', notifError);
+                    // No lanzar error, solo registrar - las actividades se siguen detectando
+                }
+            }
+
             return {
                 success: true,
                 actividades: actividades,

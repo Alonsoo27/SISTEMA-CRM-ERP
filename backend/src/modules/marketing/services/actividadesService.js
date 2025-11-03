@@ -220,6 +220,27 @@ class ActividadesService {
             const MINUTOS_MINIMOS_HUECO = 15;
 
             if (minutosSinActividad > MINUTOS_MINIMOS_HUECO) {
+                // ✅ VALIDACIÓN: Verificar si hay actividades programadas en ese período
+                const actividadesProgramadas = await query(`
+                    SELECT COUNT(*) as total
+                    FROM actividades_marketing
+                    WHERE usuario_id = $1
+                      AND activo = true
+                      AND tipo != 'sistema'
+                      AND (
+                        (fecha_inicio_planeada >= $2 AND fecha_inicio_planeada < $3)
+                        OR (fecha_fin_planeada > $2 AND fecha_fin_planeada <= $3)
+                        OR (fecha_inicio_planeada <= $2 AND fecha_fin_planeada >= $3)
+                      )
+                `, [usuarioId, finUltimaActividad, ahora]);
+
+                const hayActividadesProgramadas = parseInt(actividadesProgramadas.rows[0]?.total || 0) > 0;
+
+                if (hayActividadesProgramadas) {
+                    console.log(`ℹ️ No se registra hueco: hay ${actividadesProgramadas.rows[0].total} actividad(es) programada(s) en ese período`);
+                    return null;
+                }
+
                 console.log(`⚠️ Hueco detectado: ${Math.round(minutosSinActividad)} minutos desde ${finUltimaActividad} hasta ahora`);
 
                 // CATEGORIZACIÓN INTELIGENTE

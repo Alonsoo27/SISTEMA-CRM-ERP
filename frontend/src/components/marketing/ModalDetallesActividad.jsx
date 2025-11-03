@@ -46,7 +46,8 @@ const ModalDetallesActividad = ({ actividad, onClose, onActividadActualizada }) 
     // Permisos con validación temporal
     const puedeEditar = !esActividadPasada && esMarketing && actividad.estado !== 'completada' && actividad.estado !== 'cancelada';
     const puedeTransferir = !esActividadPasada && esJefeOSuperior && actividad.estado !== 'completada' && actividad.estado !== 'cancelada';
-    const puedeCompletar = !esActividadPasada && (esMarketing || esJefeOSuperior) && actividad.estado === 'en_progreso';
+    // PERMITIR COMPLETAR EN CUALQUIER MOMENTO (incluso si venció) - útil para completar anticipadamente o fuera de tiempo
+    const puedeCompletar = (esMarketing || esJefeOSuperior) && actividad.estado === 'en_progreso';
     const puedeExtender = !esActividadPasada && (esMarketing || esJefeOSuperior) && (actividad.estado === 'en_progreso' || actividad.estado === 'pendiente');
     const puedeCancelar = esJefeOSuperior && actividad.estado !== 'completada' && actividad.estado !== 'cancelada'; // Cancelar no tiene restricción temporal
     const puedeReprogramar = esActividadVencidaNoGestionada && esJefeOSuperior; // Solo jefes pueden reprogramar actividades pasadas no gestionadas
