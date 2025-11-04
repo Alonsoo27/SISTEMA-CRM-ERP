@@ -8,45 +8,19 @@ const { query } = require('../../../config/database');
 class ActividadesService {
     /**
      * Generar código único para actividad
-     * CORREGIDO: Usa MAX() para evitar race conditions
+     * Usa secuencia PostgreSQL para garantizar unicidad (thread-safe)
      */
     static async generarCodigoActividad() {
         const año = new Date().getFullYear();
         const prefijo = `ACT-MKT-${año}-`;
 
-        // Buscar el último código del año actual
+        // Usar secuencia de PostgreSQL (atómico, sin race conditions)
         const result = await query(`
-            SELECT codigo
-            FROM actividades_marketing
-            WHERE codigo LIKE $1
-            ORDER BY codigo DESC
-            LIMIT 1
-        `, [`${prefijo}%`]);
+            SELECT nextval('actividades_marketing_codigo_seq') as numero
+        `);
 
-        let siguienteNumero = 1;
-
-        if (result.rows.length > 0) {
-            const ultimoCodigo = result.rows[0].codigo;
-            // Extraer el número del código (ej: "ACT-MKT-2025-0010" → 10)
-            const match = ultimoCodigo.match(/ACT-MKT-\d{4}-(\d+)$/);
-            if (match) {
-                siguienteNumero = parseInt(match[1]) + 1;
-            }
-        }
-
+        const siguienteNumero = result.rows[0].numero;
         const codigo = `${prefijo}${String(siguienteNumero).padStart(4, '0')}`;
-
-        // Verificar que no exista (por si acaso)
-        const existeResult = await query(`
-            SELECT 1 FROM actividades_marketing WHERE codigo = $1
-        `, [codigo]);
-
-        if (existeResult.rows.length > 0) {
-            // Si existe, intentar con el siguiente número
-            console.log(`⚠️ Código ${codigo} ya existe, incrementando...`);
-            siguienteNumero++;
-            return `${prefijo}${String(siguienteNumero).padStart(4, '0')}`;
-        }
 
         return codigo;
     }

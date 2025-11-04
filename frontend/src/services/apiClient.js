@@ -118,6 +118,100 @@ class ApiClient {
     }
 
     // ============================================
+    // MÉTODO PUT
+    // ============================================
+    async put(endpoint, data = null, options = {}) {
+        try {
+            const url = `${this.baseURL}${endpoint}`;
+            const config = {
+                method: 'PUT',
+                headers: this.getHeaders(options.headers),
+                ...(data && { body: JSON.stringify(data) }),
+                ...options
+            };
+
+            console.log(`📡 PUT Request: ${url}`);
+
+            const response = await fetch(url, config);
+
+            if (!response.ok) {
+                // Intentar leer el body del error
+                let errorData = null;
+                try {
+                    if (response.headers.get('content-type')?.includes('application/json')) {
+                        errorData = await response.json();
+                    }
+                } catch (e) {
+                    // Si no se puede parsear, continuar sin data
+                }
+
+                const error = new Error(`HTTP ${response.status}: ${response.statusText}`);
+                error.status = response.status;
+                error.response = { status: response.status, data: errorData };
+                throw error;
+            }
+
+            // Si es una respuesta JSON
+            if (response.headers.get('content-type')?.includes('application/json')) {
+                return await response.json();
+            }
+
+            return response;
+
+        } catch (error) {
+            console.error(`❌ Error en PUT ${endpoint}:`, error);
+            throw this.handleError(error);
+        }
+    }
+
+    // ============================================
+    // MÉTODO DELETE
+    // ============================================
+    async delete(endpoint, options = {}) {
+        try {
+            const url = `${this.baseURL}${endpoint}`;
+            const config = {
+                method: 'DELETE',
+                headers: this.getHeaders(options.headers),
+                ...(options.data && { body: JSON.stringify(options.data) }),
+                ...options
+            };
+
+            console.log(`📡 DELETE Request: ${url}`);
+
+            const response = await fetch(url, config);
+
+            if (!response.ok) {
+                // Intentar leer el body del error
+                let errorData = null;
+                try {
+                    if (response.headers.get('content-type')?.includes('application/json')) {
+                        errorData = await response.json();
+                    }
+                } catch (e) {
+                    // Si no se puede parsear, continuar sin data
+                }
+
+                const error = new Error(`HTTP ${response.status}: ${response.statusText}`);
+                error.status = response.status;
+                error.response = { status: response.status, data: errorData };
+                throw error;
+            }
+
+            // Si es una respuesta JSON
+            if (response.headers.get('content-type')?.includes('application/json')) {
+                return await response.json();
+            }
+
+            return response;
+
+        } catch (error) {
+            console.error(`❌ Error en DELETE ${endpoint}:`, error);
+            throw this.handleError(error);
+        }
+    }
+
+    // ============================================
     // MÉTODO ESPECIAL PARA DESCARGAR ARCHIVOS
     // ============================================
     async downloadFile(endpoint, data = null, filename = null) {

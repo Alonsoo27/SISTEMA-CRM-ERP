@@ -635,10 +635,12 @@ class CargaMasivaController {
             }
 
             // ============================================
-            // CREAR ACTIVIDADES
+            // CREAR ACTIVIDADES (con cleanup automático)
             // ============================================
             const actividadesCreadas = [];
+            const idsCreados = []; // Para cleanup en caso de error
 
+            try {
             for (let i = 0; i < actividades.length; i++) {
                 const actividad = actividades[i];
 
@@ -654,47 +656,89 @@ class CargaMasivaController {
                         try {
                             console.log(`👤 Procesando para usuario ${usuario.id} (${usuario.email})`);
 
-                            // GENERAR CÓDIGO ÚNICO PARA CADA USUARIO (evita duplicados)
-                            const codigo = await actividadesService.generarCodigoActividad();
-                            console.log(`✅ Código generado: ${codigo}`);
-
-                            // Obtener próximo slot disponible
+                            // PASO 1: Obtener próximo slot disponible (operación lenta)
                             const fechaInicio = await actividadesService.obtenerProximoSlotDisponible(usuario.id);
                             console.log(`📅 Slot disponible: ${fechaInicio}`);
 
                             const fechaFin = reajusteService.agregarMinutosEfectivos(fechaInicio, actividad.duracion_minutos);
                             console.log(`📅 Fecha fin calculada: ${fechaFin}`);
 
-                            const insertQuery = `
-                                INSERT INTO actividades_marketing (
-                                    codigo, categoria_principal, subcategoria, descripcion,
-                                    usuario_id, creado_por, tipo, es_grupal,
-                                    participantes_ids, fecha_inicio_planeada, fecha_fin_planeada,
-                                    duracion_planeada_minutos, color_hex, estado, notas
-                                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, 'pendiente', $14)
-                                RETURNING *
-                            `;
-
                             const participantesIds = actividad.es_grupal ? actividad.usuarios.map(u => u.id) : null;
 
-                            const result = await query(insertQuery, [
-                                codigo,
-                                actividad.categoria_principal,
-                                actividad.subcategoria,
-                                actividad.descripcion,
-                                usuario.id,
-                                user_id,
-                                actividad.es_grupal ? 'grupal' : 'individual',
-                                actividad.es_grupal,
-                                participantesIds,
-                                fechaInicio,
-                                fechaFin,
-                                actividad.duracion_minutos,
-                                actividad.color_hex,
-                                actividad.notas
-                            ]);
+                            // PASO 2: Generar código e insertar INMEDIATAMENTE (retry si hay duplicado)
+                            let insertado = false;
+                            let intentos = 0;
+                            const MAX_INTENTOS = 5;
+                            let result;
 
-                            console.log(`✅ Actividad creada ID: ${result.rows[0].id}`);
+                            while (!insertado && intentos < MAX_INTENTOS) {
+                                try {
+                                    // Generar código JUSTO antes de insertar (minimiza race condition)
+                                    const codigo = await actividadesService.generarCodigoActividad();
+                                    console.log(`✅ Código generado (intento ${intentos + 1}): ${codigo}`);
+
+                                    const insertQuery = `
+                                        INSERT INTO actividades_marketing (
+                                            codigo, categoria_principal, subcategoria, descripcion,
+                                            usuario_id, creado_por, tipo, es_grupal,
+                                            participantes_ids, fecha_inicio_planeada, fecha_fin_planeada,
+                                            duracion_planeada_minutos, color_hex, estado, notas
+                                        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, 'pendiente', $14)
+                                        RETURNING *
+                                    `;
+
+                                    result = await query(insertQuery, [
+                                        codigo,
+                                        actividad.categoria_principal,
+                                        actividad.subcategoria,
+                                        actividad.descripcion,
+                                        usuario.id,
+                                        user_id,
+                                        actividad.es_grupal ? 'grupal' : 'individual',
+                                        actividad.es_grupal,
+                                        participantesIds,
+                                        fechaInicio,
+                                        fechaFin,
+                                        actividad.duracion_minutos,
+                                        actividad.color_hex,
+                                        actividad.notas
+                                    ]);
+
+                                    insertado = true;
+                                    const actividadId = result.rows[0].id;
+                                    idsCreados.push(actividadId); // Trackear para cleanup
+                                    console.log(`✅ Actividad creada ID: ${actividadId} con código: ${codigo}`);
+
+                                    // REAJUSTAR ACTIVIDADES POSTERIORES
+                                    console.log(`🔄 Reajustando actividades posteriores...`);
+                                    await reajusteService.reajustarActividades(
+                                        usuario.id,
+                                        fechaInicio,
+                                        actividad.duracion_minutos,
+                                        actividadId
+                                    );
+                                    console.log(`✅ Reajuste completado`);
+
+
+                                } catch (insertError) {
+                                    // Si es error de duplicado, reintentar
+                                    if (insertError.code === '23505' && insertError.constraint === 'actividades_marketing_codigo_key') {
+                                        intentos++;
+                                        console.log(`⚠️ Código duplicado detectado, reintentando... (${intentos}/${MAX_INTENTOS})`);
+
+                                        if (intentos >= MAX_INTENTOS) {
+                                            throw new Error(`No se pudo generar un código único después de ${MAX_INTENTOS} intentos`);
+                                        }
+
+                                        // Esperar un poco antes de reintentar (evitar colisiones)
+                                        await new Promise(resolve => setTimeout(resolve, 50 * intentos));
+                                    } else {
+                                        // Otro tipo de error, lanzar inmediatamente
+                                        throw insertError;
+                                    }
+                                }
+                            }
+
                             actividadesCreadas.push(result.rows[0]);
                         } catch (userError) {
                             console.error(`❌ Error creando actividad para usuario ${usuario.email}:`, userError);
@@ -707,13 +751,44 @@ class CargaMasivaController {
                 }
             }
 
-            res.json({
-                success: true,
-                message: `Se crearon ${actividadesCreadas.length} actividades exitosamente`,
-                actividades_creadas: actividadesCreadas.length,
-                actividades_agrupadas: actividades.length,
-                detalle: actividadesCreadas
-            });
+                // Todo exitoso
+                console.log('✅ Todas las actividades creadas exitosamente');
+
+                res.json({
+                    success: true,
+                    message: `Se crearon ${actividadesCreadas.length} actividades exitosamente`,
+                    actividades_creadas: actividadesCreadas.length,
+                    actividades_agrupadas: actividades.length,
+                    detalle: actividadesCreadas
+                });
+
+            } catch (creacionError) {
+                // Cleanup: eliminar todas las actividades creadas hasta el error
+                console.error('❌ Error durante creación, iniciando cleanup...');
+
+                if (idsCreados.length > 0) {
+                    try {
+                        // Eliminar historial de reajustes primero
+                        await query(`
+                            DELETE FROM historial_reajustes
+                            WHERE actividad_disparadora_id = ANY($1)
+                        `, [idsCreados]);
+
+                        // Eliminar actividades creadas
+                        const deleteResult = await query(`
+                            DELETE FROM actividades_marketing
+                            WHERE id = ANY($1)
+                        `, [idsCreados]);
+
+                        console.log(`🧹 Cleanup completado: ${deleteResult.rowCount} actividades eliminadas`);
+                    } catch (cleanupError) {
+                        console.error('❌ Error durante cleanup:', cleanupError);
+                        // No lanzar error, ya estamos en un catch
+                    }
+                }
+
+                throw creacionError;
+            }
 
         } catch (error) {
             console.error('❌ Error procesando carga masiva:', error);
