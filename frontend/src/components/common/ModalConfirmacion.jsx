@@ -59,6 +59,9 @@ const ModalConfirmacion = ({
     const iconoMostrar = icono || iconosPorDefecto[tipo];
 
     const handleConfirm = () => {
+        console.log('🔵 ModalConfirmacion: handleConfirm llamado');
+        console.log('🔵 onConfirm existe?', typeof onConfirm);
+        console.log('🔵 onClose existe?', typeof onClose);
         onConfirm();
         onClose();
     };
@@ -66,11 +69,19 @@ const ModalConfirmacion = ({
     return createPortal(
         <div
             className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[10003] p-4"
-            onClick={onClose}
+            onClick={(e) => {
+                console.log('🔶 CLICK en overlay', e.target);
+                if (e.target === e.currentTarget) {
+                    onClose();
+                }
+            }}
         >
             <div
                 className="bg-white rounded-lg shadow-2xl max-w-md w-full transform transition-all"
-                onClick={(e) => e.stopPropagation()}
+                onClick={(e) => {
+                    console.log('🔷 CLICK en div blanco', e.target);
+                    e.stopPropagation();
+                }}
             >
                 {/* Header con icono */}
                 <div className={`flex items-center gap-4 p-6 ${color.bg} border-b ${color.border}`}>
@@ -98,7 +109,11 @@ const ModalConfirmacion = ({
                         {textoCancelar}
                     </button>
                     <button
-                        onClick={handleConfirm}
+                        onClick={(e) => {
+                            console.log('🟢 CLICK en botón confirmar detectado', e);
+                            e.stopPropagation();
+                            handleConfirm();
+                        }}
                         className={`px-5 py-2.5 text-white rounded-lg transition font-medium ${color.button}`}
                     >
                         {textoConfirmar}

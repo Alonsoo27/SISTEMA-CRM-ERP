@@ -66,6 +66,11 @@ const ModalCancelarActividad = ({ actividad, onClose, onSuccess }) => {
     };
 
     const handleConfirmarCancelacion = async () => {
+        console.log('🔴 handleConfirmarCancelacion llamado');
+        console.log('🔴 actividad.id:', actividad.id);
+        console.log('🔴 motivo:', motivo);
+        console.log('🔴 optimizarCalendario:', optimizarCalendario);
+
         setLoading(true);
         try {
             await marketingService.cancelarActividad(actividad.id, motivo, optimizarCalendario);
