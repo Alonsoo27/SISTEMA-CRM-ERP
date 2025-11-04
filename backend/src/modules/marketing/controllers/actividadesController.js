@@ -1192,8 +1192,8 @@ class ActividadesController {
             const result = await query(`
                 UPDATE actividades_marketing SET
                     estado = 'completada',
-                    fecha_fin_real = NOW(),
-                    duracion_real_minutos = calcular_minutos_laborales(fecha_inicio_real, NOW())
+                    fecha_fin_real = (NOW() AT TIME ZONE 'America/Lima'),
+                    duracion_real_minutos = calcular_minutos_laborales(fecha_inicio_real, (NOW() AT TIME ZONE 'America/Lima'))
                 WHERE id = $1
                 RETURNING *
             `, [id]);

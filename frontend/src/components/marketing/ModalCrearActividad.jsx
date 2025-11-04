@@ -424,11 +424,7 @@ const ModalCrearActividad = ({ onClose, onSuccess, usuarioId }) => {
 // ============================================
 const ModalColision = ({ colision, onConfirmar, onCancelar, onSeleccionarSlot, formData }) => {
     const formatearFecha = (fecha) => {
-        // Las fechas vienen en UTC desde el backend, agregar 'Z' si no la tiene
-        const fechaStr = typeof fecha === 'string' && !fecha.endsWith('Z')
-            ? fecha + 'Z'
-            : fecha;
-        return new Date(fechaStr).toLocaleString('es-PE', {
+        return new Date(fecha).toLocaleString('es-PE', {
             day: '2-digit',
             month: '2-digit',
             year: 'numeric',

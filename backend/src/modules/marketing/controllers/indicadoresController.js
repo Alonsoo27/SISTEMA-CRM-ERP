@@ -115,12 +115,14 @@ class IndicadoresController {
             const extensiones = parseInt(extensionesResult.rows[0]?.total || 0);
 
             // Actividades vencidas (crítico)
+            // Solo contar las que ACTUALMENTE están vencidas, no las que fueron completadas después
             const vencidasResult = await query(`
                 SELECT COUNT(*) as total
                 FROM actividades_marketing
                 WHERE usuario_id = $1
                 AND activo = true
                 AND fue_vencida = true
+                AND estado IN ('no_realizada', 'vencida')
                 AND created_at BETWEEN $2 AND $3
             `, [usuarioId, fechaInicio, fechaFin]);
 
@@ -277,11 +279,15 @@ class IndicadoresController {
                     SUM(CASE WHEN am.estado = 'completada' THEN 1 ELSE 0 END) as completadas,
                     SUM(CASE WHEN am.estado = 'pendiente' THEN 1 ELSE 0 END) as pendientes,
                     SUM(CASE WHEN am.estado = 'en_progreso' THEN 1 ELSE 0 END) as en_progreso,
-                    AVG(CASE
+                    (SUM(CASE
                         WHEN am.duracion_real_minutos IS NOT NULL AND am.estado = 'completada'
-                        THEN am.duracion_real_minutos::float / NULLIF(am.duracion_planeada_minutos, 0)
-                        ELSE NULL
-                    END) * 100 as eficiencia_promedio
+                        THEN am.duracion_planeada_minutos
+                        ELSE 0
+                    END)::float / NULLIF(SUM(CASE
+                        WHEN am.duracion_real_minutos IS NOT NULL AND am.estado = 'completada'
+                        THEN am.duracion_real_minutos
+                        ELSE 0
+                    END), 0)) * 100 as eficiencia_promedio
                 FROM usuarios u
                 INNER JOIN actividades_marketing am ON u.id = am.usuario_id
                 WHERE am.activo = true

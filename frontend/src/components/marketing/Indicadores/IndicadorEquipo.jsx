@@ -63,9 +63,9 @@ const IndicadorEquipo = ({ datos, esJefe }) => {
                                 {/* Eficiencia */}
                                 <div className="flex-shrink-0 text-right">
                                     <div className={`text-sm font-bold ${
-                                        parseFloat(usuario.eficiencia_promedio) <= 100
+                                        parseFloat(usuario.eficiencia_promedio) >= 100
                                             ? 'text-green-600'
-                                            : parseFloat(usuario.eficiencia_promedio) <= 120
+                                            : parseFloat(usuario.eficiencia_promedio) >= 80
                                             ? 'text-yellow-600'
                                             : 'text-red-600'
                                     }`}>

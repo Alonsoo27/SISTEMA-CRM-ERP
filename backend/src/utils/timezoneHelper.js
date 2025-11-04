@@ -1,63 +1,20 @@
 // ============================================
-// HELPER: Conversión de timestamps a formato UTC con 'Z'
+// HELPER: Ya NO agrega 'Z' - timestamps son hora local Perú
 // ============================================
 
 /**
- * Convierte todos los campos de timestamp de un objeto para que incluyan 'Z'
- * indicando que son UTC. Esto permite que JavaScript los interprete correctamente.
+ * DESACTIVADO: Ahora los timestamps se guardan en hora de Perú (America/Lima)
+ * directamente en la BD usando NOW() AT TIME ZONE 'America/Lima'
+ *
+ * Este helper ahora solo retorna los datos sin modificación.
  *
  * @param {Object|Array} data - Objeto o array de objetos con campos timestamp
- * @returns {Object|Array} - Mismo objeto/array con timestamps en formato ISO + 'Z'
+ * @returns {Object|Array} - Mismo objeto/array sin modificaciones
  */
 function agregarZonaHorariaUTC(data) {
-    if (!data) return data;
-
-    // Si es un array, procesar cada elemento
-    if (Array.isArray(data)) {
-        return data.map(item => agregarZonaHorariaUTC(item));
-    }
-
-    // Si no es un objeto, retornar tal cual
-    if (typeof data !== 'object') {
-        return data;
-    }
-
-    // Procesar el objeto
-    const resultado = { ...data };
-
-    // Lista de campos que son timestamps UTC (generados por NOW() en el servidor)
-    // IMPORTANTE: Las fechas PLANEADAS vienen desde el frontend en hora local,
-    // pero las fechas REALES se generan con NOW() que es UTC
-    const camposTimestamp = [
-        'fecha_inicio_real',
-        'fecha_fin_real',
-        'created_at',
-        'updated_at',
-        'deleted_at',
-        'editada_en',
-        'hora_corte',
-        'gestionada_vencimiento_en',
-        'marcada_no_realizada_en'
-    ];
-
-    // Agregar 'Z' a cada campo timestamp si existe y no la tiene
-    camposTimestamp.forEach(campo => {
-        if (resultado[campo]) {
-            const valor = resultado[campo];
-
-            // Si es un string y no termina en 'Z', agregarlo
-            if (typeof valor === 'string' && !valor.endsWith('Z')) {
-                // Remover el +00 si existe y agregar Z
-                resultado[campo] = valor.replace(/\+00$/, '') + 'Z';
-            }
-            // Si es un Date object, convertir a ISO string
-            else if (valor instanceof Date) {
-                resultado[campo] = valor.toISOString();
-            }
-        }
-    });
-
-    return resultado;
+    // Simplemente retornar los datos sin agregar 'Z'
+    // Los timestamps ya vienen en hora de Perú desde la BD
+    return data;
 }
 
 module.exports = {
