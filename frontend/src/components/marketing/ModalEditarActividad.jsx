@@ -3,6 +3,7 @@
 // ============================================
 
 import { useState } from 'react';
+import ModalNotificacion from '../common/ModalNotificacion';
 
 const ModalEditarActividad = ({ actividad, onClose, onSuccess }) => {
     const [formData, setFormData] = useState({
@@ -11,6 +12,7 @@ const ModalEditarActividad = ({ actividad, onClose, onSuccess }) => {
         motivo_edicion: ''
     });
     const [loading, setLoading] = useState(false);
+    const [notificacion, setNotificacion] = useState({ isOpen: false, tipo: 'info', titulo: '', mensaje: '' });
 
     const handleChange = (e) => {
         const { name, value } = e.target;
@@ -24,7 +26,12 @@ const ModalEditarActividad = ({ actividad, onClose, onSuccess }) => {
         e.preventDefault();
 
         if (!formData.motivo_edicion.trim()) {
-            alert('El motivo de edición es obligatorio');
+            setNotificacion({
+                isOpen: true,
+                tipo: 'warning',
+                titulo: 'Campo obligatorio',
+                mensaje: 'El motivo de edición es obligatorio. Por favor, explica por qué estás editando esta actividad.'
+            });
             return;
         }
 
@@ -39,7 +46,12 @@ const ModalEditarActividad = ({ actividad, onClose, onSuccess }) => {
             await onSuccess(datos);
         } catch (error) {
             console.error('Error editando actividad:', error);
-            alert('Error al editar actividad: ' + (error.response?.data?.message || error.message));
+            setNotificacion({
+                isOpen: true,
+                tipo: 'danger',
+                titulo: 'Error al editar',
+                mensaje: error.response?.data?.message || error.message || 'No se pudo editar la actividad'
+            });
         } finally {
             setLoading(false);
         }
@@ -176,6 +188,15 @@ const ModalEditarActividad = ({ actividad, onClose, onSuccess }) => {
                     </div>
                 </form>
             </div>
+
+            {/* Modal de Notificación */}
+            <ModalNotificacion
+                isOpen={notificacion.isOpen}
+                onClose={() => setNotificacion({ ...notificacion, isOpen: false })}
+                tipo={notificacion.tipo}
+                titulo={notificacion.titulo}
+                mensaje={notificacion.mensaje}
+            />
         </div>
     );
 };

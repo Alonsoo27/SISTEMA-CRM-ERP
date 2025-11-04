@@ -8,6 +8,8 @@ import { createPortal } from 'react-dom';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import marketingService from '../../services/marketingService';
+import ModalConfirmacion from '../common/ModalConfirmacion';
+import ModalNotificacion from '../common/ModalNotificacion';
 
 const ModalCancelarActividad = ({ actividad, onClose, onSuccess }) => {
     const [motivo, setMotivo] = useState('');
@@ -16,6 +18,8 @@ const ModalCancelarActividad = ({ actividad, onClose, onSuccess }) => {
     const [loading, setLoading] = useState(false);
     const [loadingAnalisis, setLoadingAnalisis] = useState(false);
     const [showModalDetalle, setShowModalDetalle] = useState(false);
+    const [confirmacion, setConfirmacion] = useState({ isOpen: false, mensaje: '' });
+    const [notificacion, setNotificacion] = useState({ isOpen: false, tipo: 'info', titulo: '', mensaje: '' });
 
     // Analizar optimización cuando se marca el checkbox
     useEffect(() => {
@@ -31,38 +35,69 @@ const ModalCancelarActividad = ({ actividad, onClose, onSuccess }) => {
             setAnalisisOptimizacion(response.data);
         } catch (error) {
             console.error('Error analizando optimización:', error);
-            alert('Error al analizar optimización');
+            setNotificacion({
+                isOpen: true,
+                tipo: 'danger',
+                titulo: 'Error al analizar',
+                mensaje: 'No se pudo analizar la optimización del calendario. Intenta de nuevo.'
+            });
             setOptimizarCalendario(false);
         } finally {
             setLoadingAnalisis(false);
         }
     };
 
-    const handleSubmit = async () => {
+    const handleSubmitClick = () => {
         if (!motivo.trim()) {
-            alert('El motivo de cancelación es obligatorio');
+            setNotificacion({
+                isOpen: true,
+                tipo: 'warning',
+                titulo: 'Campo obligatorio',
+                mensaje: 'El motivo de cancelación es obligatorio. Por favor, explica por qué estás cancelando esta actividad.'
+            });
             return;
         }
 
-        if (!window.confirm('¿Estás seguro de cancelar esta actividad?')) {
-            return;
-        }
+        // Mostrar modal de confirmación
+        setConfirmacion({
+            isOpen: true,
+            mensaje: '¿Estás seguro de cancelar esta actividad? Esta acción no se puede deshacer.'
+        });
+    };
 
+    const handleConfirmarCancelacion = async () => {
         setLoading(true);
         try {
             await marketingService.cancelarActividad(actividad.id, motivo, optimizarCalendario);
 
             if (optimizarCalendario && analisisOptimizacion?.puede_optimizar) {
-                alert(`✅ Actividad cancelada y ${analisisOptimizacion.actividades_a_adelantar.length} actividades adelantadas`);
+                setNotificacion({
+                    isOpen: true,
+                    tipo: 'success',
+                    titulo: 'Actividad cancelada',
+                    mensaje: `Actividad cancelada exitosamente y ${analisisOptimizacion.actividades_a_adelantar.length} actividades adelantadas automáticamente.`
+                });
             } else {
-                alert('✅ Actividad cancelada exitosamente');
+                setNotificacion({
+                    isOpen: true,
+                    tipo: 'success',
+                    titulo: 'Actividad cancelada',
+                    mensaje: 'La actividad ha sido cancelada exitosamente.'
+                });
             }
 
-            if (onSuccess) onSuccess();
-            onClose();
+            setTimeout(() => {
+                if (onSuccess) onSuccess();
+                onClose();
+            }, 1500);
         } catch (error) {
             console.error('Error cancelando actividad:', error);
-            alert('Error al cancelar la actividad');
+            setNotificacion({
+                isOpen: true,
+                tipo: 'danger',
+                titulo: 'Error al cancelar',
+                mensaje: error.response?.data?.message || 'No se pudo cancelar la actividad. Intenta de nuevo.'
+            });
         } finally {
             setLoading(false);
         }
@@ -226,7 +261,7 @@ const ModalCancelarActividad = ({ actividad, onClose, onSuccess }) => {
                         Cancelar
                     </button>
                     <button
-                        onClick={handleSubmit}
+                        onClick={handleSubmitClick}
                         disabled={loading || !motivo.trim()}
                         className="px-6 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition disabled:opacity-50 flex items-center gap-2"
                     >
@@ -327,6 +362,27 @@ const ModalDetalleOptimizacion = ({ analisis, onClose, formatearHora }) => {
                     </button>
                 </div>
             </div>
+
+            {/* Modal de Confirmación */}
+            <ModalConfirmacion
+                isOpen={confirmacion.isOpen}
+                onClose={() => setConfirmacion({ ...confirmacion, isOpen: false })}
+                onConfirm={handleConfirmarCancelacion}
+                titulo="Confirmar Cancelación"
+                mensaje={confirmacion.mensaje}
+                textoConfirmar="Sí, cancelar"
+                textoCancelar="No, volver"
+                tipo="danger"
+            />
+
+            {/* Modal de Notificación */}
+            <ModalNotificacion
+                isOpen={notificacion.isOpen}
+                onClose={() => setNotificacion({ ...notificacion, isOpen: false })}
+                tipo={notificacion.tipo}
+                titulo={notificacion.titulo}
+                mensaje={notificacion.mensaje}
+            />
         </div>,
         document.body
     );
