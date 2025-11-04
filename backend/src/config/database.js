@@ -2,7 +2,16 @@
 // Configuración de Base de Datos PostgreSQL
 // Conexión a Supabase
 
-const { Pool } = require('pg');
+const { Pool, types } = require('pg');
+
+// ============================================
+// CONFIGURACIÓN DE PARSEO DE TIMESTAMPS
+// ============================================
+// Desactivar conversión automática de timestamps a Date objects
+// Esto permite que los timestamps se devuelvan como strings y
+// podamos controlar manualmente la zona horaria
+types.setTypeParser(1114, (val) => val); // timestamp without time zone
+types.setTypeParser(1184, (val) => val); // timestamp with time zone
 
 // Configuración del pool de conexiones
 const pool = new Pool({
