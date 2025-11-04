@@ -47,7 +47,8 @@ class IndicadoresController {
                 pendientes: 0,
                 en_progreso: 0,
                 canceladas: 0,
-                pausadas: 0
+                pausadas: 0,
+                no_realizada: 0
             };
 
             estadosResult.rows.forEach(row => {
@@ -59,6 +60,7 @@ class IndicadoresController {
                                  row.estado === 'pendiente' ? 'pendientes' :
                                  row.estado === 'cancelada' ? 'canceladas' :
                                  row.estado === 'pausada' ? 'pausadas' :
+                                 row.estado === 'no_realizada' ? 'no_realizada' :
                                  row.estado;
 
                 totales[estadoKey] = total;
@@ -206,9 +208,11 @@ class IndicadoresController {
             const totalReal = parseInt(tiemposResult.rows[0]?.total_real || 0);
             const totalAdicional = parseInt(tiemposResult.rows[0]?.total_adicional || 0);
 
-            // Calcular eficiencia (% de tiempo real vs planeado)
-            const eficiencia = totalPlaneado > 0
-                ? ((totalReal / totalPlaneado) * 100).toFixed(1)
+            // Calcular eficiencia (% de cumplimiento del tiempo planeado)
+            // Eficiencia = (Tiempo Planeado / Tiempo Real) * 100
+            // 100% = perfecto, >100% = más rápido de lo esperado, <100% = más lento
+            const eficiencia = totalReal > 0
+                ? ((totalPlaneado / totalReal) * 100).toFixed(1)
                 : 100;
 
             // Actividades que excedieron tiempo planeado

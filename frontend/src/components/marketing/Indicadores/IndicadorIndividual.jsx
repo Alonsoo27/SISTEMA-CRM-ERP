@@ -97,6 +97,15 @@ const IndicadorIndividual = ({ datos }) => {
                                     {totales.canceladas}
                                 </div>
                             )}
+                            {totales.no_realizada > 0 && (
+                                <div
+                                    className="bg-orange-500 flex items-center justify-center text-white text-xs font-bold"
+                                    style={{ width: `${(totales.no_realizada / totales.total) * 100}%` }}
+                                    title={`${totales.no_realizada} no realizadas`}
+                                >
+                                    {totales.no_realizada}
+                                </div>
+                            )}
                         </div>
 
                         {/* Leyenda */}
@@ -113,6 +122,12 @@ const IndicadorIndividual = ({ datos }) => {
                                 <div className="w-3 h-3 bg-gray-400 rounded"></div>
                                 <span>Pendientes ({totales.pendientes})</span>
                             </div>
+                            {totales.no_realizada > 0 && (
+                                <div className="flex items-center gap-1">
+                                    <div className="w-3 h-3 bg-orange-500 rounded"></div>
+                                    <span>No realizadas ({totales.no_realizada})</span>
+                                </div>
+                            )}
                         </div>
                     </div>
                 </div>

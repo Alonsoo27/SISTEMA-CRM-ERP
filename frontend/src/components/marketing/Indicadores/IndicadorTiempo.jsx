@@ -8,15 +8,16 @@ const IndicadorTiempo = ({ datos }) => {
     const { tiempos, eficiencia, actividadesExcedidas } = datos;
 
     // Determinar color según eficiencia
+    // NUEVA LÓGICA: >100% es bueno, 100% es perfecto, <100% es malo
     const getEficienciaColor = () => {
-        if (eficiencia <= 100) return 'text-green-600';
-        if (eficiencia <= 120) return 'text-yellow-600';
-        return 'text-red-600';
+        if (eficiencia >= 100) return 'text-green-600'; // Cumplió o superó expectativa
+        if (eficiencia >= 80) return 'text-yellow-600';  // Desfase moderado (80-99%)
+        return 'text-red-600'; // Desfase crítico (<80%)
     };
 
     const getEficienciaBgColor = () => {
-        if (eficiencia <= 100) return 'bg-green-50';
-        if (eficiencia <= 120) return 'bg-yellow-50';
+        if (eficiencia >= 100) return 'bg-green-50';
+        if (eficiencia >= 80) return 'bg-yellow-50';
         return 'bg-red-50';
     };
 
@@ -37,8 +38,8 @@ const IndicadorTiempo = ({ datos }) => {
                 <div className={`text-4xl font-bold ${getEficienciaColor()}`}>{eficiencia}%</div>
                 <div className="text-xs text-gray-600 mt-1">Eficiencia de Tiempo</div>
                 <div className="text-xs text-gray-500 mt-1">
-                    {eficiencia <= 100 ? '✅ Dentro del tiempo planeado' :
-                     eficiencia <= 120 ? '⚠️ Ligero desfase' :
+                    {eficiencia >= 100 ? '✅ Cumplió tiempo planeado' :
+                     eficiencia >= 80 ? '⚠️ Desfase moderado' :
                      '🔴 Requiere atención'}
                 </div>
             </div>
@@ -102,9 +103,14 @@ const IndicadorTiempo = ({ datos }) => {
                     <span className="text-sm font-bold text-gray-900">{actividadesExcedidas}</span>
                 </div>
                 <div className="flex justify-between items-center">
-                    <span className="text-sm text-gray-600">Diferencia promedio</span>
+                    <span className="text-sm text-gray-600">Desviación del tiempo planeado</span>
                     <span className={`text-sm font-bold ${getEficienciaColor()}`}>
-                        {eficiencia > 100 ? '+' : ''}{(eficiencia - 100).toFixed(1)}%
+                        {eficiencia < 100
+                            ? `+${((100 / eficiencia - 1) * 100).toFixed(1)}%`
+                            : eficiencia > 100
+                                ? `-${((1 - 100 / eficiencia) * 100).toFixed(1)}%`
+                                : '0%'
+                        }
                     </span>
                 </div>
             </div>
