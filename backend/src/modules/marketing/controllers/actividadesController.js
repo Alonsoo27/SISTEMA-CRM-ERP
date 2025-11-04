@@ -196,34 +196,43 @@ class ActividadesController {
             } else {
                 // FECHA AUTOMÁTICA
                 esAutomatica = true;
-                const slotInfo = await actividadesService.obtenerProximoSlotDisponible(
-                    usuarioDestino,
-                    es_prioritaria ? null : duracion_minutos // Solo validar duración si NO es prioritaria
-                );
 
-                // Si obtenerProximoSlotDisponible retorna objeto con info
-                if (typeof slotInfo === 'object' && slotInfo.fecha) {
-                    fechaInicioPlaneada = slotInfo.fecha;
-
-                    // Para actividades NORMALES, si no hay espacio suficiente, buscar al final
-                    if (!es_prioritaria && !slotInfo.esSuficiente) {
-                        console.log('⚠️ No hay espacio suficiente en slot encontrado para actividad normal');
-                        // Buscar siguiente hueco suficiente
-                        const huecoPosterior = await colisionesService.buscarHuecoPosterior(
-                            usuarioDestino,
-                            slotInfo.fecha,
-                            duracion_minutos
-                        );
-
-                        if (huecoPosterior) {
-                            fechaInicioPlaneada = huecoPosterior.inicio;
-                        }
-                    }
+                // Para actividades PRIORITARIAS automáticas: usar AHORA
+                // Esto permite que la detección de colisiones funcione correctamente
+                if (es_prioritaria) {
+                    fechaInicioPlaneada = new Date();
+                    console.log('📅 Actividad PRIORITARIA automática - Usando AHORA:', fechaInicioPlaneada);
                 } else {
-                    fechaInicioPlaneada = slotInfo;
-                }
+                    // Para actividades NORMALES: buscar hueco disponible
+                    const slotInfo = await actividadesService.obtenerProximoSlotDisponible(
+                        usuarioDestino,
+                        duracion_minutos
+                    );
 
-                console.log('📅 Usando fecha_inicio AUTOMÁTICA:', fechaInicioPlaneada);
+                    // Si obtenerProximoSlotDisponible retorna objeto con info
+                    if (typeof slotInfo === 'object' && slotInfo.fecha) {
+                        fechaInicioPlaneada = slotInfo.fecha;
+
+                        // Para actividades NORMALES, si no hay espacio suficiente, buscar al final
+                        if (!slotInfo.esSuficiente) {
+                            console.log('⚠️ No hay espacio suficiente en slot encontrado para actividad normal');
+                            // Buscar siguiente hueco suficiente
+                            const huecoPosterior = await colisionesService.buscarHuecoPosterior(
+                                usuarioDestino,
+                                slotInfo.fecha,
+                                duracion_minutos
+                            );
+
+                            if (huecoPosterior) {
+                                fechaInicioPlaneada = huecoPosterior.inicio;
+                            }
+                        }
+                    } else {
+                        fechaInicioPlaneada = slotInfo;
+                    }
+
+                    console.log('📅 Usando fecha_inicio AUTOMÁTICA:', fechaInicioPlaneada);
+                }
             }
 
             // Calcular fecha fin
