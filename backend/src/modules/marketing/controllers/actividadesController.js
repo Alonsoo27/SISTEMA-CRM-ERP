@@ -783,82 +783,164 @@ class ActividadesController {
                 });
             }
 
+            // ======================================
+            // MANEJO ESPECIAL PARA ACTIVIDADES GRUPALES
+            // ======================================
+            let actividadesRelacionadas = [actividad];
+            let todosParticipantes = [actividad.usuario_id];
+
+            if (actividad.es_grupal) {
+                console.log('👥 Actividad GRUPAL detectada - Editando para TODOS los participantes');
+
+                // Extraer código base (sin el -usuario_id final)
+                const codigoBase = actividad.codigo.replace(/-\d+$/, '');
+                console.log(`📋 Código base: ${codigoBase}, buscando todas las actividades relacionadas...`);
+
+                // Obtener TODAS las actividades con ese código base
+                const actividadesGrupales = await query(`
+                    SELECT * FROM actividades_marketing
+                    WHERE codigo LIKE $1 AND activo = true
+                    ORDER BY usuario_id
+                `, [`${codigoBase}%`]);
+
+                actividadesRelacionadas = actividadesGrupales.rows;
+                todosParticipantes = actividadesRelacionadas.map(a => a.usuario_id);
+
+                console.log(`👥 Encontrados ${actividadesRelacionadas.length} participantes: IDs ${todosParticipantes.join(', ')}`);
+            }
+
             // Calcular nueva fecha inicio y fin
             const nuevaFechaInicio = fecha_inicio ? new Date(fecha_inicio) : new Date(actividad.fecha_inicio_planeada);
             const nuevaDuracion = duracion_minutos || actividad.duracion_planeada_minutos;
             const nuevaFechaFin = reajusteService.agregarMinutosEfectivos(nuevaFechaInicio, nuevaDuracion);
 
-            // VALIDACIÓN: Detectar colisiones con el nuevo horario
-            const colision = await colisionesService.detectarColisionesEdicion(
-                actividad.usuario_id,
-                nuevaFechaInicio,
-                nuevaFechaFin,
-                id
-            );
+            // VALIDACIÓN: Detectar colisiones para TODOS los participantes
+            let todosConflictos = [];
+            let hayBloqueo = false;
+            let infoDesplazamiento = null;
 
-            if (colision.hayColision && colision.bloqueante) {
-                // Hay colisión con actividades inmovibles (programadas, grupales o prioritarias)
+            for (const participante of todosParticipantes) {
+                const actividadParticipante = actividadesRelacionadas.find(a => a.usuario_id === participante);
+
+                const colision = await colisionesService.detectarColisionesEdicion(
+                    participante,
+                    nuevaFechaInicio,
+                    nuevaFechaFin,
+                    actividadParticipante.id
+                );
+
+                if (colision.hayColision) {
+                    todosConflictos.push({
+                        usuario_id: participante,
+                        conflictos: colision.conflictos,
+                        bloqueante: colision.bloqueante
+                    });
+
+                    if (colision.bloqueante) {
+                        hayBloqueo = true;
+                    }
+                }
+            }
+
+            // Si algún participante tiene colisión bloqueante, NO proceder
+            if (hayBloqueo) {
+                console.log('🚫 Colisión BLOQUEANTE detectada en al menos un participante');
                 return res.status(409).json({
                     success: false,
-                    tipo_error: 'colision_edicion',
-                    mensaje: colision.mensaje,
-                    advertencia: colision.advertencia,
-                    conflictos: colision.conflictos,
-                    sugerencias: colision.sugerencias || null,
-                    total_conflictos: colision.total_conflictos,
-                    conflictos_bloqueantes: colision.conflictos_bloqueantes,
+                    tipo_error: 'colision_edicion_grupal',
+                    mensaje: actividad.es_grupal
+                        ? 'Uno o más participantes tienen conflictos de horario al editar esta actividad grupal'
+                        : 'Hay conflictos de horario al editar esta actividad',
+                    conflictos_por_participante: todosConflictos,
+                    total_participantes_afectados: todosConflictos.filter(c => c.bloqueante).length,
                     instruccion: 'Elige otro horario o reduce la duración para evitar colisiones'
                 });
             }
 
-            // Si hay colisión NO bloqueante (solo actividades normales), informar pero continuar
-            let infoDesplazamiento = null;
-            if (colision.hayColision && !colision.bloqueante) {
+            // Si hay colisiones NO bloqueantes, informar
+            if (todosConflictos.length > 0 && !hayBloqueo) {
+                const totalActividadesDesplazadas = todosConflictos.reduce((sum, c) => sum + c.conflictos.length, 0);
                 infoDesplazamiento = {
-                    actividades_desplazadas: colision.conflictos.length,
-                    mensaje: colision.mensaje
+                    actividades_desplazadas: totalActividadesDesplazadas,
+                    participantes_afectados: todosConflictos.length,
+                    mensaje: actividad.es_grupal
+                        ? `Se desplazarán ${totalActividadesDesplazadas} actividad(es) normal(es) de ${todosConflictos.length} participante(s)`
+                        : `Se desplazarán ${totalActividadesDesplazadas} actividad(es) normal(es)`
                 };
-                console.log(`ℹ️ ${colision.conflictos.length} actividad(es) normal(es) se desplazarán`);
+                console.log(`ℹ️ ${infoDesplazamiento.mensaje}`);
             }
 
-            // Actualizar actividad
-            const updateQuery = `
-                UPDATE actividades_marketing SET
-                    duracion_planeada_minutos = COALESCE($1, duracion_planeada_minutos),
-                    fecha_inicio_planeada = COALESCE($2, fecha_inicio_planeada),
-                    fecha_fin_planeada = $3,
-                    editada = true,
-                    motivo_edicion = $4,
-                    editada_por = $5,
-                    editada_en = NOW()
-                WHERE id = $6
-                RETURNING *
-            `;
+            // Actualizar TODAS las actividades relacionadas (grupal) o solo la actual (individual)
+            let result;
+            if (actividad.es_grupal) {
+                const idsActualizar = actividadesRelacionadas.map(a => a.id);
+                console.log(`🔄 Actualizando ${idsActualizar.length} registros grupales...`);
 
-            const result = await query(updateQuery, [
-                duracion_minutos,
-                fecha_inicio,
-                nuevaFechaFin,
-                motivo_edicion,
-                user_id,
-                id
-            ]);
+                result = await query(`
+                    UPDATE actividades_marketing SET
+                        duracion_planeada_minutos = COALESCE($1, duracion_planeada_minutos),
+                        fecha_inicio_planeada = COALESCE($2, fecha_inicio_planeada),
+                        fecha_fin_planeada = $3,
+                        editada = true,
+                        motivo_edicion = $4,
+                        editada_por = $5,
+                        editada_en = NOW()
+                    WHERE id = ANY($6::int[])
+                    RETURNING *
+                `, [
+                    duracion_minutos,
+                    fecha_inicio,
+                    nuevaFechaFin,
+                    motivo_edicion,
+                    user_id,
+                    idsActualizar
+                ]);
 
-            // Reajustar actividades posteriores (SOLO actividades normales)
+                console.log(`✅ ${result.rows.length} actividades grupales editadas correctamente`);
+            } else {
+                result = await query(`
+                    UPDATE actividades_marketing SET
+                        duracion_planeada_minutos = COALESCE($1, duracion_planeada_minutos),
+                        fecha_inicio_planeada = COALESCE($2, fecha_inicio_planeada),
+                        fecha_fin_planeada = $3,
+                        editada = true,
+                        motivo_edicion = $4,
+                        editada_por = $5,
+                        editada_en = NOW()
+                    WHERE id = $6
+                    RETURNING *
+                `, [
+                    duracion_minutos,
+                    fecha_inicio,
+                    nuevaFechaFin,
+                    motivo_edicion,
+                    user_id,
+                    id
+                ]);
+
+                console.log(`✅ Actividad individual editada correctamente`);
+            }
+
+            // Reajustar actividades posteriores para CADA participante (SOLO actividades normales)
             if (duracion_minutos || fecha_inicio) {
-                await reajusteService.reajustarActividades(
-                    actividad.usuario_id,
-                    fecha_inicio || actividad.fecha_inicio_planeada,
-                    duracion_minutos || actividad.duracion_planeada_minutos,
-                    id,
-                    true  // soloDesplazarNormales = true (NO mover programadas, grupales, prioritarias)
-                );
+                for (const actividadActualizada of result.rows) {
+                    await reajusteService.reajustarActividades(
+                        actividadActualizada.usuario_id,
+                        fecha_inicio || actividadActualizada.fecha_inicio_planeada,
+                        duracion_minutos || actividadActualizada.duracion_planeada_minutos,
+                        actividadActualizada.id,
+                        true  // soloDesplazarNormales = true (NO mover programadas, grupales, prioritarias)
+                    );
+                }
             }
 
             res.json({
                 success: true,
-                message: 'Actividad editada exitosamente',
+                message: actividad.es_grupal
+                    ? `Actividad grupal editada para ${result.rows.length} participante(s)`
+                    : 'Actividad editada exitosamente',
                 data: result.rows[0],
+                participantes_actualizados: actividad.es_grupal ? result.rows.length : 1,
                 info_desplazamiento: infoDesplazamiento
             });
 
@@ -920,70 +1002,142 @@ class ActividadesController {
             const nuevaFechaFin = new Date(actividad.fecha_fin_planeada);
             nuevaFechaFin.setMinutes(nuevaFechaFin.getMinutes() + minutos_adicionales);
 
-            // VALIDACIÓN: Detectar colisiones con el nuevo horario extendido
-            const colision = await colisionesService.detectarColisionesEdicion(
-                actividad.usuario_id,
-                actividad.fecha_inicio_planeada,
-                nuevaFechaFin,
-                id
-            );
+            // ======================================
+            // MANEJO ESPECIAL PARA ACTIVIDADES GRUPALES
+            // ======================================
+            let actividadesRelacionadas = [actividad];
+            let todosParticipantes = [actividad.usuario_id];
 
-            if (colision.hayColision && colision.bloqueante) {
-                // Hay colisión con actividades inmovibles
+            if (actividad.es_grupal) {
+                console.log('👥 Actividad GRUPAL detectada - Extendiendo para TODOS los participantes');
+
+                // Extraer código base (sin el -usuario_id final)
+                // Ejemplo: MKT-20250104-001-1 → MKT-20250104-001
+                const codigoBase = actividad.codigo.replace(/-\d+$/, '');
+                console.log(`📋 Código base: ${codigoBase}, buscando todas las actividades relacionadas...`);
+
+                // Obtener TODAS las actividades con ese código base
+                const actividadesGrupales = await query(`
+                    SELECT * FROM actividades_marketing
+                    WHERE codigo LIKE $1 AND activo = true
+                    ORDER BY usuario_id
+                `, [`${codigoBase}%`]);
+
+                actividadesRelacionadas = actividadesGrupales.rows;
+                todosParticipantes = actividadesRelacionadas.map(a => a.usuario_id);
+
+                console.log(`👥 Encontrados ${actividadesRelacionadas.length} participantes: IDs ${todosParticipantes.join(', ')}`);
+            }
+
+            // VALIDACIÓN: Detectar colisiones para TODOS los participantes
+            let todosConflictos = [];
+            let hayBloqueo = false;
+            let infoDesplazamiento = null;
+
+            for (const participante of todosParticipantes) {
+                const actividadParticipante = actividadesRelacionadas.find(a => a.usuario_id === participante);
+
+                const colision = await colisionesService.detectarColisionesEdicion(
+                    participante,
+                    actividadParticipante.fecha_inicio_planeada,
+                    nuevaFechaFin,
+                    actividadParticipante.id
+                );
+
+                if (colision.hayColision) {
+                    todosConflictos.push({
+                        usuario_id: participante,
+                        conflictos: colision.conflictos,
+                        bloqueante: colision.bloqueante
+                    });
+
+                    if (colision.bloqueante) {
+                        hayBloqueo = true;
+                    }
+                }
+            }
+
+            // Si algún participante tiene colisión bloqueante, NO proceder
+            if (hayBloqueo) {
+                console.log('🚫 Colisión BLOQUEANTE detectada en al menos un participante');
                 return res.status(409).json({
                     success: false,
-                    tipo_error: 'colision_extension',
-                    mensaje: colision.mensaje,
-                    advertencia: colision.advertencia,
-                    conflictos: colision.conflictos,
-                    sugerencias: null, // Para extensiones no ofrecemos slots alternativos
-                    total_conflictos: colision.total_conflictos,
-                    conflictos_bloqueantes: colision.conflictos_bloqueantes,
-                    instruccion: 'Reduce los minutos adicionales o mueve/cancela la actividad conflictiva primero'
+                    tipo_error: 'colision_extension_grupal',
+                    mensaje: actividad.es_grupal
+                        ? 'Uno o más participantes tienen conflictos de horario al extender esta actividad grupal'
+                        : 'Hay conflictos de horario al extender esta actividad',
+                    conflictos_por_participante: todosConflictos,
+                    total_participantes_afectados: todosConflictos.filter(c => c.bloqueante).length,
+                    instruccion: 'Reduce los minutos adicionales o resuelve los conflictos primero'
                 });
             }
 
-            // Si hay colisión NO bloqueante (solo actividades normales), informar pero continuar
-            let infoDesplazamiento = null;
-            if (colision.hayColision && !colision.bloqueante) {
+            // Si hay colisiones NO bloqueantes, informar
+            if (todosConflictos.length > 0 && !hayBloqueo) {
+                const totalActividadesDesplazadas = todosConflictos.reduce((sum, c) => sum + c.conflictos.length, 0);
                 infoDesplazamiento = {
-                    actividades_desplazadas: colision.conflictos.length,
-                    mensaje: colision.mensaje
+                    actividades_desplazadas: totalActividadesDesplazadas,
+                    participantes_afectados: todosConflictos.length,
+                    mensaje: actividad.es_grupal
+                        ? `Se desplazarán ${totalActividadesDesplazadas} actividad(es) normal(es) de ${todosConflictos.length} participante(s)`
+                        : `Se desplazarán ${totalActividadesDesplazadas} actividad(es) normal(es)`
                 };
-                console.log(`ℹ️ ${colision.conflictos.length} actividad(es) normal(es) se desplazarán`);
+                console.log(`ℹ️ ${infoDesplazamiento.mensaje}`);
             }
 
-            // Registrar extensión
-            await query(`
-                INSERT INTO extensiones_actividades (actividad_id, usuario_id, minutos_adicionales, motivo)
-                VALUES ($1, $2, $3, $4)
-            `, [id, user_id, minutos_adicionales, motivo]);
+            // Registrar extensión para cada participante
+            for (const actividadRel of actividadesRelacionadas) {
+                await query(`
+                    INSERT INTO extensiones_actividades (actividad_id, usuario_id, minutos_adicionales, motivo)
+                    VALUES ($1, $2, $3, $4)
+                `, [actividadRel.id, user_id, minutos_adicionales, motivo]);
+            }
 
-            // Actualizar actividad
-            const updateQuery = `
-                UPDATE actividades_marketing SET
-                    tiempo_adicional_minutos = tiempo_adicional_minutos + $1,
-                    fecha_fin_planeada = fecha_fin_planeada + ($1 || ' minutes')::interval
-                WHERE id = $2
-                RETURNING *
-            `;
+            // Actualizar TODAS las actividades relacionadas (grupal) o solo la actual (individual)
+            let result;
+            if (actividad.es_grupal) {
+                const idsActualizar = actividadesRelacionadas.map(a => a.id);
+                console.log(`🔄 Actualizando ${idsActualizar.length} registros grupales...`);
 
-            const result = await query(updateQuery, [minutos_adicionales, id]);
+                result = await query(`
+                    UPDATE actividades_marketing SET
+                        tiempo_adicional_minutos = tiempo_adicional_minutos + $1,
+                        fecha_fin_planeada = fecha_fin_planeada + ($1 || ' minutes')::interval
+                    WHERE id = ANY($2::int[])
+                    RETURNING *
+                `, [minutos_adicionales, idsActualizar]);
 
-            // Reajustar actividades posteriores (SOLO actividades normales)
-            const actividadActualizada = result.rows[0];
-            await reajusteService.reajustarActividades(
-                actividadActualizada.usuario_id,
-                actividadActualizada.fecha_inicio_planeada,
-                actividadActualizada.duracion_planeada_minutos + minutos_adicionales,
-                id,
-                true  // soloDesplazarNormales = true (NO mover programadas, grupales, prioritarias)
-            );
+                console.log(`✅ ${result.rows.length} actividades grupales extendidas correctamente`);
+            } else {
+                result = await query(`
+                    UPDATE actividades_marketing SET
+                        tiempo_adicional_minutos = tiempo_adicional_minutos + $1,
+                        fecha_fin_planeada = fecha_fin_planeada + ($1 || ' minutes')::interval
+                    WHERE id = $2
+                    RETURNING *
+                `, [minutos_adicionales, id]);
+
+                console.log(`✅ Actividad individual extendida correctamente`);
+            }
+
+            // Reajustar actividades posteriores para CADA participante (SOLO actividades normales)
+            for (const actividadActualizada of result.rows) {
+                await reajusteService.reajustarActividades(
+                    actividadActualizada.usuario_id,
+                    actividadActualizada.fecha_inicio_planeada,
+                    actividadActualizada.duracion_planeada_minutos + minutos_adicionales,
+                    actividadActualizada.id,
+                    true  // soloDesplazarNormales = true (NO mover programadas, grupales, prioritarias)
+                );
+            }
 
             res.json({
                 success: true,
-                message: 'Actividad extendida exitosamente',
+                message: actividad.es_grupal
+                    ? `Actividad grupal extendida para ${result.rows.length} participante(s)`
+                    : 'Actividad extendida exitosamente',
                 data: result.rows[0],
+                participantes_actualizados: actividad.es_grupal ? result.rows.length : 1,
                 info_desplazamiento: infoDesplazamiento
             });
 
