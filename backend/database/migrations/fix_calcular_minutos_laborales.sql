@@ -13,27 +13,33 @@ DECLARE
     hora_inicio TIME;
     hora_fin TIME;
     dia_semana INTEGER;
+    fecha_inicio_peru TIMESTAMP;
+    fecha_fin_peru TIMESTAMP;
 BEGIN
+    -- Convertir de UTC a hora Perú (UTC-5)
+    fecha_inicio_peru := fecha_inicio - INTERVAL '5 hours';
+    fecha_fin_peru := fecha_fin - INTERVAL '5 hours';
+
     -- Si las fechas son iguales o fecha_fin es antes de fecha_inicio, retornar 0
-    IF fecha_fin <= fecha_inicio THEN
+    IF fecha_fin_peru <= fecha_inicio_peru THEN
         RETURN 0;
     END IF;
 
-    -- Inicializar con la fecha de inicio
-    fecha_actual := DATE_TRUNC('day', fecha_inicio);
+    -- Inicializar con la fecha de inicio en hora Perú
+    fecha_actual := DATE_TRUNC('day', fecha_inicio_peru);
 
     -- Iterar día por día
-    WHILE fecha_actual <= DATE_TRUNC('day', fecha_fin) LOOP
+    WHILE fecha_actual <= DATE_TRUNC('day', fecha_fin_peru) LOOP
         -- Obtener día de la semana (0 = domingo, 6 = sábado)
         dia_semana := EXTRACT(DOW FROM fecha_actual);
 
         -- Solo procesar días laborales (lunes a viernes)
         IF dia_semana >= 1 AND dia_semana <= 5 THEN
             -- Determinar hora de inicio para este día
-            IF DATE_TRUNC('day', fecha_actual) = DATE_TRUNC('day', fecha_inicio) THEN
+            IF DATE_TRUNC('day', fecha_actual) = DATE_TRUNC('day', fecha_inicio_peru) THEN
                 -- Primer día: usar hora real, pero no antes de 8 AM
                 hora_inicio := GREATEST(
-                    CAST(EXTRACT(HOUR FROM fecha_inicio) || ':' || EXTRACT(MINUTE FROM fecha_inicio) AS TIME),
+                    CAST(EXTRACT(HOUR FROM fecha_inicio_peru) || ':' || EXTRACT(MINUTE FROM fecha_inicio_peru) AS TIME),
                     '08:00:00'::TIME
                 );
             ELSE
@@ -42,10 +48,10 @@ BEGIN
             END IF;
 
             -- Determinar hora de fin para este día
-            IF DATE_TRUNC('day', fecha_actual) = DATE_TRUNC('day', fecha_fin) THEN
+            IF DATE_TRUNC('day', fecha_actual) = DATE_TRUNC('day', fecha_fin_peru) THEN
                 -- Último día: usar hora real, pero no después de 6 PM
                 hora_fin := LEAST(
-                    CAST(EXTRACT(HOUR FROM fecha_fin) || ':' || EXTRACT(MINUTE FROM fecha_fin) AS TIME),
+                    CAST(EXTRACT(HOUR FROM fecha_fin_peru) || ':' || EXTRACT(MINUTE FROM fecha_fin_peru) AS TIME),
                     '18:00:00'::TIME
                 );
             ELSE
@@ -81,17 +87,21 @@ BEGIN
 
     RETURN minutos_totales;
 END;
-$$ LANGUAGE plpgsql IMMUTABLE;
+$BODY$ LANGUAGE plpgsql STABLE;
 
--- Test de la función
--- Debería retornar ~328 minutos (5h 28min) para el caso de Aldo
+-- Test de la función con timestamps en UTC
+-- Los timestamps se convierten automáticamente a hora Perú (UTC-5)
+-- UTC: 22:56 -> Perú: 17:56 (5:56 PM)
+-- UTC: 14:28 -> Perú: 09:28 (9:28 AM)
+-- Debería retornar ~92 minutos para el caso de Aldo
 SELECT calcular_minutos_laborales(
     '2025-11-03 22:56:00'::TIMESTAMP,
     '2025-11-04 14:28:00'::TIMESTAMP
 ) as minutos_laborales;
 
 COMMENT ON FUNCTION calcular_minutos_laborales IS
-'Calcula los minutos laborales entre dos timestamps, considerando:
+'Calcula los minutos laborales entre dos timestamps UTC, considerando:
+- Conversión automática a hora Perú (UTC-5)
 - Horario: 8 AM - 6 PM (lunes a viernes)
 - Almuerzo: 1 PM - 2 PM (no cuenta)
 - Fines de semana: no cuentan';

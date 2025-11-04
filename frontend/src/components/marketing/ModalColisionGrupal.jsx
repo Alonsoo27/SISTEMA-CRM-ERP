@@ -9,7 +9,11 @@ const ModalColisionGrupal = ({ isOpen, colision, onClose, onSeleccionarHorario, 
     if (!isOpen || !colision) return null;
 
     const formatearFecha = (fecha) => {
-        return new Date(fecha).toLocaleString('es-PE', {
+        // Las fechas vienen en UTC desde el backend, agregar 'Z' si no la tiene
+        const fechaStr = typeof fecha === 'string' && !fecha.endsWith('Z')
+            ? fecha + 'Z'
+            : fecha;
+        return new Date(fechaStr).toLocaleString('es-PE', {
             weekday: 'short',
             day: '2-digit',
             month: '2-digit',
@@ -19,7 +23,11 @@ const ModalColisionGrupal = ({ isOpen, colision, onClose, onSeleccionarHorario, 
     };
 
     const formatearHora = (fecha) => {
-        return new Date(fecha).toLocaleString('es-PE', {
+        // Las fechas vienen en UTC desde el backend, agregar 'Z' si no la tiene
+        const fechaStr = typeof fecha === 'string' && !fecha.endsWith('Z')
+            ? fecha + 'Z'
+            : fecha;
+        return new Date(fechaStr).toLocaleString('es-PE', {
             hour: '2-digit',
             minute: '2-digit'
         });

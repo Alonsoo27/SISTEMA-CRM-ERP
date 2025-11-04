@@ -156,7 +156,11 @@ const ModalDetallesActividad = ({ actividad, onClose, onActividadActualizada }) 
     };
 
     const formatearFecha = (fecha) => {
-        return format(new Date(fecha), "dd/MM/yyyy HH:mm", { locale: es });
+        // Las fechas vienen en UTC desde el backend, agregar 'Z' si no la tiene
+        const fechaStr = typeof fecha === 'string' && !fecha.endsWith('Z')
+            ? fecha + 'Z'
+            : fecha;
+        return format(new Date(fechaStr), "dd/MM/yyyy HH:mm", { locale: es });
     };
 
     const formatearDuracion = (minutos) => {
