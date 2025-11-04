@@ -82,7 +82,7 @@ const ModalNotificacion = ({
 
     return (
         <div
-            className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999] p-4 animate-fadeIn"
+            className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[10003] p-4 animate-fadeIn"
             onClick={onClose}
         >
             <div
