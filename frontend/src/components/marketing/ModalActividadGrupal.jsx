@@ -5,6 +5,7 @@
 import { useState, useEffect } from 'react';
 import marketingService from '../../services/marketingService';
 import ModalNotificacion from '../common/ModalNotificacion';
+import ModalColisionGrupal from './ModalColisionGrupal';
 
 const ModalActividadGrupal = ({ onClose, onSuccess }) => {
     const [formData, setFormData] = useState({
@@ -22,6 +23,10 @@ const ModalActividadGrupal = ({ onClose, onSuccess }) => {
     const [loading, setLoading] = useState(false);
     const [loadingTipos, setLoadingTipos] = useState(true);
     const [notificacion, setNotificacion] = useState({ isOpen: false, tipo: 'info', titulo: '', mensaje: '' });
+
+    // Estados para manejo de colisiones
+    const [mostrarModalColision, setMostrarModalColision] = useState(false);
+    const [colision, setColision] = useState(null);
 
     useEffect(() => {
         cargarCategorias();
@@ -155,15 +160,50 @@ const ModalActividadGrupal = ({ onClose, onSuccess }) => {
             }, 1500);
         } catch (error) {
             console.error('Error creando actividad grupal:', error);
-            setNotificacion({
-                isOpen: true,
-                tipo: 'danger',
-                titulo: 'Error al crear',
-                mensaje: error.response?.data?.message || error.message || 'No se pudo crear la actividad grupal. Intenta de nuevo.'
-            });
+
+            // MANEJO DE COLISIONES (HTTP 409)
+            if (error.status === 409 || error.response?.status === 409) {
+                const colisionData = error.response?.data || error.data;
+                console.log('⚠️ Colisión detectada en actividad grupal - Mostrando modal', colisionData);
+                setColision(colisionData);
+                setMostrarModalColision(true);
+            } else {
+                // Otros errores
+                setNotificacion({
+                    isOpen: true,
+                    tipo: 'danger',
+                    titulo: 'Error al crear',
+                    mensaje: error.response?.data?.mensaje || error.response?.data?.message || error.message || 'No se pudo crear la actividad grupal. Intenta de nuevo.'
+                });
+            }
         } finally {
             setLoading(false);
         }
+    };
+
+    // Manejar selección de horario alternativo
+    const handleSeleccionarHorario = (fechaSlot) => {
+        console.log('📅 Horario alternativo seleccionado:', fechaSlot);
+
+        // Actualizar la fecha en el formulario
+        const fechaFormateada = new Date(fechaSlot).toISOString().slice(0, 16);
+        setFormData(prev => ({
+            ...prev,
+            fecha_inicio: fechaFormateada
+        }));
+
+        // Cerrar modal de colisión
+        setMostrarModalColision(false);
+        setColision(null);
+
+        // Informar al usuario
+        const fechaFormateadaLegible = new Date(fechaSlot).toLocaleString('es-PE');
+        setNotificacion({
+            isOpen: true,
+            tipo: 'info',
+            titulo: 'Horario actualizado',
+            mensaje: `Se ha actualizado el horario a: ${fechaFormateadaLegible}. Presiona "Crear Actividad Grupal" para confirmar.`
+        });
     };
 
     const duracionHoras = Math.floor(formData.duracion_minutos / 60);
@@ -373,6 +413,18 @@ const ModalActividadGrupal = ({ onClose, onSuccess }) => {
                 tipo={notificacion.tipo}
                 titulo={notificacion.titulo}
                 mensaje={notificacion.mensaje}
+            />
+
+            {/* Modal de Colisión Grupal */}
+            <ModalColisionGrupal
+                isOpen={mostrarModalColision}
+                colision={colision}
+                onClose={() => {
+                    setMostrarModalColision(false);
+                    setColision(null);
+                }}
+                onSeleccionarHorario={handleSeleccionarHorario}
+                formData={formData}
             />
         </div>
     );
