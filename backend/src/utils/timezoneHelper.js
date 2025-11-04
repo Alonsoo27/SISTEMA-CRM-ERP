@@ -25,10 +25,10 @@ function agregarZonaHorariaUTC(data) {
     // Procesar el objeto
     const resultado = { ...data };
 
-    // Lista de campos que son timestamps en actividades_marketing
+    // Lista de campos que son timestamps UTC (generados por NOW() en el servidor)
+    // IMPORTANTE: Las fechas PLANEADAS vienen desde el frontend en hora local,
+    // pero las fechas REALES se generan con NOW() que es UTC
     const camposTimestamp = [
-        'fecha_inicio_planeada',
-        'fecha_fin_planeada',
         'fecha_inicio_real',
         'fecha_fin_real',
         'created_at',
