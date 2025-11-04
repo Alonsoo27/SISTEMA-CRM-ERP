@@ -104,6 +104,13 @@ class OptimizacionService {
                     break; // Detener cascada
                 }
 
+                // VALIDACIÓN 2: No adelantar actividades grupales (afecta a múltiples usuarios)
+                if (actividad.es_grupal) {
+                    advertencias.push(`"${actividad.descripcion}" es una actividad grupal - no se adelantará (afectaría a otros participantes)`);
+                    console.log(`⚠️ Actividad ${actividad.id} es grupal - DETENER cascada`);
+                    break; // Detener cascada
+                }
+
                 // Calcular nuevo horario
                 const nuevoInicio = new Date(cursorTiempo);
                 const nuevoFin = this.calcularFinConLimites(nuevoInicio, duracion);
@@ -115,21 +122,21 @@ class OptimizacionService {
                     break;
                 }
 
-                // VALIDACIÓN 2: Verificar que el nuevo horario no cruza almuerzo
+                // VALIDACIÓN 3: Verificar que el nuevo horario no cruza almuerzo
                 if (this.cruzaAlmuerzo(nuevoInicio, nuevoFin)) {
                     advertencias.push(`"${actividad.descripcion}" cruzaría el almuerzo - cascada detenida`);
                     console.log(`⚠️ Actividad ${actividad.id} cruza almuerzo - DETENER cascada`);
                     break;
                 }
 
-                // VALIDACIÓN 3: Verificar que no cruza fin de jornada
+                // VALIDACIÓN 4: Verificar que no cruza fin de jornada
                 if (this.cruzaFinJornada(nuevoFin)) {
                     advertencias.push(`"${actividad.descripcion}" cruzaría el fin de jornada - cascada detenida`);
                     console.log(`⚠️ Actividad ${actividad.id} cruza fin jornada - DETENER cascada`);
                     break;
                 }
 
-                // VALIDACIÓN 4: Solo adelantar si realmente se mueve
+                // VALIDACIÓN 5: Solo adelantar si realmente se mueve
                 const tiempoAdelantado = (inicioOriginal - nuevoInicio) / 60000; // minutos
                 if (tiempoAdelantado <= 0) {
                     // Ya no hay más actividades que adelantar
