@@ -6,6 +6,7 @@ const { query } = require('../../../config/database');
 const reajusteService = require('../services/reajusteService');
 const actividadesService = require('../services/actividadesService');
 const colisionesService = require('../services/colisionesService');
+const { agregarZonaHorariaUTC } = require('../../../utils/timezoneHelper');
 
 // Mapeo de colores por categoría principal
 const COLORES_CATEGORIAS = {
@@ -688,9 +689,12 @@ class ActividadesController {
 
             const result = await query(sql, params);
 
+            // Agregar 'Z' a los timestamps para indicar que son UTC
+            const actividadesConTimezone = agregarZonaHorariaUTC(result.rows);
+
             res.json({
                 success: true,
-                data: result.rows,
+                data: actividadesConTimezone,
                 total: result.rowCount
             });
 
@@ -729,9 +733,12 @@ class ActividadesController {
                 });
             }
 
+            // Agregar 'Z' a los timestamps para indicar que son UTC
+            const actividadConTimezone = agregarZonaHorariaUTC(result.rows[0]);
+
             res.json({
                 success: true,
-                data: result.rows[0]
+                data: actividadConTimezone
             });
 
         } catch (error) {
@@ -934,12 +941,15 @@ class ActividadesController {
                 }
             }
 
+            // Agregar 'Z' a los timestamps para indicar que son UTC
+            const actividadConTimezone = agregarZonaHorariaUTC(result.rows[0]);
+
             res.json({
                 success: true,
                 message: actividad.es_grupal
                     ? `Actividad grupal editada para ${result.rows.length} participante(s)`
                     : 'Actividad editada exitosamente',
-                data: result.rows[0],
+                data: actividadConTimezone,
                 participantes_actualizados: actividad.es_grupal ? result.rows.length : 1,
                 info_desplazamiento: infoDesplazamiento
             });
@@ -1131,12 +1141,15 @@ class ActividadesController {
                 );
             }
 
+            // Agregar 'Z' a los timestamps para indicar que son UTC
+            const actividadConTimezone = agregarZonaHorariaUTC(result.rows[0]);
+
             res.json({
                 success: true,
                 message: actividad.es_grupal
                     ? `Actividad grupal extendida para ${result.rows.length} participante(s)`
                     : 'Actividad extendida exitosamente',
-                data: result.rows[0],
+                data: actividadConTimezone,
                 participantes_actualizados: actividad.es_grupal ? result.rows.length : 1,
                 info_desplazamiento: infoDesplazamiento
             });
@@ -1192,10 +1205,13 @@ class ActividadesController {
                 });
             }
 
+            // Agregar 'Z' a los timestamps para indicar que son UTC
+            const actividadConTimezone = agregarZonaHorariaUTC(result.rows[0]);
+
             res.json({
                 success: true,
                 message: 'Actividad completada exitosamente',
-                data: result.rows[0]
+                data: actividadConTimezone
             });
 
         } catch (error) {
@@ -1308,9 +1324,12 @@ class ActividadesController {
 
             console.log(`⏰ Actividades vencidas encontradas para usuario ${usuarioId}:`, result.rows.length);
 
+            // Agregar 'Z' a los timestamps para indicar que son UTC
+            const actividadesConTimezone = agregarZonaHorariaUTC(result.rows);
+
             res.json({
                 success: true,
-                data: result.rows,
+                data: actividadesConTimezone,
                 total: result.rows.length,
                 fecha_actual: ahora
             });
