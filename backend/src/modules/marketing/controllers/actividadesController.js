@@ -250,17 +250,24 @@ class ActividadesController {
                 );
 
                 if (colision.hayColision) {
-                    // Retornar HTTP 409 con información de la colisión
-                    return res.status(409).json({
-                        success: false,
-                        tipo_colision: colision.tipo,
-                        mensaje: colision.mensaje,
-                        actividad_conflicto: colision.actividad,
-                        sugerencias: colision.sugerencias || null,
-                        requiere_confirmacion: colision.requiere_confirmacion || false,
-                        advertencia: colision.advertencia || null,
-                        instruccion: 'Para continuar, vuelve a enviar la solicitud con confirmar_colision: true'
-                    });
+                    // Si colisiona con NORMAL → continuar (se cortará automáticamente después)
+                    if (colision.tipo === 'normal') {
+                        console.log('✅ Actividad prioritaria vs normal - Se ejecutará reajuste automático');
+                        // No hacer nada, continuar con la creación
+                    } else {
+                        // Si colisiona con PRIORITARIA o GRUPAL → devolver 409 (requiere confirmación)
+                        console.log(`⚠️ Actividad prioritaria vs ${colision.tipo} - Requiere confirmación`);
+                        return res.status(409).json({
+                            success: false,
+                            tipo_colision: colision.tipo,
+                            mensaje: colision.mensaje,
+                            actividad_conflicto: colision.actividad,
+                            sugerencias: colision.sugerencias || null,
+                            requiere_confirmacion: colision.requiere_confirmacion || false,
+                            advertencia: colision.advertencia || null,
+                            instruccion: 'Para continuar, vuelve a enviar la solicitud con confirmar_colision: true'
+                        });
+                    }
                 }
             }
 
