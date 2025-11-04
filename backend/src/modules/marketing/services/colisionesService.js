@@ -576,6 +576,136 @@ class ColisionesService {
 
         return result.rows;
     }
+
+    /**
+     * Detectar colisiones al EDITAR/EXTENDER una actividad
+     * Valida que el nuevo horario no colisione con actividades inmovibles
+     */
+    static async detectarColisionesEdicion(usuarioId, nuevaFechaInicio, nuevaFechaFin, actividadIdExcluir) {
+        try {
+            const inicio = new Date(nuevaFechaInicio);
+            const fin = new Date(nuevaFechaFin);
+
+            console.log('🔍 Detectando colisiones de edición:', {
+                usuarioId,
+                inicio,
+                fin,
+                excluir: actividadIdExcluir
+            });
+
+            // Buscar actividades que se solapen con el nuevo rango
+            const result = await query(`
+                SELECT *
+                FROM actividades_marketing
+                WHERE usuario_id = $1
+                  AND activo = true
+                  AND estado IN ('pendiente', 'en_progreso')
+                  AND id != $2
+                  AND (fecha_inicio_planeada, fecha_fin_planeada) OVERLAPS ($3, $4)
+                ORDER BY fecha_inicio_planeada ASC
+            `, [usuarioId, actividadIdExcluir, inicio, fin]);
+
+            if (result.rows.length === 0) {
+                return { hayColision: false };
+            }
+
+            console.log(`⚠️ ${result.rows.length} colisiones detectadas`);
+
+            // Analizar tipo de colisión (priorizar la más crítica)
+            const conflictos = [];
+
+            for (const actividad of result.rows) {
+                let tipoConflicto = 'normal';
+                let bloqueante = false;
+                let razon = '';
+
+                // TIPO 1: Actividad PROGRAMADA (horario fijo elegido por usuario)
+                if (actividad.es_programada) {
+                    tipoConflicto = 'programada';
+                    bloqueante = true;
+                    razon = 'Actividad con horario programado manualmente';
+                }
+                // TIPO 2: Actividad GRUPAL (afecta a múltiples usuarios)
+                else if (actividad.es_grupal) {
+                    tipoConflicto = 'grupal';
+                    bloqueante = true;
+                    razon = 'Actividad grupal (afecta a ' + (actividad.participantes_ids?.length || 0) + ' participantes)';
+                }
+                // TIPO 3: Actividad PRIORITARIA (no se puede mover)
+                else if (actividad.es_prioritaria) {
+                    tipoConflicto = 'prioritaria';
+                    bloqueante = true;
+                    razon = 'Actividad prioritaria';
+                }
+                // TIPO 4: Actividad NORMAL (se puede mover)
+                else {
+                    tipoConflicto = 'normal';
+                    bloqueante = false;
+                    razon = 'Actividad normal (se desplazará automáticamente)';
+                }
+
+                conflictos.push({
+                    tipo: tipoConflicto,
+                    bloqueante: bloqueante,
+                    razon: razon,
+                    actividad: {
+                        id: actividad.id,
+                        codigo: actividad.codigo,
+                        descripcion: actividad.descripcion,
+                        fecha_inicio: actividad.fecha_inicio_planeada,
+                        fecha_fin: actividad.fecha_fin_planeada,
+                        duracion_minutos: actividad.duracion_planeada_minutos,
+                        es_programada: actividad.es_programada,
+                        es_grupal: actividad.es_grupal,
+                        es_prioritaria: actividad.es_prioritaria,
+                        participantes_ids: actividad.participantes_ids
+                    }
+                });
+            }
+
+            // Verificar si hay algún conflicto BLOQUEANTE
+            const hayBloqueantes = conflictos.some(c => c.bloqueante);
+
+            if (hayBloqueantes) {
+                // Buscar horarios alternativos
+                const duracionMinutos = Math.round((fin - inicio) / 60000);
+                const primerConflicto = conflictos.find(c => c.bloqueante);
+
+                const slots = await this.buscarSlotsPrevioYPosterior(
+                    usuarioId,
+                    primerConflicto.actividad.fecha_inicio,
+                    primerConflicto.actividad.fecha_fin,
+                    duracionMinutos
+                );
+
+                return {
+                    hayColision: true,
+                    bloqueante: true,
+                    conflictos: conflictos,
+                    sugerencias: slots,
+                    mensaje: 'El nuevo horario colisiona con actividades que no se pueden mover',
+                    advertencia: 'Las actividades programadas, grupales y prioritarias no pueden ser desplazadas',
+                    total_conflictos: conflictos.length,
+                    conflictos_bloqueantes: conflictos.filter(c => c.bloqueante).length
+                };
+            } else {
+                // Solo hay conflictos con actividades NORMALES (se desplazarán)
+                return {
+                    hayColision: true,
+                    bloqueante: false,
+                    conflictos: conflictos,
+                    mensaje: 'El nuevo horario desplazará actividades normales',
+                    advertencia: 'Las siguientes actividades se moverán automáticamente',
+                    total_conflictos: conflictos.length,
+                    conflictos_bloqueantes: 0
+                };
+            }
+
+        } catch (error) {
+            console.error('Error detectando colisiones de edición:', error);
+            throw error;
+        }
+    }
 }
 
 module.exports = ColisionesService;

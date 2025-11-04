@@ -8,8 +8,14 @@ const { query } = require('../../../config/database');
 class ReajusteService {
     /**
      * Reajustar actividades cuando se inserta/edita/extiende una actividad
+     *
+     * @param {number} usuarioId - ID del usuario
+     * @param {Date} fechaInsercion - Fecha de inserción/inicio
+     * @param {number} duracionMinutos - Duración en minutos
+     * @param {number} actividadIdDisparadora - ID de la actividad que dispara el reajuste
+     * @param {boolean} soloDesplazarNormales - Si true, solo desplaza actividades normales (edición). Si false, desplaza todo excepto prioritarias (inserción prioritaria)
      */
-    static async reajustarActividades(usuarioId, fechaInsercion, duracionMinutos, actividadIdDisparadora = null) {
+    static async reajustarActividades(usuarioId, fechaInsercion, duracionMinutos, actividadIdDisparadora = null, soloDesplazarNormales = false) {
         try {
             // Validaciones de entrada
             if (!usuarioId || !fechaInsercion || !duracionMinutos) {
@@ -34,7 +40,8 @@ class ReajusteService {
             });
 
             // 1. Obtener todas las actividades pendientes y en progreso del usuario
-            const actividadesExistentes = await this.obtenerActividadesPendientes(usuarioId, fechaInsercion, actividadIdDisparadora);
+            // Si soloDesplazarNormales=true, solo obtiene actividades normales (excluye programadas, grupales, prioritarias)
+            const actividadesExistentes = await this.obtenerActividadesPendientes(usuarioId, fechaInsercion, actividadIdDisparadora, soloDesplazarNormales);
 
             if (actividadesExistentes.length === 0) {
                 console.log('✅ No hay actividades para reajustar');
@@ -462,7 +469,7 @@ class ReajusteService {
      * - Busca actividades que TERMINAN después del punto de inserción
      * - Esto incluye tanto actividades futuras como actividades ya en progreso
      */
-    static async obtenerActividadesPendientes(usuarioId, fechaDesde, excluirActividadId = null) {
+    static async obtenerActividadesPendientes(usuarioId, fechaDesde, excluirActividadId = null, soloNormales = false) {
         let sql = `
             SELECT *
             FROM actividades_marketing
@@ -477,6 +484,15 @@ class ReajusteService {
         if (excluirActividadId) {
             sql += ` AND id != $3`;
             params.push(excluirActividadId);
+        }
+
+        // NUEVO: Si soloNormales = true, excluir programadas, grupales y prioritarias
+        if (soloNormales) {
+            sql += `
+              AND es_programada = false
+              AND es_grupal = false
+              AND es_prioritaria = false
+            `;
         }
 
         sql += ` ORDER BY fecha_inicio_planeada ASC`;

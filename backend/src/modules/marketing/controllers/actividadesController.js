@@ -783,11 +783,42 @@ class ActividadesController {
                 });
             }
 
-            // Calcular nueva fecha fin si cambia duración
-            let nuevaFechaFin = actividad.fecha_fin_planeada;
-            if (duracion_minutos && duracion_minutos !== actividad.duracion_planeada_minutos) {
-                const fechaInicio = fecha_inicio ? new Date(fecha_inicio) : new Date(actividad.fecha_inicio_planeada);
-                nuevaFechaFin = reajusteService.agregarMinutosEfectivos(fechaInicio, duracion_minutos);
+            // Calcular nueva fecha inicio y fin
+            const nuevaFechaInicio = fecha_inicio ? new Date(fecha_inicio) : new Date(actividad.fecha_inicio_planeada);
+            const nuevaDuracion = duracion_minutos || actividad.duracion_planeada_minutos;
+            const nuevaFechaFin = reajusteService.agregarMinutosEfectivos(nuevaFechaInicio, nuevaDuracion);
+
+            // VALIDACIÓN: Detectar colisiones con el nuevo horario
+            const colision = await colisionesService.detectarColisionesEdicion(
+                actividad.usuario_id,
+                nuevaFechaInicio,
+                nuevaFechaFin,
+                id
+            );
+
+            if (colision.hayColision && colision.bloqueante) {
+                // Hay colisión con actividades inmovibles (programadas, grupales o prioritarias)
+                return res.status(409).json({
+                    success: false,
+                    tipo_error: 'colision_edicion',
+                    mensaje: colision.mensaje,
+                    advertencia: colision.advertencia,
+                    conflictos: colision.conflictos,
+                    sugerencias: colision.sugerencias || null,
+                    total_conflictos: colision.total_conflictos,
+                    conflictos_bloqueantes: colision.conflictos_bloqueantes,
+                    instruccion: 'Elige otro horario o reduce la duración para evitar colisiones'
+                });
+            }
+
+            // Si hay colisión NO bloqueante (solo actividades normales), informar pero continuar
+            let infoDesplazamiento = null;
+            if (colision.hayColision && !colision.bloqueante) {
+                infoDesplazamiento = {
+                    actividades_desplazadas: colision.conflictos.length,
+                    mensaje: colision.mensaje
+                };
+                console.log(`ℹ️ ${colision.conflictos.length} actividad(es) normal(es) se desplazarán`);
             }
 
             // Actualizar actividad
@@ -813,20 +844,22 @@ class ActividadesController {
                 id
             ]);
 
-            // Reajustar actividades posteriores
+            // Reajustar actividades posteriores (SOLO actividades normales)
             if (duracion_minutos || fecha_inicio) {
                 await reajusteService.reajustarActividades(
                     actividad.usuario_id,
                     fecha_inicio || actividad.fecha_inicio_planeada,
                     duracion_minutos || actividad.duracion_planeada_minutos,
-                    id
+                    id,
+                    true  // soloDesplazarNormales = true (NO mover programadas, grupales, prioritarias)
                 );
             }
 
             res.json({
                 success: true,
                 message: 'Actividad editada exitosamente',
-                data: result.rows[0]
+                data: result.rows[0],
+                info_desplazamiento: infoDesplazamiento
             });
 
         } catch (error) {
@@ -879,6 +912,47 @@ class ActividadesController {
                 });
             }
 
+            // Obtener datos completos de la actividad
+            const actividadCompleta = await query('SELECT * FROM actividades_marketing WHERE id = $1', [id]);
+            const actividad = actividadCompleta.rows[0];
+
+            // Calcular nueva fecha fin con la extensión
+            const nuevaFechaFin = new Date(actividad.fecha_fin_planeada);
+            nuevaFechaFin.setMinutes(nuevaFechaFin.getMinutes() + minutos_adicionales);
+
+            // VALIDACIÓN: Detectar colisiones con el nuevo horario extendido
+            const colision = await colisionesService.detectarColisionesEdicion(
+                actividad.usuario_id,
+                actividad.fecha_inicio_planeada,
+                nuevaFechaFin,
+                id
+            );
+
+            if (colision.hayColision && colision.bloqueante) {
+                // Hay colisión con actividades inmovibles
+                return res.status(409).json({
+                    success: false,
+                    tipo_error: 'colision_extension',
+                    mensaje: colision.mensaje,
+                    advertencia: colision.advertencia,
+                    conflictos: colision.conflictos,
+                    sugerencias: null, // Para extensiones no ofrecemos slots alternativos
+                    total_conflictos: colision.total_conflictos,
+                    conflictos_bloqueantes: colision.conflictos_bloqueantes,
+                    instruccion: 'Reduce los minutos adicionales o mueve/cancela la actividad conflictiva primero'
+                });
+            }
+
+            // Si hay colisión NO bloqueante (solo actividades normales), informar pero continuar
+            let infoDesplazamiento = null;
+            if (colision.hayColision && !colision.bloqueante) {
+                infoDesplazamiento = {
+                    actividades_desplazadas: colision.conflictos.length,
+                    mensaje: colision.mensaje
+                };
+                console.log(`ℹ️ ${colision.conflictos.length} actividad(es) normal(es) se desplazarán`);
+            }
+
             // Registrar extensión
             await query(`
                 INSERT INTO extensiones_actividades (actividad_id, usuario_id, minutos_adicionales, motivo)
@@ -896,19 +970,21 @@ class ActividadesController {
 
             const result = await query(updateQuery, [minutos_adicionales, id]);
 
-            // Reajustar actividades posteriores
-            const actividad = result.rows[0];
+            // Reajustar actividades posteriores (SOLO actividades normales)
+            const actividadActualizada = result.rows[0];
             await reajusteService.reajustarActividades(
-                actividad.usuario_id,
-                actividad.fecha_inicio_planeada,
-                actividad.duracion_planeada_minutos + minutos_adicionales,
-                id
+                actividadActualizada.usuario_id,
+                actividadActualizada.fecha_inicio_planeada,
+                actividadActualizada.duracion_planeada_minutos + minutos_adicionales,
+                id,
+                true  // soloDesplazarNormales = true (NO mover programadas, grupales, prioritarias)
             );
 
             res.json({
                 success: true,
                 message: 'Actividad extendida exitosamente',
-                data: result.rows[0]
+                data: result.rows[0],
+                info_desplazamiento: infoDesplazamiento
             });
 
         } catch (error) {
