@@ -5,6 +5,7 @@
 
 import { useState, useEffect } from 'react';
 import marketingService from '../../services/marketingService';
+import ModalNotificacion from '../common/ModalNotificacion';
 
 const ModalCrearActividad = ({ onClose, onSuccess, usuarioId }) => {
     const [formData, setFormData] = useState({
@@ -24,6 +25,7 @@ const ModalCrearActividad = ({ onClose, onSuccess, usuarioId }) => {
     // NUEVO: Estado para manejar colisiones
     const [colision, setColision] = useState(null);
     const [mostrarModalColision, setMostrarModalColision] = useState(false);
+    const [notificacion, setNotificacion] = useState({ isOpen: false, tipo: 'info', titulo: '', mensaje: '' });
 
     useEffect(() => {
         cargarCategorias();
@@ -82,17 +84,32 @@ const ModalCrearActividad = ({ onClose, onSuccess, usuarioId }) => {
 
         // Validaciones
         if (!formData.categoria_principal || !formData.subcategoria) {
-            alert('Selecciona el tipo de actividad');
+            setNotificacion({
+                isOpen: true,
+                tipo: 'warning',
+                titulo: 'Campo obligatorio',
+                mensaje: 'Por favor, selecciona el tipo de actividad (categoría y subcategoría).'
+            });
             return;
         }
 
         if (!formData.descripcion.trim()) {
-            alert('Ingresa una descripción');
+            setNotificacion({
+                isOpen: true,
+                tipo: 'warning',
+                titulo: 'Campo obligatorio',
+                mensaje: 'Por favor, ingresa una descripción para la actividad.'
+            });
             return;
         }
 
         if (formData.duracion_minutos <= 0) {
-            alert('La duración debe ser mayor a 0');
+            setNotificacion({
+                isOpen: true,
+                tipo: 'warning',
+                titulo: 'Duración inválida',
+                mensaje: 'La duración debe ser mayor a 0 minutos.'
+            });
             return;
         }
 
@@ -121,15 +138,27 @@ const ModalCrearActividad = ({ onClose, onSuccess, usuarioId }) => {
 
             // Si hay reprogramación automática (actividad normal)
             if (response.reprogramada) {
-                const mensaje = `✅ ${response.mensaje}\n\n` +
-                    `Horario original solicitado: ${new Date(formData.fecha_inicio).toLocaleString()}\n` +
-                    `Nueva programación: ${new Date(response.nueva_programacion.fecha_inicio).toLocaleString()}`;
-                alert(mensaje);
+                const horarioOriginal = new Date(formData.fecha_inicio).toLocaleString('es-PE');
+                const nuevaProgramacion = new Date(response.nueva_programacion.fecha_inicio).toLocaleString('es-PE');
+
+                setNotificacion({
+                    isOpen: true,
+                    tipo: 'info',
+                    titulo: 'Actividad reprogramada',
+                    mensaje: `${response.mensaje}\n\nHorario original: ${horarioOriginal}\nNueva programación: ${nuevaProgramacion}`
+                });
             } else {
-                alert('✅ Actividad creada exitosamente');
+                setNotificacion({
+                    isOpen: true,
+                    tipo: 'success',
+                    titulo: 'Actividad creada',
+                    mensaje: 'La actividad ha sido creada exitosamente.'
+                });
             }
 
-            onSuccess && onSuccess();
+            setTimeout(() => {
+                onSuccess && onSuccess();
+            }, 1500);
         } catch (error) {
             // MANEJO DE COLISIONES (HTTP 409)
             if (error.status === 409 || error.response?.status === 409) {
@@ -139,7 +168,12 @@ const ModalCrearActividad = ({ onClose, onSuccess, usuarioId }) => {
                 setMostrarModalColision(true);
             } else {
                 console.error('Error creando actividad:', error);
-                alert('Error al crear la actividad: ' + (error.response?.data?.message || error.message));
+                setNotificacion({
+                    isOpen: true,
+                    tipo: 'danger',
+                    titulo: 'Error al crear',
+                    mensaje: error.response?.data?.message || error.message || 'No se pudo crear la actividad. Intenta de nuevo.'
+                });
             }
         } finally {
             setLoading(false);
@@ -170,7 +204,13 @@ const ModalCrearActividad = ({ onClose, onSuccess, usuarioId }) => {
         setColision(null);
 
         // Informar al usuario
-        alert(`Fecha actualizada a: ${new Date(fechaSlot).toLocaleString('es-PE')}\n\nAhora puedes hacer clic en "Crear Actividad" nuevamente.`);
+        const fechaFormateadaLegible = new Date(fechaSlot).toLocaleString('es-PE');
+        setNotificacion({
+            isOpen: true,
+            tipo: 'info',
+            titulo: 'Fecha actualizada',
+            mensaje: `Fecha actualizada a: ${fechaFormateadaLegible}\n\nAhora puedes hacer clic en "Crear Actividad" nuevamente.`
+        });
     };
 
     const duracionHoras = Math.floor(formData.duracion_minutos / 60);
@@ -366,6 +406,15 @@ const ModalCrearActividad = ({ onClose, onSuccess, usuarioId }) => {
                     formData={formData}
                 />
             )}
+
+            {/* Modal de Notificación */}
+            <ModalNotificacion
+                isOpen={notificacion.isOpen}
+                onClose={() => setNotificacion({ ...notificacion, isOpen: false })}
+                tipo={notificacion.tipo}
+                titulo={notificacion.titulo}
+                mensaje={notificacion.mensaje}
+            />
         </>
     );
 };

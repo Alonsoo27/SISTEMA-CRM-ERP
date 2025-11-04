@@ -5,18 +5,29 @@
 
 import { createPortal } from 'react-dom';
 
-const ModalConfirmacion = ({
-    isOpen,
-    onClose,
-    onConfirm,
-    titulo = "¿Estás seguro?",
-    mensaje,
-    textoConfirmar = "Confirmar",
-    textoCancelar = "Cancelar",
-    tipo = "warning", // success, warning, danger, info
-    icono = null
-}) => {
-    if (!isOpen) return null;
+const ModalConfirmacion = (props) => {
+    console.log('🔵🔵🔵 ModalConfirmacion FUNCIÓN EJECUTADA', props);
+
+    const {
+        isOpen,
+        onClose,
+        onConfirm,
+        titulo = "¿Estás seguro?",
+        mensaje,
+        textoConfirmar = "Confirmar",
+        textoCancelar = "Cancelar",
+        tipo = "warning", // success, warning, danger, info
+        icono = null
+    } = props;
+
+    console.log('🔵 ModalConfirmacion render', { isOpen, titulo, mensaje });
+
+    if (!isOpen) {
+        console.log('🔵 ModalConfirmacion: isOpen es false, no renderizando');
+        return null;
+    }
+
+    console.log('🔵 ModalConfirmacion: RENDERIZANDO modal');
 
     // Colores según tipo
     const colores = {

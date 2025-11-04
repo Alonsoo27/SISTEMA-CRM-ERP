@@ -48,7 +48,10 @@ const ModalCancelarActividad = ({ actividad, onClose, onSuccess }) => {
     };
 
     const handleSubmitClick = () => {
+        console.log('🟡 handleSubmitClick ejecutado', { motivo });
+
         if (!motivo.trim()) {
+            console.log('❌ Motivo vacío, mostrando notificación');
             setNotificacion({
                 isOpen: true,
                 tipo: 'warning',
@@ -58,11 +61,15 @@ const ModalCancelarActividad = ({ actividad, onClose, onSuccess }) => {
             return;
         }
 
+        console.log('✅ Motivo OK, mostrando confirmación');
         // Mostrar modal de confirmación
-        setConfirmacion({
+        const nuevoEstado = {
             isOpen: true,
             mensaje: '¿Estás seguro de cancelar esta actividad? Esta acción no se puede deshacer.'
-        });
+        };
+        console.log('🟢 Actualizando confirmacion a:', nuevoEstado);
+        setConfirmacion(nuevoEstado);
+        console.log('🟢 setConfirmacion ejecutado');
     };
 
     const handleConfirmarCancelacion = async () => {
@@ -111,6 +118,8 @@ const ModalCancelarActividad = ({ actividad, onClose, onSuccess }) => {
     const formatearHora = (fecha) => {
         return format(new Date(fecha), 'HH:mm', { locale: es });
     };
+
+    console.log('🟣 ModalCancelarActividad render, confirmacion.isOpen:', confirmacion.isOpen);
 
     return createPortal(
         <div
@@ -266,7 +275,14 @@ const ModalCancelarActividad = ({ actividad, onClose, onSuccess }) => {
                         Cancelar
                     </button>
                     <button
-                        onClick={handleSubmitClick}
+                        onClick={(e) => {
+                            console.log('🟠 CLICK en Cancelar Actividad', {
+                                loading,
+                                motivo: motivo.trim(),
+                                disabled: loading || !motivo.trim()
+                            });
+                            handleSubmitClick();
+                        }}
                         disabled={loading || !motivo.trim()}
                         className="px-6 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition disabled:opacity-50 flex items-center gap-2"
                     >
@@ -287,6 +303,27 @@ const ModalCancelarActividad = ({ actividad, onClose, onSuccess }) => {
                     formatearHora={formatearHora}
                 />
             )}
+
+            {/* Modal de Confirmación */}
+            <ModalConfirmacion
+                isOpen={confirmacion.isOpen}
+                onClose={() => setConfirmacion({ ...confirmacion, isOpen: false })}
+                onConfirm={handleConfirmarCancelacion}
+                titulo="Confirmar Cancelación"
+                mensaje={confirmacion.mensaje}
+                textoConfirmar="Sí, cancelar"
+                textoCancelar="No, volver"
+                tipo="danger"
+            />
+
+            {/* Modal de Notificación */}
+            <ModalNotificacion
+                isOpen={notificacion.isOpen}
+                onClose={() => setNotificacion({ ...notificacion, isOpen: false })}
+                tipo={notificacion.tipo}
+                titulo={notificacion.titulo}
+                mensaje={notificacion.mensaje}
+            />
         </div>,
         document.body
     );
@@ -367,27 +404,6 @@ const ModalDetalleOptimizacion = ({ analisis, onClose, formatearHora }) => {
                     </button>
                 </div>
             </div>
-
-            {/* Modal de Confirmación */}
-            <ModalConfirmacion
-                isOpen={confirmacion.isOpen}
-                onClose={() => setConfirmacion({ ...confirmacion, isOpen: false })}
-                onConfirm={handleConfirmarCancelacion}
-                titulo="Confirmar Cancelación"
-                mensaje={confirmacion.mensaje}
-                textoConfirmar="Sí, cancelar"
-                textoCancelar="No, volver"
-                tipo="danger"
-            />
-
-            {/* Modal de Notificación */}
-            <ModalNotificacion
-                isOpen={notificacion.isOpen}
-                onClose={() => setNotificacion({ ...notificacion, isOpen: false })}
-                tipo={notificacion.tipo}
-                titulo={notificacion.titulo}
-                mensaje={notificacion.mensaje}
-            />
         </div>,
         document.body
     );

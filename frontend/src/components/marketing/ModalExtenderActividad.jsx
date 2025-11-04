@@ -5,11 +5,13 @@
 
 import { useState } from 'react';
 import { createPortal } from 'react-dom';
+import ModalNotificacion from '../common/ModalNotificacion';
 
 const ModalExtenderActividad = ({ actividad, onClose, onSuccess }) => {
     const [minutosAdicionales, setMinutosAdicionales] = useState('');
     const [motivo, setMotivo] = useState('');
     const [loading, setLoading] = useState(false);
+    const [notificacion, setNotificacion] = useState({ isOpen: false, tipo: 'info', titulo: '', mensaje: '' });
 
     const handleSubmit = async (e) => {
         e.preventDefault();
@@ -17,12 +19,22 @@ const ModalExtenderActividad = ({ actividad, onClose, onSuccess }) => {
         const minutos = parseInt(minutosAdicionales);
 
         if (!minutos || minutos <= 0) {
-            alert('Debes ingresar una cantidad válida de minutos mayor a 0');
+            setNotificacion({
+                isOpen: true,
+                tipo: 'warning',
+                titulo: 'Valor inválido',
+                mensaje: 'Debes ingresar una cantidad válida de minutos mayor a 0.'
+            });
             return;
         }
 
         if (!motivo.trim()) {
-            alert('El motivo es obligatorio');
+            setNotificacion({
+                isOpen: true,
+                tipo: 'warning',
+                titulo: 'Campo obligatorio',
+                mensaje: 'El motivo de la extensión es obligatorio. Por favor, explica por qué necesitas más tiempo.'
+            });
             return;
         }
 
@@ -181,6 +193,15 @@ const ModalExtenderActividad = ({ actividad, onClose, onSuccess }) => {
                     </div>
                 </form>
             </div>
+
+            {/* Modal de Notificación */}
+            <ModalNotificacion
+                isOpen={notificacion.isOpen}
+                onClose={() => setNotificacion({ ...notificacion, isOpen: false })}
+                tipo={notificacion.tipo}
+                titulo={notificacion.titulo}
+                mensaje={notificacion.mensaje}
+            />
         </div>,
         document.body
     );

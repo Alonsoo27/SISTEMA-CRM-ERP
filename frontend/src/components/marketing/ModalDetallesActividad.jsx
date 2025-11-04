@@ -12,6 +12,7 @@ import ModalTransferirActividad from './ModalTransferirActividad';
 import ModalCancelarActividad from './ModalCancelarActividad';
 import ModalExtenderActividad from './ModalExtenderActividad';
 import ModalCompletarActividad from './ModalCompletarActividad';
+import ModalNotificacion from '../common/ModalNotificacion';
 
 const ModalDetallesActividad = ({ actividad, onClose, onActividadActualizada }) => {
     const [showModalEditar, setShowModalEditar] = useState(false);
@@ -19,6 +20,7 @@ const ModalDetallesActividad = ({ actividad, onClose, onActividadActualizada }) 
     const [showModalCancelar, setShowModalCancelar] = useState(false);
     const [showModalExtender, setShowModalExtender] = useState(false);
     const [showModalCompletar, setShowModalCompletar] = useState(false);
+    const [notificacion, setNotificacion] = useState({ isOpen: false, tipo: 'info', titulo: '', mensaje: '' });
 
     // Obtener usuario del localStorage
     const user = useMemo(() => {
@@ -57,18 +59,32 @@ const ModalDetallesActividad = ({ actividad, onClose, onActividadActualizada }) 
     // Handlers
     const handleEditarSubmit = async (datos) => {
         await marketingService.editarActividad(actividad.id, datos);
-        alert('✅ Actividad editada exitosamente');
+        setNotificacion({
+            isOpen: true,
+            tipo: 'success',
+            titulo: 'Actividad editada',
+            mensaje: 'La actividad ha sido editada exitosamente.'
+        });
         setShowModalEditar(false);
-        if (onActividadActualizada) onActividadActualizada();
-        onClose();
+        setTimeout(() => {
+            if (onActividadActualizada) onActividadActualizada();
+            onClose();
+        }, 1500);
     };
 
     const handleTransferirSubmit = async (datos) => {
         await marketingService.transferirActividad(datos);
-        alert('✅ Actividad transferida exitosamente');
+        setNotificacion({
+            isOpen: true,
+            tipo: 'success',
+            titulo: 'Actividad transferida',
+            mensaje: 'La actividad ha sido transferida exitosamente.'
+        });
         setShowModalTransferir(false);
-        if (onActividadActualizada) onActividadActualizada();
-        onClose();
+        setTimeout(() => {
+            if (onActividadActualizada) onActividadActualizada();
+            onClose();
+        }, 1500);
     };
 
     const handleCompletar = () => {
@@ -78,13 +94,25 @@ const ModalDetallesActividad = ({ actividad, onClose, onActividadActualizada }) 
     const handleCompletarSuccess = async () => {
         try {
             await marketingService.completarActividad(actividad.id);
-            alert('✅ Actividad completada exitosamente');
+            setNotificacion({
+                isOpen: true,
+                tipo: 'success',
+                titulo: 'Actividad completada',
+                mensaje: 'La actividad ha sido completada exitosamente.'
+            });
             setShowModalCompletar(false);
-            if (onActividadActualizada) onActividadActualizada();
-            onClose();
+            setTimeout(() => {
+                if (onActividadActualizada) onActividadActualizada();
+                onClose();
+            }, 1500);
         } catch (error) {
             console.error('Error completando actividad:', error);
-            alert('Error al completar la actividad');
+            setNotificacion({
+                isOpen: true,
+                tipo: 'danger',
+                titulo: 'Error al completar',
+                mensaje: 'No se pudo completar la actividad. Intenta de nuevo.'
+            });
         }
     };
 
@@ -95,13 +123,25 @@ const ModalDetallesActividad = ({ actividad, onClose, onActividadActualizada }) 
     const handleExtenderSuccess = async ({ minutos, motivo }) => {
         try {
             await marketingService.extenderActividad(actividad.id, minutos, motivo);
-            alert('✅ Actividad extendida exitosamente');
+            setNotificacion({
+                isOpen: true,
+                tipo: 'success',
+                titulo: 'Actividad extendida',
+                mensaje: 'La actividad ha sido extendida exitosamente.'
+            });
             setShowModalExtender(false);
-            if (onActividadActualizada) onActividadActualizada();
-            onClose();
+            setTimeout(() => {
+                if (onActividadActualizada) onActividadActualizada();
+                onClose();
+            }, 1500);
         } catch (error) {
             console.error('Error extendiendo actividad:', error);
-            alert('Error al extender la actividad');
+            setNotificacion({
+                isOpen: true,
+                tipo: 'danger',
+                titulo: 'Error al extender',
+                mensaje: 'No se pudo extender la actividad. Intenta de nuevo.'
+            });
         }
     };
 
@@ -424,7 +464,12 @@ const ModalDetallesActividad = ({ actividad, onClose, onActividadActualizada }) 
                             )}
                             {puedeReprogramar && (
                                 <button
-                                    onClick={() => alert('Reprogramar actividad como PARTE 2 (próximamente)')}
+                                    onClick={() => setNotificacion({
+                                        isOpen: true,
+                                        tipo: 'info',
+                                        titulo: 'Función próximamente',
+                                        mensaje: 'La función de reprogramar actividades como PARTE 2 estará disponible próximamente.'
+                                    })}
                                     className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition flex items-center gap-2"
                                     title="Solo jefes pueden reprogramar actividades vencidas no gestionadas"
                                 >
@@ -484,6 +529,15 @@ const ModalDetallesActividad = ({ actividad, onClose, onActividadActualizada }) 
                     onSuccess={handleCompletarSuccess}
                 />
             )}
+
+            {/* Modal de Notificación */}
+            <ModalNotificacion
+                isOpen={notificacion.isOpen}
+                onClose={() => setNotificacion({ ...notificacion, isOpen: false })}
+                tipo={notificacion.tipo}
+                titulo={notificacion.titulo}
+                mensaje={notificacion.mensaje}
+            />
         </div>,
         document.body
     );

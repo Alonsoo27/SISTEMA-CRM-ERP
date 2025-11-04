@@ -7,6 +7,7 @@ import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
+import ModalNotificacion from '../common/ModalNotificacion';
 
 const ModalGestionarVencida = ({ actividad, indiceActual = 1, totalActividades = 1, onClose, onSuccess }) => {
     const [loading, setLoading] = useState(false);
@@ -18,6 +19,7 @@ const ModalGestionarVencida = ({ actividad, indiceActual = 1, totalActividades =
     const [horaFinReal, setHoraFinReal] = useState('');
     const [tiempoRestante, setTiempoRestante] = useState('');
     const [descripcionAdicional, setDescripcionAdicional] = useState('');
+    const [notificacion, setNotificacion] = useState({ isOpen: false, tipo: 'info', titulo: '', mensaje: '' });
 
     useEffect(() => {
         // Pre-seleccionar la primera acción disponible
@@ -37,7 +39,12 @@ const ModalGestionarVencida = ({ actividad, indiceActual = 1, totalActividades =
             switch (accionSeleccionada) {
                 case 'extender':
                     if (!minutosAdicionales || minutosAdicionales <= 0) {
-                        alert('Debes especificar los minutos adicionales');
+                        setNotificacion({
+                            isOpen: true,
+                            tipo: 'warning',
+                            titulo: 'Campo obligatorio',
+                            mensaje: 'Debes especificar los minutos adicionales para extender la actividad.'
+                        });
                         setLoading(false);
                         return;
                     }
@@ -49,7 +56,12 @@ const ModalGestionarVencida = ({ actividad, indiceActual = 1, totalActividades =
 
                 case 'completar_retroactivo':
                     if (!horaFinReal) {
-                        alert('Debes especificar la hora real de finalización');
+                        setNotificacion({
+                            isOpen: true,
+                            tipo: 'warning',
+                            titulo: 'Campo obligatorio',
+                            mensaje: 'Debes especificar la hora real de finalización de la actividad.'
+                        });
                         setLoading(false);
                         return;
                     }
@@ -61,7 +73,12 @@ const ModalGestionarVencida = ({ actividad, indiceActual = 1, totalActividades =
 
                 case 'reprogramar':
                     if (!tiempoRestante || tiempoRestante <= 0) {
-                        alert('Debes especificar el tiempo restante necesario');
+                        setNotificacion({
+                            isOpen: true,
+                            tipo: 'warning',
+                            titulo: 'Campo obligatorio',
+                            mensaje: 'Debes especificar el tiempo restante necesario para completar la actividad.'
+                        });
                         setLoading(false);
                         return;
                     }
@@ -74,7 +91,12 @@ const ModalGestionarVencida = ({ actividad, indiceActual = 1, totalActividades =
 
                 case 'cancelar':
                     if (!motivo) {
-                        alert('El motivo es obligatorio para cancelar');
+                        setNotificacion({
+                            isOpen: true,
+                            tipo: 'warning',
+                            titulo: 'Campo obligatorio',
+                            mensaje: 'El motivo es obligatorio para cancelar una actividad.'
+                        });
                         setLoading(false);
                         return;
                     }
@@ -90,7 +112,12 @@ const ModalGestionarVencida = ({ actividad, indiceActual = 1, totalActividades =
             await onSuccess(accionSeleccionada, datos);
         } catch (error) {
             console.error('Error:', error);
-            alert(error.response?.data?.message || 'Error al gestionar actividad');
+            setNotificacion({
+                isOpen: true,
+                tipo: 'danger',
+                titulo: 'Error al gestionar',
+                mensaje: error.response?.data?.message || 'No se pudo gestionar la actividad. Intenta de nuevo.'
+            });
         } finally {
             setLoading(false);
         }
@@ -463,6 +490,15 @@ const ModalGestionarVencida = ({ actividad, indiceActual = 1, totalActividades =
                     </button>
                 </div>
             </div>
+
+            {/* Modal de Notificación */}
+            <ModalNotificacion
+                isOpen={notificacion.isOpen}
+                onClose={() => setNotificacion({ ...notificacion, isOpen: false })}
+                tipo={notificacion.tipo}
+                titulo={notificacion.titulo}
+                mensaje={notificacion.mensaje}
+            />
         </div>,
         document.body
     );

@@ -4,6 +4,7 @@
 
 import { useState, useEffect } from 'react';
 import marketingService from '../../services/marketingService';
+import ModalNotificacion from '../common/ModalNotificacion';
 
 const ModalActividadGrupal = ({ onClose, onSuccess }) => {
     const [formData, setFormData] = useState({
@@ -20,6 +21,7 @@ const ModalActividadGrupal = ({ onClose, onSuccess }) => {
     const [equipoMarketing, setEquipoMarketing] = useState([]);
     const [loading, setLoading] = useState(false);
     const [loadingTipos, setLoadingTipos] = useState(true);
+    const [notificacion, setNotificacion] = useState({ isOpen: false, tipo: 'info', titulo: '', mensaje: '' });
 
     useEffect(() => {
         cargarCategorias();
@@ -98,17 +100,32 @@ const ModalActividadGrupal = ({ onClose, onSuccess }) => {
         e.preventDefault();
 
         if (!formData.categoria_principal || !formData.subcategoria) {
-            alert('Selecciona el tipo de actividad');
+            setNotificacion({
+                isOpen: true,
+                tipo: 'warning',
+                titulo: 'Campo obligatorio',
+                mensaje: 'Por favor, selecciona el tipo de actividad (categoría y subcategoría).'
+            });
             return;
         }
 
         if (!formData.descripcion.trim()) {
-            alert('Ingresa una descripción');
+            setNotificacion({
+                isOpen: true,
+                tipo: 'warning',
+                titulo: 'Campo obligatorio',
+                mensaje: 'Por favor, ingresa una descripción para la actividad grupal.'
+            });
             return;
         }
 
         if (formData.participantes_ids.length === 0) {
-            alert('Selecciona al menos un participante');
+            setNotificacion({
+                isOpen: true,
+                tipo: 'warning',
+                titulo: 'Participantes requeridos',
+                mensaje: 'Debes seleccionar al menos un participante para la actividad grupal.'
+            });
             return;
         }
 
@@ -127,11 +144,23 @@ const ModalActividadGrupal = ({ onClose, onSuccess }) => {
             }
 
             await marketingService.crearActividadGrupal(actividadData);
-            alert('✅ Actividad grupal creada exitosamente para ' + formData.participantes_ids.length + ' participantes');
-            if (onSuccess) onSuccess();
+            setNotificacion({
+                isOpen: true,
+                tipo: 'success',
+                titulo: 'Actividad grupal creada',
+                mensaje: `La actividad grupal ha sido creada exitosamente para ${formData.participantes_ids.length} participante(s).`
+            });
+            setTimeout(() => {
+                if (onSuccess) onSuccess();
+            }, 1500);
         } catch (error) {
             console.error('Error creando actividad grupal:', error);
-            alert('Error al crear la actividad grupal: ' + (error.response?.data?.message || error.message));
+            setNotificacion({
+                isOpen: true,
+                tipo: 'danger',
+                titulo: 'Error al crear',
+                mensaje: error.response?.data?.message || error.message || 'No se pudo crear la actividad grupal. Intenta de nuevo.'
+            });
         } finally {
             setLoading(false);
         }
@@ -336,6 +365,15 @@ const ModalActividadGrupal = ({ onClose, onSuccess }) => {
                     </div>
                 </form>
             </div>
+
+            {/* Modal de Notificación */}
+            <ModalNotificacion
+                isOpen={notificacion.isOpen}
+                onClose={() => setNotificacion({ ...notificacion, isOpen: false })}
+                tipo={notificacion.tipo}
+                titulo={notificacion.titulo}
+                mensaje={notificacion.mensaje}
+            />
         </div>
     );
 };

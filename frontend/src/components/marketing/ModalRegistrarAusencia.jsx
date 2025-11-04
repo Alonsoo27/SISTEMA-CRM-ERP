@@ -4,6 +4,7 @@
 
 import { useState, useEffect } from 'react';
 import marketingService from '../../services/marketingService';
+import ModalNotificacion from '../common/ModalNotificacion';
 
 const ModalRegistrarAusencia = ({ onClose, onSuccess }) => {
     const [formData, setFormData] = useState({
@@ -17,6 +18,7 @@ const ModalRegistrarAusencia = ({ onClose, onSuccess }) => {
     const [equipoMarketing, setEquipoMarketing] = useState([]);
     const [loading, setLoading] = useState(false);
     const [loadingEquipo, setLoadingEquipo] = useState(true);
+    const [notificacion, setNotificacion] = useState({ isOpen: false, tipo: 'info', titulo: '', mensaje: '' });
 
     useEffect(() => {
         cargarEquipo();
@@ -49,17 +51,32 @@ const ModalRegistrarAusencia = ({ onClose, onSuccess }) => {
         e.preventDefault();
 
         if (!formData.usuario_id) {
-            alert('Selecciona un usuario');
+            setNotificacion({
+                isOpen: true,
+                tipo: 'warning',
+                titulo: 'Campo obligatorio',
+                mensaje: 'Por favor, selecciona el usuario que estará ausente.'
+            });
             return;
         }
 
         if (!formData.fecha_inicio || !formData.fecha_fin) {
-            alert('Debes especificar la fecha de inicio y fin de la ausencia');
+            setNotificacion({
+                isOpen: true,
+                tipo: 'warning',
+                titulo: 'Campos obligatorios',
+                mensaje: 'Debes especificar la fecha de inicio y fin de la ausencia.'
+            });
             return;
         }
 
         if (!formData.motivo.trim()) {
-            alert('El motivo es obligatorio');
+            setNotificacion({
+                isOpen: true,
+                tipo: 'warning',
+                titulo: 'Campo obligatorio',
+                mensaje: 'El motivo de la ausencia es obligatorio.'
+            });
             return;
         }
 
@@ -67,7 +84,12 @@ const ModalRegistrarAusencia = ({ onClose, onSuccess }) => {
         const inicio = new Date(formData.fecha_inicio);
         const fin = new Date(formData.fecha_fin);
         if (fin < inicio) {
-            alert('La fecha de fin debe ser posterior a la fecha de inicio');
+            setNotificacion({
+                isOpen: true,
+                tipo: 'warning',
+                titulo: 'Fechas inválidas',
+                mensaje: 'La fecha de fin debe ser posterior a la fecha de inicio.'
+            });
             return;
         }
 
@@ -82,11 +104,23 @@ const ModalRegistrarAusencia = ({ onClose, onSuccess }) => {
             };
 
             await marketingService.registrarAusencia(datos);
-            alert('✅ Ausencia registrada exitosamente');
-            if (onSuccess) onSuccess();
+            setNotificacion({
+                isOpen: true,
+                tipo: 'success',
+                titulo: 'Ausencia registrada',
+                mensaje: 'La ausencia ha sido registrada exitosamente.'
+            });
+            setTimeout(() => {
+                if (onSuccess) onSuccess();
+            }, 1500);
         } catch (error) {
             console.error('Error registrando ausencia:', error);
-            alert('Error al registrar ausencia: ' + (error.response?.data?.message || error.message));
+            setNotificacion({
+                isOpen: true,
+                tipo: 'danger',
+                titulo: 'Error al registrar',
+                mensaje: error.response?.data?.message || error.message || 'No se pudo registrar la ausencia. Intenta de nuevo.'
+            });
         } finally {
             setLoading(false);
         }
@@ -279,6 +313,15 @@ const ModalRegistrarAusencia = ({ onClose, onSuccess }) => {
                     </div>
                 </form>
             </div>
+
+            {/* Modal de Notificación */}
+            <ModalNotificacion
+                isOpen={notificacion.isOpen}
+                onClose={() => setNotificacion({ ...notificacion, isOpen: false })}
+                tipo={notificacion.tipo}
+                titulo={notificacion.titulo}
+                mensaje={notificacion.mensaje}
+            />
         </div>
     );
 };

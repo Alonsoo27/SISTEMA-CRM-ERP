@@ -4,6 +4,7 @@
 
 import { useState, useEffect } from 'react';
 import marketingService from '../../services/marketingService';
+import ModalNotificacion from '../common/ModalNotificacion';
 
 const ModalTransferirActividad = ({ actividad, onClose, onSuccess }) => {
     const [formData, setFormData] = useState({
@@ -13,6 +14,7 @@ const ModalTransferirActividad = ({ actividad, onClose, onSuccess }) => {
     const [equipoMarketing, setEquipoMarketing] = useState([]);
     const [loading, setLoading] = useState(false);
     const [loadingEquipo, setLoadingEquipo] = useState(true);
+    const [notificacion, setNotificacion] = useState({ isOpen: false, tipo: 'info', titulo: '', mensaje: '' });
 
     useEffect(() => {
         cargarEquipo();
@@ -32,7 +34,12 @@ const ModalTransferirActividad = ({ actividad, onClose, onSuccess }) => {
             setEquipoMarketing(equipoFiltrado);
         } catch (error) {
             console.error('Error cargando equipo:', error);
-            alert('Error al cargar el equipo de marketing');
+            setNotificacion({
+                isOpen: true,
+                tipo: 'danger',
+                titulo: 'Error al cargar equipo',
+                mensaje: 'No se pudo cargar el equipo de marketing. Intenta de nuevo.'
+            });
         } finally {
             setLoadingEquipo(false);
         }
@@ -50,12 +57,22 @@ const ModalTransferirActividad = ({ actividad, onClose, onSuccess }) => {
         e.preventDefault();
 
         if (!formData.usuario_destino_id) {
-            alert('Selecciona un usuario destino');
+            setNotificacion({
+                isOpen: true,
+                tipo: 'warning',
+                titulo: 'Campo obligatorio',
+                mensaje: 'Por favor, selecciona un usuario destino para la transferencia.'
+            });
             return;
         }
 
         if (!formData.motivo.trim()) {
-            alert('El motivo de transferencia es obligatorio');
+            setNotificacion({
+                isOpen: true,
+                tipo: 'warning',
+                titulo: 'Campo obligatorio',
+                mensaje: 'El motivo de transferencia es obligatorio. Por favor, explica por qué estás transfiriendo esta actividad.'
+            });
             return;
         }
 
@@ -70,7 +87,12 @@ const ModalTransferirActividad = ({ actividad, onClose, onSuccess }) => {
             await onSuccess(datos);
         } catch (error) {
             console.error('Error transfiriendo actividad:', error);
-            alert('Error al transferir actividad: ' + (error.response?.data?.message || error.message));
+            setNotificacion({
+                isOpen: true,
+                tipo: 'danger',
+                titulo: 'Error al transferir',
+                mensaje: error.response?.data?.message || error.message || 'No se pudo transferir la actividad. Intenta de nuevo.'
+            });
         } finally {
             setLoading(false);
         }
@@ -201,6 +223,15 @@ const ModalTransferirActividad = ({ actividad, onClose, onSuccess }) => {
                     </div>
                 </form>
             </div>
+
+            {/* Modal de Notificación */}
+            <ModalNotificacion
+                isOpen={notificacion.isOpen}
+                onClose={() => setNotificacion({ ...notificacion, isOpen: false })}
+                tipo={notificacion.tipo}
+                titulo={notificacion.titulo}
+                mensaje={notificacion.mensaje}
+            />
         </div>
     );
 };
