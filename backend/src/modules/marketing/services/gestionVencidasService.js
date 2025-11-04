@@ -287,7 +287,7 @@ class GestionVencidasService {
             UPDATE actividades_marketing SET
                 estado = 'completada',
                 fecha_fin_real = NOW(),
-                duracion_real_minutos = EXTRACT(EPOCH FROM (NOW() - fecha_inicio_real)) / 60,
+                duracion_real_minutos = calcular_minutos_laborales(fecha_inicio_real, NOW()),
                 fue_vencida = true,
                 minutos_vencimiento = $1,
                 gestionada_vencimiento_en = NOW()
@@ -378,7 +378,7 @@ class GestionVencidasService {
             UPDATE actividades_marketing SET
                 estado = 'completada',
                 fecha_fin_real = $1,
-                duracion_real_minutos = EXTRACT(EPOCH FROM ($1 - fecha_inicio_real)) / 60,
+                duracion_real_minutos = calcular_minutos_laborales(fecha_inicio_real, $1),
                 fue_vencida = true,
                 minutos_vencimiento = $2,
                 gestionada_vencimiento_en = NOW(),
@@ -486,7 +486,7 @@ class GestionVencidasService {
             UPDATE actividades_marketing SET
                 estado = 'completada',
                 fecha_fin_real = NOW(),
-                duracion_real_minutos = EXTRACT(EPOCH FROM (NOW() - fecha_inicio_real)) / 60,
+                duracion_real_minutos = calcular_minutos_laborales(fecha_inicio_real, NOW()),
                 fue_vencida = true,
                 minutos_vencimiento = $1,
                 gestionada_vencimiento_en = NOW(),

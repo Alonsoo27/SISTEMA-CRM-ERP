@@ -1180,7 +1180,7 @@ class ActividadesController {
                 UPDATE actividades_marketing SET
                     estado = 'completada',
                     fecha_fin_real = NOW(),
-                    duracion_real_minutos = EXTRACT(EPOCH FROM (NOW() - fecha_inicio_real)) / 60
+                    duracion_real_minutos = calcular_minutos_laborales(fecha_inicio_real, NOW())
                 WHERE id = $1
                 RETURNING *
             `, [id]);
