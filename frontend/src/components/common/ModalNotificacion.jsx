@@ -3,6 +3,8 @@
 // Sistema profesional de alertas y mensajes
 // ============================================
 
+import { createPortal } from 'react-dom';
+
 const ModalNotificacion = ({
     isOpen,
     onClose,
@@ -80,7 +82,7 @@ const ModalNotificacion = ({
         )
     };
 
-    return (
+    return createPortal(
         <div
             className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[10003] p-4 animate-fadeIn"
             onClick={onClose}
@@ -122,7 +124,8 @@ const ModalNotificacion = ({
                     </button>
                 </div>
             </div>
-        </div>
+        </div>,
+        document.body
     );
 };
 

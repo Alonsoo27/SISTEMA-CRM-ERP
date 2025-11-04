@@ -3,6 +3,8 @@
 // Sistema profesional de confirmaciones
 // ============================================
 
+import { createPortal } from 'react-dom';
+
 const ModalConfirmacion = ({
     isOpen,
     onClose,
@@ -61,7 +63,7 @@ const ModalConfirmacion = ({
         onClose();
     };
 
-    return (
+    return createPortal(
         <div
             className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[10003] p-4"
             onClick={onClose}
@@ -103,7 +105,8 @@ const ModalConfirmacion = ({
                     </button>
                 </div>
             </div>
-        </div>
+        </div>,
+        document.body
     );
 };
 
