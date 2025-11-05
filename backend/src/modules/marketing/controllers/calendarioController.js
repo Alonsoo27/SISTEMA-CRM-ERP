@@ -24,8 +24,8 @@ class CalendarioController {
             inicio.setHours(0, 0, 0, 0); // Inicio del día lunes
 
             const fin = new Date(inicio);
-            fin.setDate(fin.getDate() + 4); // +4 días (Lunes a Viernes)
-            fin.setHours(23, 59, 59, 999); // Fin del día viernes
+            fin.setDate(fin.getDate() + 5); // +5 días (Lunes a Sábado)
+            fin.setHours(23, 59, 59, 999); // Fin del día sábado
 
             console.log('📅 Vista semanal - Rango:', {
                 usuarioObjetivo,

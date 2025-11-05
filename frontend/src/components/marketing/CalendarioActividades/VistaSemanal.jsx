@@ -8,12 +8,12 @@ import LineaTiempo from '../LineaTiempo';
 const VistaSemanal = ({ actividades, fechaInicio, onActividadClick, onRecargar }) => {
     const [diaSeleccionado, setDiaSeleccionado] = useState(null);
 
-    // Generar días de la semana (Lunes a Viernes)
+    // Generar días de la semana (Lunes a Sábado)
     const generarDiasSemana = () => {
         const dias = [];
         const inicio = getStartOfWeek(new Date(fechaInicio));
 
-        for (let i = 0; i < 5; i++) {
+        for (let i = 0; i < 6; i++) {
             const dia = new Date(inicio);
             dia.setDate(dia.getDate() + i);
             dias.push(dia);
@@ -63,7 +63,7 @@ const VistaSemanal = ({ actividades, fechaInicio, onActividadClick, onRecargar }
         };
     };
 
-    const nombresDias = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes'];
+    const nombresDias = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
     const meses = [
         'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
         'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'
@@ -81,7 +81,7 @@ const VistaSemanal = ({ actividades, fechaInicio, onActividadClick, onRecargar }
     return (
         <div className="space-y-4">
             {/* Grid de días - Vista compacta superior */}
-            <div className="grid grid-cols-5 gap-3">
+            <div className="grid grid-cols-6 gap-3">
                 {diasSemana.map((dia, index) => {
                     const stats = obtenerEstadisticasDia(dia);
                     const isHoy = esHoy(dia);

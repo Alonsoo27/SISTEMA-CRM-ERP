@@ -343,6 +343,12 @@ class ReajusteService {
                 });
                 throw new Error('Bucle infinito detectado al calcular fechas. Por favor, reduce la duración de la actividad.');
             }
+
+            // FIX: Si ya no quedan minutos, salir inmediatamente
+            if (minutosRestantes <= 0) {
+                break;
+            }
+
             const hora = cursor.getHours();
             const minuto = cursor.getMinutes();
             const diaSemana = cursor.getDay(); // 0=Domingo, 6=Sábado
