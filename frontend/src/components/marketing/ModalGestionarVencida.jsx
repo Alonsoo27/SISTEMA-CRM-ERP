@@ -5,9 +5,29 @@
 
 import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { format } from 'date-fns';
-import { es } from 'date-fns/locale';
 import ModalNotificacion from '../common/ModalNotificacion';
+import { formatearFechaHora } from '../../utils/dateHelpers';
+
+// Fallback: Acciones por defecto si backend no las envía
+const obtenerAccionesPorDefecto = (ventana) => {
+    const acciones = {
+        recien_vencida: [
+            { id: 'completar', label: 'Ya la completé', descripcion: 'Se marcará como completada ahora' },
+            { id: 'extender', label: 'Necesito más tiempo', descripcion: 'Aún estoy trabajando en ella' },
+            { id: 'posponer', label: 'Recordarme en 5 minutos', descripcion: 'Aún no termino pero estoy en ello' }
+        ],
+        vencida: [
+            { id: 'completar_retroactivo', label: 'La completé fuera de tiempo', descripcion: 'Indica a qué hora terminaste' },
+            { id: 'reprogramar', label: 'Reprogramar continuación', descripcion: 'Crear PARTE 2' },
+            { id: 'cancelar', label: 'No la pude hacer', descripcion: 'Cancelar con motivo' }
+        ],
+        muy_vencida: [
+            { id: 'completar_fuera_tiempo', label: 'Marcar como completada', descripcion: 'Completada fuera de tiempo' },
+            { id: 'cancelar', label: 'Cancelar', descripcion: 'No se completó' }
+        ]
+    };
+    return acciones[ventana] || acciones.muy_vencida;
+};
 
 const ModalGestionarVencida = ({ actividad, indiceActual = 1, totalActividades = 1, onClose, onSuccess }) => {
     const [loading, setLoading] = useState(false);
@@ -23,10 +43,23 @@ const ModalGestionarVencida = ({ actividad, indiceActual = 1, totalActividades =
 
     useEffect(() => {
         // Pre-seleccionar la primera acción disponible
-        if (actividad?.acciones_disponibles?.length > 0) {
-            setAccionSeleccionada(actividad.acciones_disponibles[0].id);
+        const acciones = actividad?.acciones_disponibles?.length > 0
+            ? actividad.acciones_disponibles
+            : obtenerAccionesPorDefecto(actividad?.ventana || 'muy_vencida');
+
+        if (acciones.length > 0) {
+            setAccionSeleccionada(acciones[0].id);
         }
     }, [actividad]);
+
+    // Limpiar todos los estados del formulario cuando cambia la actividad
+    useEffect(() => {
+        setMinutosAdicionales('');
+        setMotivo('');
+        setHoraFinReal('');
+        setTiempoRestante('');
+        setDescripcionAdicional('');
+    }, [actividad?.id]);
 
     const handleSubmit = async (e) => {
         e.preventDefault();
@@ -90,12 +123,13 @@ const ModalGestionarVencida = ({ actividad, indiceActual = 1, totalActividades =
                     break;
 
                 case 'cancelar':
+                case 'completar_fuera_tiempo':
                     if (!motivo) {
                         setNotificacion({
                             isOpen: true,
                             tipo: 'warning',
                             titulo: 'Campo obligatorio',
-                            mensaje: 'El motivo es obligatorio para cancelar una actividad.'
+                            mensaje: `El motivo es obligatorio para ${accion === 'cancelar' ? 'cancelar' : 'completar fuera de tiempo'} una actividad.`
                         });
                         setLoading(false);
                         return;
@@ -104,7 +138,6 @@ const ModalGestionarVencida = ({ actividad, indiceActual = 1, totalActividades =
 
                 case 'completar':
                 case 'posponer':
-                case 'completar_fuera_tiempo':
                     // Estos no requieren datos adicionales obligatorios
                     break;
             }
@@ -123,13 +156,6 @@ const ModalGestionarVencida = ({ actividad, indiceActual = 1, totalActividades =
         }
     };
 
-    const formatearFecha = (fecha) => {
-        // Las fechas vienen en UTC desde el backend, agregar 'Z' si no la tiene
-        const fechaStr = typeof fecha === 'string' && !fecha.endsWith('Z')
-            ? fecha + 'Z'
-            : fecha;
-        return format(new Date(fechaStr), "dd/MM/yyyy HH:mm", { locale: es });
-    };
 
     const getVentanaColor = () => {
         switch (actividad.ventana) {
@@ -170,7 +196,12 @@ const ModalGestionarVencida = ({ actividad, indiceActual = 1, totalActividades =
         }
     };
 
-    const accionActual = actividad?.acciones_disponibles?.find(a => a.id === accionSeleccionada);
+    // Usar acciones del backend o fallback
+    const accionesDisponibles = actividad?.acciones_disponibles?.length > 0
+        ? actividad.acciones_disponibles
+        : obtenerAccionesPorDefecto(actividad?.ventana || 'muy_vencida');
+
+    const accionActual = accionesDisponibles.find(a => a.id === accionSeleccionada);
 
     return createPortal(
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-[10001]">
@@ -249,7 +280,7 @@ const ModalGestionarVencida = ({ actividad, indiceActual = 1, totalActividades =
                             <div className="mt-3 pt-3 border-t border-gray-200">
                                 <div className="text-xs text-gray-500 mb-1">Finalizó hace</div>
                                 <div className="text-sm text-gray-700 font-semibold">
-                                    {formatearFecha(actividad.fecha_fin_planeada)}
+                                    {formatearFechaHora(actividad.fecha_fin_planeada)}
                                 </div>
                             </div>
                         )}
@@ -261,7 +292,7 @@ const ModalGestionarVencida = ({ actividad, indiceActual = 1, totalActividades =
                             ¿Qué deseas hacer?
                         </label>
                         <div className="space-y-2">
-                            {actividad.acciones_disponibles?.map((accion) => (
+                            {accionesDisponibles.map((accion) => (
                                 <label
                                     key={accion.id}
                                     className={`flex items-start p-4 border-2 rounded-lg cursor-pointer transition ${

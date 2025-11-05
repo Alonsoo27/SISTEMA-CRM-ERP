@@ -328,8 +328,18 @@ const marketingService = {
      * Retorna actividades vencidas clasificadas por ventana de tiempo
      */
     async detectarActividadesVencidas(usuarioId) {
-        const response = await apiClient.get(`/marketing/actividades-vencidas/${usuarioId}/detectar`);
-        return response.data;
+        try {
+            const response = await apiClient.get(`/marketing/actividades-vencidas/${usuarioId}/detectar`);
+            return response;
+        } catch (error) {
+            console.error('Error en detectarActividadesVencidas:', error);
+            return {
+                success: false,
+                message: error.message || 'Error al detectar actividades vencidas',
+                actividades: [],
+                total: 0
+            };
+        }
     },
 
     /**
@@ -338,10 +348,20 @@ const marketingService = {
      * @param {number} minutosAntes - Minutos antes del vencimiento (por defecto 15)
      */
     async detectarActividadesProximasVencer(usuarioId, minutosAntes = 15) {
-        const response = await apiClient.get(`/marketing/actividades-proximas-vencer/${usuarioId}/detectar`, {
-            params: { minutosAntes }
-        });
-        return response.data;
+        try {
+            const response = await apiClient.get(`/marketing/actividades-proximas-vencer/${usuarioId}/detectar`, {
+                params: { minutosAntes }
+            });
+            return response;
+        } catch (error) {
+            console.error('Error en detectarActividadesProximasVencer:', error);
+            return {
+                success: false,
+                message: error.message || 'Error al detectar actividades próximas a vencer',
+                actividades: [],
+                total: 0
+            };
+        }
     },
 
     /**

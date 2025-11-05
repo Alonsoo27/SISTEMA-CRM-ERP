@@ -144,7 +144,7 @@ const MarketingPage = () => {
     /**
      * Verifica si una actividad puede mostrarse (no está pospuesta o ya expiró el postpone)
      */
-    const puedeMotrarActividad = useCallback((actividadId) => {
+    const puedeMostrarActividad = useCallback((actividadId) => {
         if (!actividadesPospuestas.has(actividadId)) {
             return true;
         }
@@ -198,7 +198,7 @@ const MarketingPage = () => {
             if (response.actividades && response.actividades.length > 0) {
                 // Filtrar TODAS las actividades que no estén pospuestas
                 const actividadesParaMostrar = response.actividades.filter(act =>
-                    puedeMotrarActividad(act.id)
+                    puedeMostrarActividad(act.id)
                 );
 
                 // Si hay actividades pendientes y NO hay un modal abierto actualmente
@@ -221,7 +221,7 @@ const MarketingPage = () => {
             console.error('Error detectando actividades vencidas:', error);
             // No mostrar error al usuario para no interrumpir su flujo
         }
-    }, [usuarioSeleccionado, esMarketing, user.id, puedeMotrarActividad, modalVencidaAbierto]);
+    }, [usuarioSeleccionado, esMarketing, user.id, puedeMostrarActividad, modalVencidaAbierto]);
 
     /**
      * Detectar actividades próximas a vencer (notificación preventiva 15 min antes)
@@ -731,7 +731,7 @@ const MarketingPage = () => {
             )}
 
             {/* Modal para gestionar actividades vencidas */}
-            {modalVencidaAbierto && actividadesVencidas.length > 0 && (
+            {modalVencidaAbierto && actividadesVencidas.length > 0 && indiceActividadActual < actividadesVencidas.length && (
                 <ModalGestionarVencida
                     actividad={actividadesVencidas[indiceActividadActual]}
                     indiceActual={indiceActividadActual + 1}

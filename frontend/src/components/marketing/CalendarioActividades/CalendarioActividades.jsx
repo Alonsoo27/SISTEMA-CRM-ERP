@@ -31,9 +31,11 @@ const CalendarioActividades = ({ vista, usuarioId }) => {
 
             switch (vista) {
                 case 'semanal':
+                    // Enviar fecha en formato YYYY-MM-DD sin hora
+                    const fechaSemanal = fechaActual.toISOString().split('T')[0];
                     response = await marketingService.vistaSemanal(
                         usuarioId,
-                        fechaActual.toISOString()
+                        fechaSemanal
                     );
                     break;
 
