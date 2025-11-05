@@ -187,72 +187,120 @@ class ActividadesService {
     /**
      * Registrar huecos de tiempo pasado sin actividad
      *
-     * VERSIÓN MEJORADA V2:
-     * - Threshold de 15 minutos (más sensible)
+     * VERSIÓN CORREGIDA V3:
+     * - Llena TODOS los huecos del pasado, no solo el último
+     * - Límite superior: AHORA (NOW())
+     * - Usa calcular_minutos_laborales() para cálculo correcto
+     * - Threshold de 15 minutos
      * - Categorización automática: ALMUERZO, BREAK, INACTIVO
-     * - Mejor detección de patrones
      */
     static async registrarHuecosPasados(usuarioId, fechaInicioNuevaActividad) {
         try {
-            const ahora = new Date();
-            const inicioNuevaActividad = new Date(fechaInicioNuevaActividad);
+            const MINUTOS_MINIMOS_HUECO = 15;
+            let huecosCreados = 0;
 
-            // Buscar la última actividad que terminó ANTES de ahora
+            console.log(`🔍 Analizando huecos pasados para usuario ${usuarioId}...`);
+
+            // Obtener TODAS las actividades pasadas (que terminaron antes de NOW)
             const result = await query(`
-                SELECT fecha_fin_planeada, codigo, descripcion
+                SELECT
+                    id,
+                    codigo,
+                    fecha_inicio_planeada,
+                    fecha_fin_planeada
                 FROM actividades_marketing
                 WHERE usuario_id = $1
                   AND activo = true
                   AND fecha_fin_planeada < NOW()
                   AND tipo != 'sistema'
-                ORDER BY fecha_fin_planeada DESC
-                LIMIT 1
+                ORDER BY fecha_fin_planeada ASC
             `, [usuarioId]);
 
             if (result.rows.length === 0) {
-                // No hay actividades previas, no hay hueco que registrar
+                console.log('ℹ️ No hay actividades previas, no hay huecos que registrar');
                 return null;
             }
 
-            const ultimaActividad = result.rows[0];
-            const finUltimaActividad = new Date(ultimaActividad.fecha_fin_planeada);
-            const minutosSinActividad = (ahora - finUltimaActividad) / 60000;
+            const actividades = result.rows;
+            console.log(`📊 Encontradas ${actividades.length} actividades pasadas`);
 
-            // THRESHOLD MEJORADO: 15 minutos (antes 30)
-            const MINUTOS_MINIMOS_HUECO = 15;
+            // Iterar entre actividades consecutivas buscando huecos
+            for (let i = 0; i < actividades.length - 1; i++) {
+                const actividadActual = actividades[i];
+                const actividadSiguiente = actividades[i + 1];
 
-            if (minutosSinActividad > MINUTOS_MINIMOS_HUECO) {
-                // ✅ VALIDACIÓN: Verificar si hay actividades programadas en ese período
-                const actividadesProgramadas = await query(`
-                    SELECT COUNT(*) as total
-                    FROM actividades_marketing
-                    WHERE usuario_id = $1
-                      AND activo = true
-                      AND tipo != 'sistema'
-                      AND (
-                        (fecha_inicio_planeada >= $2 AND fecha_inicio_planeada < $3)
-                        OR (fecha_fin_planeada > $2 AND fecha_fin_planeada <= $3)
-                        OR (fecha_inicio_planeada <= $2 AND fecha_fin_planeada >= $3)
-                      )
-                `, [usuarioId, finUltimaActividad, ahora]);
+                const finActual = actividadActual.fecha_fin_planeada;
+                const inicioSiguiente = actividadSiguiente.fecha_inicio_planeada;
 
-                const hayActividadesProgramadas = parseInt(actividadesProgramadas.rows[0]?.total || 0) > 0;
+                // Calcular minutos laborales entre las dos actividades usando PostgreSQL
+                const resultMinutos = await query(`
+                    SELECT calcular_minutos_laborales($1, $2) as minutos_laborales
+                `, [finActual, inicioSiguiente]);
 
-                if (hayActividadesProgramadas) {
-                    console.log(`ℹ️ No se registra hueco: hay ${actividadesProgramadas.rows[0].total} actividad(es) programada(s) en ese período`);
-                    return null;
+                const minutosHueco = resultMinutos.rows[0].minutos_laborales;
+
+                if (minutosHueco >= MINUTOS_MINIMOS_HUECO) {
+                    console.log(`⚠️ Hueco encontrado entre ${actividadActual.codigo} y ${actividadSiguiente.codigo}: ${minutosHueco} min`);
+
+                    // Categorizar el hueco
+                    const categoriaHueco = this.categorizarHueco(
+                        new Date(finActual),
+                        new Date(inicioSiguiente),
+                        minutosHueco
+                    );
+
+                    // Crear actividad de sistema
+                    const codigoHueco = await this.generarCodigoActividad();
+                    await query(`
+                        INSERT INTO actividades_marketing (
+                            codigo, categoria_principal, subcategoria, descripcion,
+                            usuario_id, creado_por, tipo,
+                            fecha_inicio_planeada, fecha_fin_planeada,
+                            duracion_planeada_minutos, duracion_real_minutos,
+                            color_hex, estado, activo
+                        ) VALUES (
+                            $1, 'SISTEMA', $2, $3,
+                            $4, $4, 'sistema',
+                            $5, $6,
+                            $7, $7,
+                            $8, 'completada', true
+                        )
+                    `, [
+                        codigoHueco,
+                        categoriaHueco.subcategoria,
+                        categoriaHueco.descripcion,
+                        usuarioId,
+                        finActual,
+                        inicioSiguiente,
+                        minutosHueco,
+                        categoriaHueco.color
+                    ]);
+
+                    console.log(`✅ Hueco registrado: ${codigoHueco} - ${categoriaHueco.subcategoria} (${minutosHueco} min)`);
+                    huecosCreados++;
                 }
+            }
 
-                console.log(`⚠️ Hueco detectado: ${Math.round(minutosSinActividad)} minutos desde ${finUltimaActividad} hasta ahora`);
+            // Último hueco: desde la última actividad hasta AHORA
+            const ultimaActividad = actividades[actividades.length - 1];
+            const finUltima = ultimaActividad.fecha_fin_planeada;
 
-                // CATEGORIZACIÓN INTELIGENTE
+            // Calcular minutos laborales hasta NOW
+            const resultMinutosFinales = await query(`
+                SELECT calcular_minutos_laborales($1, NOW()) as minutos_laborales
+            `, [finUltima]);
+
+            const minutosHuecoFinal = resultMinutosFinales.rows[0].minutos_laborales;
+
+            if (minutosHuecoFinal >= MINUTOS_MINIMOS_HUECO) {
+                console.log(`⚠️ Hueco final detectado desde ${ultimaActividad.codigo} hasta ahora: ${minutosHuecoFinal} min`);
+
                 const categoriaHueco = this.categorizarHueco(
-                    finUltimaActividad,
-                    ahora,
-                    minutosSinActividad
+                    new Date(finUltima),
+                    new Date(),
+                    minutosHuecoFinal
                 );
 
-                // Crear registro categorizado
                 const codigoHueco = await this.generarCodigoActividad();
                 await query(`
                     INSERT INTO actividades_marketing (
@@ -273,16 +321,18 @@ class ActividadesService {
                     categoriaHueco.subcategoria,
                     categoriaHueco.descripcion,
                     usuarioId,
-                    finUltimaActividad,
-                    Math.round(minutosSinActividad),
+                    finUltima,
+                    minutosHuecoFinal,
                     categoriaHueco.color
                 ]);
 
-                console.log(`✅ Hueco registrado: ${codigoHueco} - ${categoriaHueco.subcategoria} (${Math.round(minutosSinActividad)} min)`);
-                return codigoHueco;
+                console.log(`✅ Hueco final registrado: ${codigoHueco} - ${categoriaHueco.subcategoria} (${minutosHuecoFinal} min)`);
+                huecosCreados++;
             }
 
-            return null;
+            console.log(`🎯 Total de huecos creados: ${huecosCreados}`);
+            return huecosCreados > 0 ? huecosCreados : null;
+
         } catch (error) {
             console.error('Error registrando huecos pasados:', error);
             // No lanzar error, solo loggearlo (no es crítico)
