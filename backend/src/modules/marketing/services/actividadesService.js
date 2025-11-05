@@ -201,7 +201,9 @@ class ActividadesService {
 
             console.log(`🔍 Analizando huecos pasados para usuario ${usuarioId}...`);
 
-            // Obtener TODAS las actividades pasadas (que terminaron antes de NOW)
+            // Obtener TODAS las actividades pasadas del usuario
+            // LÍMITE INFERIOR: Primera actividad existente (puede ser hace 100 años)
+            // LÍMITE SUPERIOR: AHORA (NOW())
             const result = await query(`
                 SELECT
                     id,
