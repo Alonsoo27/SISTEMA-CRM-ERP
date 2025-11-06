@@ -13,7 +13,7 @@ class ReajusteService {
      * @param {Date} fechaInsercion - Fecha de inserción/inicio
      * @param {number} duracionMinutos - Duración en minutos
      * @param {number} actividadIdDisparadora - ID de la actividad que dispara el reajuste
-     * @param {boolean} soloDesplazarNormales - Si true, solo desplaza actividades normales (edición). Si false, desplaza todo excepto prioritarias (inserción prioritaria)
+     * @param {boolean} soloDesplazarNormales - SIEMPRE solo desplaza actividades normales (excluye programadas, grupales y prioritarias)
      */
     static async reajustarActividades(usuarioId, fechaInsercion, duracionMinutos, actividadIdDisparadora = null, soloDesplazarNormales = false) {
         try {
@@ -494,6 +494,14 @@ class ReajusteService {
 
         // NUEVO: Si soloNormales = true, excluir programadas, grupales y prioritarias
         if (soloNormales) {
+            sql += `
+              AND es_programada = false
+              AND es_grupal = false
+              AND es_prioritaria = false
+            `;
+        } else {
+            // Inserción prioritaria: también excluir programadas, grupales y prioritarias
+            // Las actividades prioritarias NO deben mover otras prioritarias, programadas o grupales
             sql += `
               AND es_programada = false
               AND es_grupal = false
