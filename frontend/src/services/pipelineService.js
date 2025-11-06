@@ -146,9 +146,10 @@ class PipelineService {
 
   /**
    * Método de conveniencia para obtener todos los datos del dashboard
+   * Backend v3.0 - Retorna estructura plana para fácil acceso
    * @param {string|null} asesorId - ID del asesor (opcional)
    * @param {string} periodo - Período de consulta
-   * @returns {Promise<Object>} Todos los datos del dashboard
+   * @returns {Promise<Object>} Todos los datos del dashboard en estructura plana
    */
   async obtenerDashboardCompleto(asesorId = null, periodo = 'mes_actual') {
     try {
@@ -164,7 +165,7 @@ class PipelineService {
       const dashboard = dashboardResult.status === 'fulfilled' ? dashboardResult.value.data : null;
       const embudo = embudoResult.status === 'fulfilled' ? embudoResult.value.data : null;
       const proyeccion = proyeccionResult.status === 'fulfilled' ? proyeccionResult.value.data : null;
-      const seguimientos_criticos = criticosResult.status === 'fulfilled' ? criticosResult.value.data : [];
+      const criticosData = criticosResult.status === 'fulfilled' ? criticosResult.value.data : null;
 
       // Log de errores si los hay
       [dashboardResult, embudoResult, proyeccionResult, criticosResult].forEach((result, index) => {
@@ -174,13 +175,24 @@ class PipelineService {
         }
       });
 
+      // Estructura plana para fácil acceso desde el componente
+      // Merge de datos del dashboard principal con otros endpoints
       return {
         success: true,
         data: {
-          dashboard,
+          // Dashboard principal (contiene kpis_principales, kpis_secundarios, etc.)
+          ...dashboard,
+
+          // Embudo de conversión
           embudo,
+
+          // Proyección de ventas
           proyeccion,
-          seguimientos_criticos: Array.isArray(seguimientos_criticos) ? seguimientos_criticos : []
+
+          // Seguimientos críticos (extraer el array directamente)
+          seguimientos_criticos: criticosData?.seguimientos_criticos || [],
+          metricas_seguimientos: criticosData?.metricas || null,
+          recomendacion_seguimientos: criticosData?.recomendacion || null
         },
         timestamp: new Date().toISOString()
       };

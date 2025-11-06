@@ -85,6 +85,59 @@ const obtenerFechasPeriodo = (periodo) => {
   return { fechaInicio, fechaFin };
 };
 
+// ✅ FIX: Función auxiliar para extraer año y mes del parámetro período
+const extraerAñoMesDePeriodo = (periodo) => {
+  const hoy = new Date();
+
+  // Formato: mes_2025-09
+  if (periodo.startsWith('mes_') && periodo.includes('-')) {
+    const [year, month] = periodo.replace('mes_', '').split('-');
+    const yearNum = parseInt(year);
+    const monthNum = parseInt(month);
+
+    if (!isNaN(yearNum) && !isNaN(monthNum) && monthNum >= 1 && monthNum <= 12) {
+      return { año: yearNum, mes: monthNum };
+    }
+  }
+
+  // Formato: trimestre_2025-Q3 (tomar el último mes del trimestre)
+  if (periodo.startsWith('trimestre_') && periodo.includes('-Q')) {
+    const [year, quarter] = periodo.replace('trimestre_', '').split('-Q');
+    const yearNum = parseInt(year);
+    const quarterNum = parseInt(quarter);
+
+    if (!isNaN(yearNum) && !isNaN(quarterNum) && quarterNum >= 1 && quarterNum <= 4) {
+      const ultimoMesTrimestre = quarterNum * 3; // Q1=3, Q2=6, Q3=9, Q4=12
+      return { año: yearNum, mes: ultimoMesTrimestre };
+    }
+  }
+
+  // Formato: año_2025 (tomar diciembre)
+  if (periodo.startsWith('año_') && /^\d{4}$/.test(periodo.replace('año_', ''))) {
+    const yearNum = parseInt(periodo.replace('año_', ''));
+    if (!isNaN(yearNum)) {
+      return { año: yearNum, mes: 12 };
+    }
+  }
+
+  // Períodos predeterminados
+  switch (periodo) {
+    case 'hoy':
+    case 'semana_actual':
+    case 'mes_actual':
+    default:
+      return { año: hoy.getFullYear(), mes: hoy.getMonth() + 1 };
+
+    case 'trimestre_actual':
+      const mesActual = hoy.getMonth() + 1;
+      const ultimoMesTrimestre = Math.ceil(mesActual / 3) * 3;
+      return { año: hoy.getFullYear(), mes: ultimoMesTrimestre };
+
+    case 'año_actual':
+      return { año: hoy.getFullYear(), mes: 12 };
+  }
+};
+
 // Función auxiliar para cálculos seguros de porcentajes
 const calcularPorcentajeSafe = (parte, total) => {
   if (!total || total === 0) return 0;
@@ -388,34 +441,9 @@ const metasAvanzado = async (req, res) => {
 
     console.log(`[Metas Avanzado] Consultando período: ${periodo}`);
 
-    // Buscar el mes más reciente con datos disponibles
-    const mesRecienteQuery = `
-      SELECT año, mes 
-      FROM metas_ventas 
-      WHERE activo = true 
-      ORDER BY año DESC, mes DESC 
-      LIMIT 1
-    `;
-
-    const mesRecienteResult = await db.query(mesRecienteQuery);
-
-    if (mesRecienteResult.rows.length === 0) {
-      return res.json({
-        success: true,
-        data: {
-          periodo,
-          fechas: { fechaInicio, fechaFin },
-          dias_total: 0,
-          dias_transcurridos: 0,
-          progreso_periodo: 0,
-          asesores_metas: [],
-          mensaje: 'No hay metas configuradas en el sistema'
-        }
-      });
-    }
-
-    let { año, mes } = mesRecienteResult.rows[0];
-    console.log(`[Metas Avanzado] Usando datos del período: ${año}-${mes}`);
+    // ✅ FIX: Extraer año y mes del período seleccionado por el usuario
+    let { año, mes } = extraerAñoMesDePeriodo(periodo);
+    console.log(`[Metas Avanzado] Usando datos del período seleccionado: ${año}-${mes}`);
 
     // Query ejecutivo: obtener TODOS los asesores con metas (Vista de Jefe)
     const metasVentasQuery = `
@@ -484,10 +512,16 @@ const metasAvanzado = async (req, res) => {
       ORDER BY porcentaje_valor DESC, mv.meta_valor DESC
     `;
 
+    // ✅ FIX: Rastrear si hubo fallback a otro período
+    const añoSolicitado = año;
+    const mesSolicitado = mes;
+    let hubofallback = false;
+
     const metasResult = await db.query(metasVentasQuery, [año, mes]);
 
     if (metasResult.rows.length === 0) {
       console.log(`[Metas Avanzado] No hay datos para ${año}-${mes}, buscando período anterior...`);
+      hubofallback = true;
 
       // FALLBACK AUTOMÁTICO: Buscar el período anterior con datos
       const periodosAnterioresQuery = `
@@ -774,8 +808,8 @@ const metasAvanzado = async (req, res) => {
 
     const periodosDisponibles = await db.query(periodosDisponiblesQuery);
 
-    // Determinar si se está mostrando período actual o anterior
-    const essPeriodoSolicitado = periodo === 'mes_actual' && año === new Date().getFullYear() && mes === (new Date().getMonth() + 1);
+    // ✅ FIX: Determinar si se está mostrando el período actual
+    const esPeriodoActual = año === new Date().getFullYear() && mes === (new Date().getMonth() + 1);
 
     res.json({
       success: true,
@@ -783,7 +817,7 @@ const metasAvanzado = async (req, res) => {
         // Información del período
         periodo: `${año}-${String(mes).padStart(2, '0')}`,
         periodo_solicitado: periodo,
-        es_periodo_actual: essPeriodoSolicitado,
+        es_periodo_actual: esPeriodoActual,
         fechas: { fechaInicio, fechaFin },
         dias_total: diasTotal,
         dias_transcurridos: diasTranscurridosReal,
@@ -801,10 +835,10 @@ const metasAvanzado = async (req, res) => {
           asesores_con_metas: p.asesores_con_metas
         })),
 
-        // Información de contexto
-        fallback_aplicado: !essPeriodoSolicitado,
-        mensaje_contexto: !essPeriodoSolicitado ?
-          `Mostrando ${año}-${String(mes).padStart(2, '0')} (período más reciente con datos)` :
+        // ✅ FIX: Información de contexto (solo mostrar si hubo fallback)
+        fallback_aplicado: hubofallback,
+        mensaje_contexto: hubofallback ?
+          `No hay datos para ${añoSolicitado}-${String(mesSolicitado).padStart(2, '0')}. Mostrando ${año}-${String(mes).padStart(2, '0')} (período más reciente con datos)` :
           null
       }
     });

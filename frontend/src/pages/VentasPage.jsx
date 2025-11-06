@@ -944,6 +944,7 @@ const VentasPage = () => {
               <PipelineMetrics
                 asesorId={usuarioActual.id}
                 refreshTrigger={refreshTrigger}
+                usuarioActual={usuarioActual}
               />
             ) : (
               <div className="flex items-center justify-center h-64">

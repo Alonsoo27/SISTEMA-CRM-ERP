@@ -60,62 +60,90 @@ const PipelineCharts = ({ vista, datos, periodo }) => {
     return null;
   };
 
-  // Preparar datos para gráficos según vista - compatible con backend corregido
+  // Preparar datos para gráficos según vista - Backend v3.0
   const prepararDatos = () => {
     if (!datos) return null;
 
-    const { dashboard, embudo, proyeccion } = datos;
+    const { distribucion_snapshot, distribucion_canal, embudo, proyeccion } = datos;
 
     switch (vista) {
       case 'general':
-        // Datos para distribución por etapas - estructura corregida
-        const distribucionEtapas = dashboard?.distribucion_etapas?.map(etapa => ({
-          etapa: etapa.estado,
-          cantidad: parseInt(etapa.cantidad || 0),
-          valor_total: parseFloat(etapa.valor_total || 0),
-          porcentaje: parseFloat(etapa.porcentaje || 0),
-          probabilidad_promedio: parseFloat(etapa.probabilidad_promedio || 0)
+        // Backend v3.0: usar distribucion_snapshot (snapshot actual del pipeline)
+        const snapshotData = distribucion_snapshot || {};
+
+        // Convertir snapshot en array para gráficos
+        const distribucionEtapas = [
+          {
+            etapa: 'Prospecto',
+            cantidad: parseInt(snapshotData.prospectos || 0),
+            porcentaje: 0 // Se calculará después
+          },
+          {
+            etapa: 'Cotizado',
+            cantidad: parseInt(snapshotData.cotizados || 0),
+            porcentaje: 0
+          },
+          {
+            etapa: 'Negociación',
+            cantidad: parseInt(snapshotData.negociacion || 0),
+            porcentaje: 0
+          }
+        ];
+
+        // Calcular porcentajes
+        const totalLeads = distribucionEtapas.reduce((sum, e) => sum + e.cantidad, 0);
+        distribucionEtapas.forEach(etapa => {
+          etapa.porcentaje = totalLeads > 0 ? (etapa.cantidad / totalLeads) * 100 : 0;
+        });
+
+        // Backend v3.0: usar distribucion_canal para gráfico de canales
+        const distribucionCanales = distribucion_canal?.slice(0, 5).map(canal => ({
+          canal: canal.canal,
+          cantidad: parseInt(canal.cantidad || 0),
+          conversiones: parseInt(canal.conversiones || 0),
+          tasa_conversion: parseFloat(canal.tasa_conversion || 0),
+          valor_total: parseFloat(canal.valor_total || 0)
         })) || [];
 
-        // Datos para performance de asesores - estructura corregida
-        const performanceAsesores = dashboard?.performance_asesores?.slice(0, 5).map(asesor => ({
-          asesor: asesor.asesor_nombre,
-          conversiones: parseInt(asesor.ventas_cerradas || 0),
-          tasa_conversion: parseFloat(asesor.tasa_conversion || 0),
-          ingresos: parseFloat(asesor.ingresos_generados || 0),
-          leads: parseInt(asesor.total_leads || 0)
-        })) || [];
-
-        return { distribucionEtapas, performanceAsesores };
+        return { distribucionEtapas, distribucionCanales };
 
       case 'embudo':
-        // Datos para el embudo - usando distribucion real del dashboard
-        const datosEmbudo = dashboard?.distribucion_etapas?.map((etapa, index) => ({
-          etapa: etapa.estado,
+        // Backend v3.0: usar datos del endpoint /embudo
+        const datosEmbudo = embudo?.embudo?.etapas?.map((etapa, index) => ({
+          etapa: etapa.nombre,
           cantidad: parseInt(etapa.cantidad || 0),
-          valor: parseFloat(etapa.valor_total || 0),
+          valor: parseFloat(etapa.valor || 0),
           porcentaje: parseFloat(etapa.porcentaje || 0),
+          conversion_desde_anterior: parseFloat(etapa.conversion_desde_anterior || 0),
           fill: coloresPaleta[index % coloresPaleta.length]
         })) || [];
 
-        // Tasas de conversión del embudo - usar datos del dashboard también
-        const tasasConversion = embudo?.tasas_conversion || dashboard?.tasas_conversion || {};
+        // Win rate del embudo
+        const tasasConversion = {
+          win_rate: embudo?.embudo?.win_rate || 0,
+          modo: embudo?.modo || 'snapshot'
+        };
 
         return { datosEmbudo, tasasConversion };
 
       case 'proyeccion':
-        // Datos para proyección de ventas - estructura corregida
-        const datosProyeccion = proyeccion?.proyeccion_por_etapa?.map(etapa => ({
-          etapa: etapa.estado,
-          valor_pipeline: parseFloat(etapa.valor_pipeline || 0),
-          valor_proyectado: parseFloat(etapa.valor_proyectado || 0),
+        // Backend v3.0: usar datos del endpoint /proyeccion
+        const datosProyeccion = proyeccion?.detalle_por_etapa?.map(etapa => ({
+          etapa: etapa.etapa,
+          valor_pipeline: parseFloat(etapa.valor_total || 0),
+          valor_proyectado: parseFloat(etapa.valor_ponderado || 0),
           probabilidad: parseFloat(etapa.probabilidad_promedio || 0),
-          cantidad: parseInt(etapa.cantidad_oportunidades || 0)
+          cantidad: parseInt(etapa.cantidad || 0)
         })) || [];
 
-        return { 
-          datosProyeccion, 
-          proyeccionTotal: parseFloat(proyeccion?.proyeccion_total || 0) 
+        // Proyecciones (conservadora, realista, optimista)
+        const proyecciones = proyeccion?.proyecciones || {};
+
+        return {
+          datosProyeccion,
+          proyecciones,
+          proyeccionTotal: parseFloat(proyecciones.realista?.valor || 0),
+          pipelineActual: proyeccion?.pipeline_actual || {}
         };
 
       default:
@@ -138,26 +166,26 @@ const PipelineCharts = ({ vista, datos, periodo }) => {
 
   // Renderizar vista General
   if (vista === 'general') {
-    const { distribucionEtapas, performanceAsesores } = datosGrafico;
+    const { distribucionEtapas, distribucionCanales } = datosGrafico;
 
     return (
       <div className="space-y-6">
         {/* Gráfico de Distribución por Etapas */}
         <div className="bg-white rounded-lg shadow-sm border p-6">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-gray-900">Distribución por Etapas</h3>
+            <h3 className="text-lg font-semibold text-gray-900">Distribución del Pipeline Actual</h3>
             <BarChart3 className="h-5 w-5 text-gray-500" />
           </div>
-          
+
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* Gráfico de barras - Cantidad */}
             <div>
-              <h4 className="text-sm font-medium text-gray-700 mb-3">Cantidad de Prospectos</h4>
+              <h4 className="text-sm font-medium text-gray-700 mb-3">Leads por Etapa (Snapshot)</h4>
               <ResponsiveContainer width="100%" height={250}>
                 <BarChart data={distribucionEtapas}>
                   <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis 
-                    dataKey="etapa" 
+                  <XAxis
+                    dataKey="etapa"
                     tick={{ fontSize: 12 }}
                     angle={-45}
                     textAnchor="end"
@@ -196,28 +224,57 @@ const PipelineCharts = ({ vista, datos, periodo }) => {
           </div>
         </div>
 
-        {/* Gráfico de Performance por Asesor */}
-        {performanceAsesores.length > 0 && (
+        {/* Gráfico de Performance por Canal */}
+        {distribucionCanales.length > 0 && (
           <div className="bg-white rounded-lg shadow-sm border p-6">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-gray-900">Top Asesores - Tasa de Conversión</h3>
-              <Users className="h-5 w-5 text-gray-500" />
+              <h3 className="text-lg font-semibold text-gray-900">Performance por Canal de Contacto</h3>
+              <TrendingUp className="h-5 w-5 text-gray-500" />
             </div>
 
             <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={performanceAsesores} layout="horizontal">
+              <BarChart data={distribucionCanales}>
                 <CartesianGrid strokeDasharray="3 3" />
-                <XAxis type="number" />
-                <YAxis 
-                  dataKey="asesor" 
-                  type="category" 
-                  tick={{ fontSize: 12 }} 
-                  width={100} 
+                <XAxis
+                  dataKey="canal"
+                  tick={{ fontSize: 11 }}
+                  angle={-20}
+                  textAnchor="end"
+                  height={70}
                 />
+                <YAxis yAxisId="left" />
+                <YAxis yAxisId="right" orientation="right" />
                 <Tooltip content={<CustomTooltip />} />
-                <Bar dataKey="tasa_conversion" fill="#10B981" radius={[0, 4, 4, 0]} />
+                <Bar yAxisId="left" dataKey="cantidad" fill="#3B82F6" name="Cantidad" radius={[4, 4, 0, 0]} />
+                <Bar yAxisId="right" dataKey="tasa_conversion" fill="#10B981" name="Tasa Conversión %" radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
+
+            {/* Tabla de detalles */}
+            <div className="mt-4 overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Canal</th>
+                    <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Cantidad</th>
+                    <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Conversiones</th>
+                    <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Tasa %</th>
+                    <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Valor Total</th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {distribucionCanales.map((canal, index) => (
+                    <tr key={index}>
+                      <td className="px-4 py-2 text-sm text-gray-900">{canal.canal}</td>
+                      <td className="px-4 py-2 text-sm text-gray-900 text-right">{formatearNumero(canal.cantidad)}</td>
+                      <td className="px-4 py-2 text-sm text-gray-900 text-right">{formatearNumero(canal.conversiones)}</td>
+                      <td className="px-4 py-2 text-sm text-gray-900 text-right">{canal.tasa_conversion.toFixed(1)}%</td>
+                      <td className="px-4 py-2 text-sm text-gray-900 text-right">{formatearMoneda(canal.valor_total)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
       </div>
@@ -326,51 +383,119 @@ const PipelineCharts = ({ vista, datos, periodo }) => {
     );
   }
 
-  // Renderizar vista Proyección
+  // Renderizar vista Proyección - Backend v3.0
   if (vista === 'proyeccion') {
-    const { datosProyeccion, proyeccionTotal } = datosGrafico;
+    const { datosProyeccion, proyecciones, proyeccionTotal, pipelineActual } = datosGrafico;
 
     return (
       <div className="space-y-6">
-        {/* Resumen de proyección */}
-        <div className="bg-white rounded-lg shadow-sm border p-6">
+        {/* Resumen del Pipeline Actual */}
+        <div className="bg-gradient-to-r from-blue-600 to-purple-600 rounded-lg shadow-lg p-6 text-white">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-gray-900">Proyección de Ventas</h3>
-            <Target className="h-5 w-5 text-gray-500" />
+            <h3 className="text-lg font-semibold">Pipeline Actual</h3>
+            <DollarSign className="h-6 w-6" />
           </div>
-          
-          <div className="text-center py-6">
-            <div className="text-3xl font-bold text-green-600 mb-2">
-              {formatearMoneda(proyeccionTotal)}
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="text-center">
+              <p className="text-sm text-blue-100 mb-1">Valor Total</p>
+              <p className="text-2xl font-bold">{formatearMoneda(pipelineActual.valor_total)}</p>
             </div>
-            <p className="text-gray-600">Ingresos proyectados basados en pipeline actual</p>
+            <div className="text-center">
+              <p className="text-sm text-blue-100 mb-1">Valor Ponderado</p>
+              <p className="text-2xl font-bold">{formatearMoneda(pipelineActual.valor_ponderado)}</p>
+            </div>
+            <div className="text-center">
+              <p className="text-sm text-blue-100 mb-1">Oportunidades</p>
+              <p className="text-2xl font-bold">{formatearNumero(pipelineActual.cantidad_oportunidades)}</p>
+            </div>
+          </div>
+        </div>
+
+        {/* Proyecciones: Conservadora, Realista, Optimista */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          {/* Conservadora */}
+          <div className="bg-white rounded-lg shadow-sm border p-6">
+            <div className="text-center">
+              <div className="inline-flex items-center justify-center w-12 h-12 bg-yellow-100 rounded-full mb-3">
+                <TrendingDown className="h-6 w-6 text-yellow-600" />
+              </div>
+              <h4 className="text-sm font-medium text-gray-600 mb-2">Conservadora</h4>
+              <p className="text-2xl font-bold text-gray-900 mb-1">
+                {formatearMoneda(proyecciones.conservadora?.valor)}
+              </p>
+              <p className="text-xs text-gray-500 mb-3">
+                {proyecciones.conservadora?.descripcion}
+              </p>
+              <div className="text-xs text-gray-600">
+                Tasa: {proyecciones.conservadora?.probabilidad}%
+              </div>
+            </div>
+          </div>
+
+          {/* Realista */}
+          <div className="bg-white rounded-lg shadow-sm border-2 border-blue-500 p-6">
+            <div className="text-center">
+              <div className="inline-flex items-center justify-center w-12 h-12 bg-blue-100 rounded-full mb-3">
+                <Target className="h-6 w-6 text-blue-600" />
+              </div>
+              <h4 className="text-sm font-medium text-blue-600 mb-2">Realista ⭐</h4>
+              <p className="text-3xl font-bold text-blue-600 mb-1">
+                {formatearMoneda(proyecciones.realista?.valor)}
+              </p>
+              <p className="text-xs text-gray-500 mb-3">
+                {proyecciones.realista?.descripcion}
+              </p>
+              <div className="text-xs text-gray-600">
+                Ponderada por probabilidad
+              </div>
+            </div>
+          </div>
+
+          {/* Optimista */}
+          <div className="bg-white rounded-lg shadow-sm border p-6">
+            <div className="text-center">
+              <div className="inline-flex items-center justify-center w-12 h-12 bg-green-100 rounded-full mb-3">
+                <TrendingUp className="h-6 w-6 text-green-600" />
+              </div>
+              <h4 className="text-sm font-medium text-gray-600 mb-2">Optimista</h4>
+              <p className="text-2xl font-bold text-gray-900 mb-1">
+                {formatearMoneda(proyecciones.optimista?.valor)}
+              </p>
+              <p className="text-xs text-gray-500 mb-3">
+                {proyecciones.optimista?.descripcion}
+              </p>
+              <div className="text-xs text-gray-600">
+                Tasa: {proyecciones.optimista?.probabilidad}%
+              </div>
+            </div>
           </div>
         </div>
 
         {/* Gráfico de proyección por etapa */}
         <div className="bg-white rounded-lg shadow-sm border p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Proyección por Etapa</h3>
-          
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Análisis por Etapa del Pipeline</h3>
+
           <ResponsiveContainer width="100%" height={350}>
             <BarChart data={datosProyeccion}>
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis dataKey="etapa" />
               <YAxis />
               <Tooltip content={<CustomTooltip />} />
-              <Bar dataKey="valor_pipeline" fill="#93C5FD" name="Pipeline Total" />
-              <Bar dataKey="valor_proyectado" fill="#3B82F6" name="Valor Proyectado" />
+              <Bar dataKey="valor_pipeline" fill="#93C5FD" name="Valor Total" />
+              <Bar dataKey="valor_proyectado" fill="#3B82F6" name="Valor Ponderado" />
             </BarChart>
           </ResponsiveContainer>
-          
+
           <div className="mt-4 text-center">
             <div className="flex justify-center space-x-6">
               <div className="flex items-center">
                 <div className="w-4 h-4 bg-blue-300 rounded mr-2" />
-                <span className="text-sm text-gray-600">Pipeline Total</span>
+                <span className="text-sm text-gray-600">Valor Total</span>
               </div>
               <div className="flex items-center">
                 <div className="w-4 h-4 bg-blue-600 rounded mr-2" />
-                <span className="text-sm text-gray-600">Valor Proyectado</span>
+                <span className="text-sm text-gray-600">Valor Ponderado (por probabilidad)</span>
               </div>
             </div>
           </div>
@@ -382,24 +507,24 @@ const PipelineCharts = ({ vista, datos, periodo }) => {
             <h3 className="text-lg font-semibold text-gray-900 mb-4">Detalle por Etapa</h3>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               {datosProyeccion.map((etapa, index) => (
-                <div key={etapa.etapa} className="p-4 border rounded-lg">
-                  <h4 className="font-medium text-gray-900 mb-2">{etapa.etapa}</h4>
-                  <div className="space-y-1 text-sm">
+                <div key={etapa.etapa} className="p-4 border rounded-lg hover:shadow-md transition-shadow">
+                  <h4 className="font-medium text-gray-900 mb-3">{etapa.etapa}</h4>
+                  <div className="space-y-2 text-sm">
                     <div className="flex justify-between">
                       <span className="text-gray-600">Oportunidades:</span>
                       <span className="font-medium">{formatearNumero(etapa.cantidad)}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-gray-600">Pipeline:</span>
+                      <span className="text-gray-600">Valor Total:</span>
                       <span className="font-medium">{formatearMoneda(etapa.valor_pipeline)}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-gray-600">Proyectado:</span>
-                      <span className="font-medium text-green-600">{formatearMoneda(etapa.valor_proyectado)}</span>
+                      <span className="text-gray-600">Ponderado:</span>
+                      <span className="font-medium text-blue-600">{formatearMoneda(etapa.valor_proyectado)}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-gray-600">Probabilidad:</span>
-                      <span className="font-medium">{etapa.probabilidad.toFixed(0)}%</span>
+                      <span className="font-medium">{etapa.probabilidad.toFixed(1)}%</span>
                     </div>
                   </div>
                 </div>

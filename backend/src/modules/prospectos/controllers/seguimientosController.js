@@ -658,21 +658,36 @@ class SeguimientosController {
                         // ✅ FIX: Solo notificar si el prospecto está en estados activos
                         if (!['Cerrado', 'Perdido', 'Convertido'].includes(seguimiento.estado)) {
                             try {
-                                await NotificacionesController.crearNotificaciones({
-                                    tipo: 'seguimiento_urgente',
-                                    modo: 'basico',
-                                    data: {
-                                        usuario_id: seguimiento.prospecto_asesor_id,
-                                        prospecto_id: seguimiento.prospecto_id,
-                                        prospecto_codigo: seguimiento.codigo,
-                                        prospecto_nombre: seguimiento.nombre_cliente,
-                                        seguimiento_id: seguimiento.id,
-                                        horas_vencidas: Math.round(horasVencidas),
-                                        valor_estimado: seguimiento.valor_estimado || 0
-                                    },
-                                    auto_prioridad: true
-                                });
-                                logger.info(`⏰ Seguimiento vencido pero en período de gracia (faltan ${Math.round((fechaLimite2DiasLaborales - ahora_date) / (1000 * 60 * 60))}h para traspaso)`);
+                                // ✅ FIX SPAM: Verificar si ya notificamos en las últimas 4 horas
+                                const yaNotificado = await query(`
+                                    SELECT id FROM notificaciones
+                                    WHERE usuario_id = $1
+                                    AND tipo = $2
+                                    AND prospecto_id = $3
+                                    AND created_at > NOW() - INTERVAL '4 hours'
+                                    LIMIT 1
+                                `, [seguimiento.prospecto_asesor_id, 'seguimiento_urgente', seguimiento.prospecto_id]);
+
+                                if (!yaNotificado.rows || yaNotificado.rows.length === 0) {
+                                    // Solo notificar si no hay notificación reciente
+                                    await NotificacionesController.crearNotificaciones({
+                                        tipo: 'seguimiento_urgente',
+                                        modo: 'basico',
+                                        data: {
+                                            usuario_id: seguimiento.prospecto_asesor_id,
+                                            prospecto_id: seguimiento.prospecto_id,
+                                            prospecto_codigo: seguimiento.codigo,
+                                            prospecto_nombre: seguimiento.nombre_cliente,
+                                            seguimiento_id: seguimiento.id,
+                                            horas_vencidas: Math.round(horasVencidas),
+                                            valor_estimado: seguimiento.valor_estimado || 0
+                                        },
+                                        auto_prioridad: true
+                                    });
+                                    logger.info(`⏰ Seguimiento vencido pero en período de gracia (faltan ${Math.round((fechaLimite2DiasLaborales - ahora_date) / (1000 * 60 * 60))}h para traspaso)`);
+                                } else {
+                                    logger.info(`⏭️ Notificación omitida: ya notificado hace menos de 4 horas`);
+                                }
                             } catch (errorNotif) {
                                 logger.error('⚠️ Error creando notificación:', errorNotif);
                             }
@@ -721,6 +736,7 @@ class SeguimientosController {
 
                     const nuevasReasignaciones = seguimiento.numero_reasignaciones + 1;
 
+                    // ✅ FIX: Validación explícita para evitar bugs con contadores inconsistentes
                     if (nuevasReasignaciones <= 2) {
                         // REASIGNACIÓN NORMAL (1er o 2do rebote)
                         const resultadoReasignacion = await SeguimientosController.reasignarProspecto(seguimiento.prospecto_id, 'seguimiento_vencido');
@@ -747,8 +763,8 @@ class SeguimientosController {
                             WHERE id = $6
                         `, ['traspasado', true, new Date(), seguimiento.asesor_id, 'seguimiento_vencido', seguimiento.prospecto_id]);
 
-                    } else {
-                        // ACTIVAR MODO LIBRE (3er rebote - numero_reasignaciones = 2 → 3)
+                    } else if (nuevasReasignaciones === 3) {
+                        // ACTIVAR MODO LIBRE (3er rebote exacto - numero_reasignaciones = 2 → 3)
                         await SeguimientosController.activarModoLibre(seguimiento.prospecto_id);
                         resultado.modo_libre_activado++;
 
@@ -766,8 +782,17 @@ class SeguimientosController {
                             SET estado_seguimiento = $1, fecha_ultimo_seguimiento = $2
                             WHERE id = $3
                         `, ['modo_libre', new Date(), seguimiento.prospecto_id]);
+
+                    } else {
+                        // ⚠️ CASO ANÓMALO: numero_reasignaciones > 3 (no debería pasar con LEAST())
+                        logger.warn(`⚠️ ALERTA: Prospecto ${seguimiento.codigo} tiene ${seguimiento.numero_reasignaciones} reasignaciones (>3). Ignorando procesamiento.`, {
+                            prospecto_id: seguimiento.prospecto_id,
+                            numero_reasignaciones: seguimiento.numero_reasignaciones,
+                            asesor_actual: seguimiento.asesor_nombre
+                        });
+                        // No hacer nada, ya está en un estado inconsistente que requiere revisión manual
                     }
-                    
+
                     resultado.procesados++;
                     
                 } catch (error) {
@@ -852,13 +877,15 @@ class SeguimientosController {
             `, [7, true, prospecto.asesor_id]); // rol_id = 7 (VENDEDOR)
             
             if (!asesoresResult.rows || asesoresResult.rows.length === 0) {
-                // Si no hay VENDEDOREs disponibles, activar MODO LIBRE
+                // ✅ FIX: Si no hay VENDEDOREs disponibles, activar MODO LIBRE + LIMPIAR asesor_id
                 await query(`
                     UPDATE prospectos
                     SET asesor_anterior_id = asesor_id,
+                        asesor_id = NULL,
+                        asesor_nombre = NULL,
                         modo_libre = $1,
                         fecha_modo_libre = CURRENT_TIMESTAMP,
-                        numero_reasignaciones = $2,
+                        numero_reasignaciones = LEAST($2, 5),
                         fecha_traspaso = NOW(),
                         motivo_traspaso = $3
                     WHERE id = $4
@@ -905,8 +932,24 @@ class SeguimientosController {
             // 🕐 Programar seguimiento para 2 días laborales desde ahora
             const ahora = new Date();
             const fechaProgramada = calcular2DiasLaborales(ahora);
+
+            // ✅ FIX: Validar que fechaProgramada sea válida antes de crear seguimiento
+            if (!fechaProgramada || isNaN(fechaProgramada.getTime())) {
+                logger.error(`❌ Error: fechaProgramada inválida para prospecto ${prospecto_id}`, {
+                    fechaProgramada,
+                    ahora: ahora.toISOString()
+                });
+                throw new Error('No se pudo calcular fecha programada válida');
+            }
+
             // fecha_limite: 4h después de la fecha programada (alerta al asesor)
             const fechaLimite = calcularFechaLimite(fechaProgramada.toISOString(), 'Llamada');
+
+            // Validar fechaLimite también
+            if (!fechaLimite) {
+                logger.error(`❌ Error: fechaLimite inválida para prospecto ${prospecto_id}`);
+                throw new Error('No se pudo calcular fecha límite válida');
+            }
 
             await query(`
                 INSERT INTO seguimientos (
@@ -926,7 +969,9 @@ class SeguimientosController {
 
             logger.info(`✅ Nuevo seguimiento creado para ${asesorSeleccionado.nombre} (fecha: ${fechaProgramada.toISOString()})`);
 
-            // Crear notificaciones
+            // ✅ FIX: Usar solo sistema unificado de notificaciones
+            // La tabla notificaciones_reasignacion se mantiene solo para auditoría histórica
+            // Las notificaciones activas se envían por el sistema unificado
             await SeguimientosController.crearNotificacionesReasignacion(
                 prospecto_id,
                 prospecto.asesor_id,
@@ -958,16 +1003,19 @@ class SeguimientosController {
                 SELECT id FROM usuarios
                 WHERE rol_id = $1 AND activo = $2 AND id != 19
             `, [7, true]); // rol_id = 7 (VENDEDOR)
-            
+
             const asesor_ids = asesoresResult.rows?.map(a => a.id) || [];
-            
-            // Activar modo libre en prospecto con auditoría
+
+            // ✅ FIX: Activar modo libre en prospecto con auditoría + LIMPIAR asesor_id
+            // Cuando un prospecto está en modo libre, no pertenece a nadie hasta que lo tomen
             await query(`
                 UPDATE prospectos
                 SET asesor_anterior_id = asesor_id,
+                    asesor_id = NULL,
+                    asesor_nombre = NULL,
                     modo_libre = $1,
                     fecha_modo_libre = $2,
-                    numero_reasignaciones = numero_reasignaciones + 1,
+                    numero_reasignaciones = LEAST(numero_reasignaciones + 1, 5),
                     fecha_traspaso = NOW(),
                     motivo_traspaso = $3
                 WHERE id = $4
@@ -983,11 +1031,12 @@ class SeguimientosController {
                 // Tabla modo_libre puede no existir, continuar sin error
                 logger.warn('Tabla prospecto_modo_libre no existe, continuando...');
             }
-            
-            // Notificar a todos los asesores mediante el sistema unificado
+
+            // ✅ FIX: Registrar en tabla de auditoría (notificaciones_reasignacion)
+            // Solo para histórico, las notificaciones activas se envían más abajo
             await SeguimientosController.crearNotificacionModoLibre(prospecto_id, asesor_ids);
 
-            // 🔔 NOTIFICACIÓN VÍA SISTEMA UNIFICADO: prospecto_libre_activado
+            // 🔔 NOTIFICACIÓN VÍA SISTEMA UNIFICADO: prospecto_libre_activado (SISTEMA PRINCIPAL)
             // ✅ FIX: Solo notificar si el prospecto está en estados activos
             try {
                 // Obtener datos del prospecto

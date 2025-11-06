@@ -3362,8 +3362,9 @@ static async obtenerPorId(req, res) {
                 });
             }
 
-            // ❌ VALIDAR: Asesor no puede retomar un prospecto que él mismo perdió
-            if (prospecto.asesor_anterior_id === asesor_id) {
+            // ✅ FIX: VALIDAR con conversión de tipos: Asesor no puede retomar un prospecto que él mismo perdió
+            // Comparar como enteros para evitar type mismatch (string vs number)
+            if (prospecto.asesor_anterior_id && parseInt(prospecto.asesor_anterior_id) === parseInt(asesor_id)) {
                 await client.query('ROLLBACK');
 
                 logger.warn(`❌ Intento fallido: Asesor ${asesor_id} intentó retomar prospecto ${prospecto.codigo} que él mismo perdió anteriormente`);
@@ -3405,9 +3406,27 @@ static async obtenerPorId(req, res) {
             // 🕐 Programar para 2 días laborales desde ahora
             const ahora = new Date();
             const fechaProgramada = calcular2DiasLaborales(ahora);
+
+            // ✅ FIX: Validar que fechaProgramada sea válida antes de crear seguimiento
+            if (!fechaProgramada || isNaN(fechaProgramada.getTime())) {
+                await client.query('ROLLBACK');
+                logger.error(`❌ Error: fechaProgramada inválida al tomar prospecto ${id}`, {
+                    fechaProgramada,
+                    ahora: ahora.toISOString()
+                });
+                throw new Error('No se pudo calcular fecha programada válida');
+            }
+
             // fecha_limite: 4h después de la fecha programada (alerta al asesor)
             const { calcularFechaLimite } = require('../utils/fechasHelper');
             const fechaLimite = calcularFechaLimite(fechaProgramada.toISOString(), 'Llamada');
+
+            // Validar fechaLimite también
+            if (!fechaLimite) {
+                await client.query('ROLLBACK');
+                logger.error(`❌ Error: fechaLimite inválida al tomar prospecto ${id}`);
+                throw new Error('No se pudo calcular fecha límite válida');
+            }
 
             await client.query(`
                 INSERT INTO seguimientos (
@@ -3464,6 +3483,11 @@ static async obtenerPorId(req, res) {
      */
     static async obtenerDisponibles(req, res) {
         try {
+            // ✅ FIX: Agregar paginación para evitar queries gigantes
+            const { limit = 100, offset = 0 } = req.query;
+            const limitNum = Math.min(parseInt(limit) || 100, 200); // Máximo 200
+            const offsetNum = parseInt(offset) || 0;
+
             const result = await query(`
                 SELECT
                     p.id,
@@ -3487,7 +3511,8 @@ static async obtenerPorId(req, res) {
                 AND p.activo = true
                 AND p.estado NOT IN ('Cerrado', 'Perdido')
                 ORDER BY p.valor_estimado DESC, p.fecha_modo_libre ASC
-            `);
+                LIMIT $1 OFFSET $2
+            `, [limitNum, offsetNum]);
 
             const prospectos = result.rows.map(p => ({
                 ...p,
