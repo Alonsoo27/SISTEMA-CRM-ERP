@@ -1695,7 +1695,11 @@ class ActividadesController {
                 datos || {}
             );
 
-            res.json(resultado);
+            // Envolver el resultado en un objeto con 'data' para consistencia con otros endpoints
+            res.json({
+                success: true,
+                data: resultado
+            });
 
         } catch (error) {
             console.error('Error gestionando actividad vencida:', error);

@@ -285,7 +285,9 @@ const MarketingPage = () => {
                 datos
             );
 
-            if (response.success) {
+            // Manejar tanto response.data.success como response.success (retrocompatibilidad)
+            const resultado = response.data || response;
+            if (resultado.success) {
                 // Si la acción fue "posponer", registrar en el Map
                 if (accion === 'posponer') {
                     setActividadesPospuestas(prev => {
