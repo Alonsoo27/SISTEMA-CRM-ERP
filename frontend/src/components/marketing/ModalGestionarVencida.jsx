@@ -6,6 +6,7 @@
 import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import ModalNotificacion from '../common/ModalNotificacion';
+import ModalConfirmarCompletarGrupal from './ModalConfirmarCompletarGrupal';
 import { formatearFechaHora } from '../../utils/dateHelpers';
 
 // Fallback: Acciones por defecto si backend no las envía
@@ -41,6 +42,10 @@ const ModalGestionarVencida = ({ actividad, indiceActual = 1, totalActividades =
     const [descripcionAdicional, setDescripcionAdicional] = useState('');
     const [notificacion, setNotificacion] = useState({ isOpen: false, tipo: 'info', titulo: '', mensaje: '' });
 
+    // Estados para modal de confirmación grupal
+    const [mostrarModalGrupal, setMostrarModalGrupal] = useState(false);
+    const [datosGestionPendiente, setDatosGestionPendiente] = useState(null);
+
     useEffect(() => {
         // Pre-seleccionar la primera acción disponible
         const acciones = actividad?.acciones_disponibles?.length > 0
@@ -60,6 +65,23 @@ const ModalGestionarVencida = ({ actividad, indiceActual = 1, totalActividades =
         setTiempoRestante('');
         setDescripcionAdicional('');
     }, [actividad?.id]);
+
+    // Función auxiliar para proceder con la gestión (después de confirmación grupal o directamente)
+    const procederConGestion = async (datos) => {
+        try {
+            await onSuccess(accionSeleccionada, datos);
+        } catch (error) {
+            console.error('Error:', error);
+            setNotificacion({
+                isOpen: true,
+                tipo: 'danger',
+                titulo: 'Error al gestionar',
+                mensaje: error.response?.data?.message || 'No se pudo gestionar la actividad. Intenta de nuevo.'
+            });
+        } finally {
+            setLoading(false);
+        }
+    };
 
     const handleSubmit = async (e) => {
         e.preventDefault();
@@ -152,7 +174,21 @@ const ModalGestionarVencida = ({ actividad, indiceActual = 1, totalActividades =
                     break;
             }
 
-            await onSuccess(accionSeleccionada, datos);
+            // NUEVA LÓGICA: Verificar si es actividad grupal Y es una acción de completar
+            const esAccionCompletar = ['completar', 'completar_retroactivo', 'completar_fuera_tiempo'].includes(accionSeleccionada);
+            const esGrupal = actividad?.es_grupal === true;
+
+            if (esGrupal && esAccionCompletar) {
+                // Mostrar modal de confirmación grupal
+                setDatosGestionPendiente(datos);
+                setMostrarModalGrupal(true);
+                setLoading(false);
+                return;
+            }
+
+            // Si no es grupal o no es acción de completar, proceder directamente
+            await procederConGestion(datos);
+
         } catch (error) {
             console.error('Error:', error);
             setNotificacion({
@@ -161,9 +197,21 @@ const ModalGestionarVencida = ({ actividad, indiceActual = 1, totalActividades =
                 titulo: 'Error al gestionar',
                 mensaje: error.response?.data?.message || 'No se pudo gestionar la actividad. Intenta de nuevo.'
             });
-        } finally {
             setLoading(false);
         }
+    };
+
+    // Handler para confirmación del modal grupal
+    const handleConfirmarGrupal = async (completarTodos) => {
+        setMostrarModalGrupal(false);
+        setLoading(true);
+
+        const datosConGrupal = {
+            ...datosGestionPendiente,
+            completar_todos_participantes: completarTodos
+        };
+
+        await procederConGestion(datosConGrupal);
     };
 
 
@@ -544,6 +592,18 @@ const ModalGestionarVencida = ({ actividad, indiceActual = 1, totalActividades =
                 titulo={notificacion.titulo}
                 mensaje={notificacion.mensaje}
             />
+
+            {/* Modal de Confirmación Grupal */}
+            {mostrarModalGrupal && (
+                <ModalConfirmarCompletarGrupal
+                    actividad={actividad}
+                    onConfirm={handleConfirmarGrupal}
+                    onCancel={() => {
+                        setMostrarModalGrupal(false);
+                        setLoading(false);
+                    }}
+                />
+            )}
         </div>,
         document.body
     );

@@ -1168,14 +1168,16 @@ class ActividadesController {
      * Completar actividad
      * NOTA: Permite completar en cualquier momento (antes o después del vencimiento)
      * útil para completar anticipadamente o registrar completadas fuera de tiempo
+     * NUEVO: Soporte para actividades grupales
      */
     static async completarActividad(req, res) {
         try {
             const { id } = req.params;
+            const { completar_todos_participantes = false } = req.body;
 
-            // Verificar que la actividad existe
+            // Verificar que la actividad existe y obtener info de si es grupal
             const actividadCheck = await query(
-                'SELECT id, estado FROM actividades_marketing WHERE id = $1',
+                'SELECT id, estado, es_grupal, participantes_ids FROM actividades_marketing WHERE id = $1',
                 [id]
             );
 
@@ -1186,9 +1188,38 @@ class ActividadesController {
                 });
             }
 
+            const actividad = actividadCheck.rows[0];
+
             // VALIDACIÓN REMOVIDA: Ahora se permite completar en cualquier momento
             // Esto es consistente con el frontend que permite completar actividades vencidas
 
+            // Si es grupal Y se solicita completar para todos
+            if (actividad.es_grupal && completar_todos_participantes) {
+                console.log(`📋 Completando actividad grupal para TODOS los participantes:`, actividad.participantes_ids);
+
+                // Completar todas las actividades con los mismos participantes_ids
+                const result = await query(`
+                    UPDATE actividades_marketing SET
+                        estado = 'completada',
+                        fecha_fin_real = (NOW() AT TIME ZONE 'America/Lima'),
+                        duracion_real_minutos = calcular_minutos_laborales(fecha_inicio_real, (NOW() AT TIME ZONE 'America/Lima'))
+                    WHERE participantes_ids = $1
+                      AND es_grupal = true
+                      AND estado != 'completada'
+                    RETURNING *
+                `, [actividad.participantes_ids]);
+
+                const actividadesCompletadas = result.rows.map(agregarZonaHorariaUTC);
+
+                return res.json({
+                    success: true,
+                    message: `Actividad grupal completada para ${result.rows.length} participante(s)`,
+                    data: actividadesCompletadas,
+                    tipo_completado: 'grupal_todos'
+                });
+            }
+
+            // Completar solo la actividad individual
             const result = await query(`
                 UPDATE actividades_marketing SET
                     estado = 'completada',
@@ -1211,7 +1242,8 @@ class ActividadesController {
             res.json({
                 success: true,
                 message: 'Actividad completada exitosamente',
-                data: actividadConTimezone
+                data: actividadConTimezone,
+                tipo_completado: actividad.es_grupal ? 'grupal_individual' : 'individual'
             });
 
         } catch (error) {

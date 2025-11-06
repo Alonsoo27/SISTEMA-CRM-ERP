@@ -184,7 +184,7 @@ class GestionVencidasService {
         try {
             const ahora = new Date();
 
-            // 1. Obtener actividad
+            // 1. Obtener actividad (incluyendo info de si es grupal)
             const actResult = await query(
                 'SELECT * FROM actividades_marketing WHERE id = $1',
                 [actividadId]
@@ -195,6 +195,11 @@ class GestionVencidasService {
             }
 
             const actividad = actResult.rows[0];
+
+            // Agregar parámetro completar_todos_participantes a los datos si no existe
+            if (datos.completar_todos_participantes === undefined) {
+                datos.completar_todos_participantes = false;
+            }
 
             // Calcular minutos de vencimiento
             const minutosVencimiento = Math.round(
@@ -283,6 +288,44 @@ class GestionVencidasService {
      * ACCIÓN: Completar ahora (0-5 min)
      */
     static async completarAhora(actividadId, userId, minutosVencimiento, datos) {
+        const { completar_todos_participantes = false } = datos;
+
+        // Obtener info de si es grupal
+        const actResult = await query(
+            'SELECT es_grupal, participantes_ids FROM actividades_marketing WHERE id = $1',
+            [actividadId]
+        );
+
+        if (actResult.rows.length === 0) {
+            throw new Error('Actividad no encontrada');
+        }
+
+        const actividad = actResult.rows[0];
+
+        // Si es grupal Y se solicita completar para todos
+        if (actividad.es_grupal && completar_todos_participantes) {
+            const result = await query(`
+                UPDATE actividades_marketing SET
+                    estado = 'completada',
+                    fecha_fin_real = NOW(),
+                    duracion_real_minutos = calcular_minutos_laborales(fecha_inicio_real, NOW()),
+                    fue_vencida = true,
+                    minutos_vencimiento = $1,
+                    gestionada_vencimiento_en = NOW()
+                WHERE participantes_ids = $2
+                  AND es_grupal = true
+                  AND estado != 'completada'
+            `, [minutosVencimiento, actividad.participantes_ids]);
+
+            return {
+                success: true,
+                message: `Actividad grupal completada para ${result.rowCount} participante(s)`,
+                accion: 'completada',
+                tipo_completado: 'grupal_todos'
+            };
+        }
+
+        // Completar solo la actividad individual
         await query(`
             UPDATE actividades_marketing SET
                 estado = 'completada',
@@ -297,7 +340,8 @@ class GestionVencidasService {
         return {
             success: true,
             message: 'Actividad completada exitosamente',
-            accion: 'completada'
+            accion: 'completada',
+            tipo_completado: actividad.es_grupal ? 'grupal_individual' : 'individual'
         };
     }
 
@@ -360,15 +404,15 @@ class GestionVencidasService {
      * ACCIÓN: Completar retroactivo (5-60 min)
      */
     static async completarRetroactivo(actividadId, userId, minutosVencimiento, datos) {
-        const { hora_fin_real, motivo } = datos;
+        const { hora_fin_real, motivo, completar_todos_participantes = false } = datos;
 
         if (!hora_fin_real) {
             throw new Error('Debes especificar la hora real de finalización');
         }
 
-        // Obtener actividad para validar fecha de inicio
+        // Obtener actividad para validar fecha de inicio Y verificar si es grupal
         const actResult = await query(
-            'SELECT fecha_inicio_real, fecha_inicio_planeada FROM actividades_marketing WHERE id = $1',
+            'SELECT fecha_inicio_real, fecha_inicio_planeada, es_grupal, participantes_ids FROM actividades_marketing WHERE id = $1',
             [actividadId]
         );
 
@@ -391,6 +435,31 @@ class GestionVencidasService {
             throw new Error('La hora de finalización no puede ser anterior al inicio de la actividad');
         }
 
+        // Si es grupal Y se solicita completar para todos
+        if (actividad.es_grupal && completar_todos_participantes) {
+            const result = await query(`
+                UPDATE actividades_marketing SET
+                    estado = 'completada',
+                    fecha_fin_real = $1,
+                    duracion_real_minutos = calcular_minutos_laborales(fecha_inicio_real, $1),
+                    fue_vencida = true,
+                    minutos_vencimiento = $2,
+                    gestionada_vencimiento_en = NOW(),
+                    motivo_edicion = $3
+                WHERE participantes_ids = $4
+                  AND es_grupal = true
+                  AND estado != 'completada'
+            `, [fechaFinReal, minutosVencimiento, motivo, actividad.participantes_ids]);
+
+            return {
+                success: true,
+                message: `Actividad grupal completada para ${result.rowCount} participante(s) con hora ajustada`,
+                accion: 'completada_retroactiva',
+                tipo_completado: 'grupal_todos'
+            };
+        }
+
+        // Completar solo la actividad individual
         await query(`
             UPDATE actividades_marketing SET
                 estado = 'completada',
@@ -406,7 +475,8 @@ class GestionVencidasService {
         return {
             success: true,
             message: 'Actividad completada con hora ajustada',
-            accion: 'completada_retroactiva'
+            accion: 'completada_retroactiva',
+            tipo_completado: actividad.es_grupal ? 'grupal_individual' : 'individual'
         };
     }
 
@@ -497,8 +567,45 @@ class GestionVencidasService {
      * ACCIÓN: Completar fuera de tiempo (60+ min)
      */
     static async completarFueraTiempo(actividadId, userId, minutosVencimiento, datos) {
-        const { motivo } = datos;
+        const { motivo, completar_todos_participantes = false } = datos;
 
+        // Obtener info de si es grupal
+        const actResult = await query(
+            'SELECT es_grupal, participantes_ids FROM actividades_marketing WHERE id = $1',
+            [actividadId]
+        );
+
+        if (actResult.rows.length === 0) {
+            throw new Error('Actividad no encontrada');
+        }
+
+        const actividad = actResult.rows[0];
+
+        // Si es grupal Y se solicita completar para todos
+        if (actividad.es_grupal && completar_todos_participantes) {
+            const result = await query(`
+                UPDATE actividades_marketing SET
+                    estado = 'completada',
+                    fecha_fin_real = NOW(),
+                    duracion_real_minutos = calcular_minutos_laborales(fecha_inicio_real, NOW()),
+                    fue_vencida = true,
+                    minutos_vencimiento = $1,
+                    gestionada_vencimiento_en = NOW(),
+                    motivo_edicion = $2
+                WHERE participantes_ids = $3
+                  AND es_grupal = true
+                  AND estado != 'completada'
+            `, [minutosVencimiento, `Completada fuera de tiempo: ${motivo}`, actividad.participantes_ids]);
+
+            return {
+                success: true,
+                message: `Actividad grupal completada (fuera de tiempo) para ${result.rowCount} participante(s)`,
+                accion: 'completada_fuera_tiempo',
+                tipo_completado: 'grupal_todos'
+            };
+        }
+
+        // Completar solo la actividad individual
         await query(`
             UPDATE actividades_marketing SET
                 estado = 'completada',
@@ -514,7 +621,8 @@ class GestionVencidasService {
         return {
             success: true,
             message: 'Actividad completada (fuera de tiempo)',
-            accion: 'completada_fuera_tiempo'
+            accion: 'completada_fuera_tiempo',
+            tipo_completado: actividad.es_grupal ? 'grupal_individual' : 'individual'
         };
     }
 
