@@ -367,7 +367,8 @@ class ReajusteService {
             }
 
             // Si estamos fuera de jornada (antes de inicio o después de fin)
-            if (hora >= JORNADA_FIN || hora < JORNADA_INICIO) {
+            // NOTA: Usar > en lugar de >= para permitir que actividades terminen exactamente a las 6pm
+            if (hora > JORNADA_FIN || hora < JORNADA_INICIO) {
                 cursor.setDate(cursor.getDate() + 1);
                 const siguienteDia = cursor.getDay();
 
@@ -415,7 +416,8 @@ class ReajusteService {
             }
 
             // Si llegamos al fin de jornada
-            if (minutosActuales + minutosRestantes >= minutosFinJornada) {
+            // NOTA: Usar > en lugar de >= para permitir que actividades terminen exactamente a las 6pm
+            if (minutosActuales + minutosRestantes > minutosFinJornada) {
                 const minutosHastaFin = minutosFinJornada - minutosActuales;
 
                 // Validación: si es negativo o cero, significa que ya estamos fuera de jornada
