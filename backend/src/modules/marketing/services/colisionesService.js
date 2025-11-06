@@ -44,6 +44,7 @@ class ColisionesService {
             }
 
             // Analizar tipo de colisión (priorizar la más crítica)
+            // ORDEN DE PRIORIDAD: GRUPAL > PRIORITARIA > PROGRAMADA > NORMAL
             for (const actividad of result.rows) {
                 // Colisión con GRUPAL
                 if (actividad.es_grupal) {
@@ -89,6 +90,35 @@ class ColisionesService {
                         },
                         sugerencias: slots,
                         mensaje: 'Ya hay una actividad prioritaria en ese horario'
+                    };
+                }
+
+                // Colisión con PROGRAMADA (horario fijo elegido manualmente)
+                if (actividad.es_programada) {
+                    const slots = await this.buscarSlotsPrevioYPosterior(
+                        usuarioId,
+                        actividad.fecha_inicio_planeada,
+                        actividad.fecha_fin_planeada,
+                        duracionMinutos
+                    );
+
+                    return {
+                        hayColision: true,
+                        tipo: 'programada',
+                        requiere_confirmacion: true,
+                        actividad: {
+                            id: actividad.id,
+                            codigo: actividad.codigo,
+                            descripcion: actividad.descripcion,
+                            fecha_inicio: actividad.fecha_inicio_planeada,
+                            fecha_fin: actividad.fecha_fin_planeada,
+                            duracion_minutos: actividad.duracion_planeada_minutos,
+                            es_prioritaria: actividad.es_prioritaria,
+                            es_programada: actividad.es_programada
+                        },
+                        sugerencias: slots,
+                        mensaje: 'Ya hay una actividad programada (horario fijo) en ese horario',
+                        advertencia: 'Las actividades programadas tienen horario fijo. Puedes: buscar otro espacio, mover la programada, o acortar su duración'
                     };
                 }
             }

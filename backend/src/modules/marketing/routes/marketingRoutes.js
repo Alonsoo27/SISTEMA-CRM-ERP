@@ -101,6 +101,26 @@ router.post('/actividades/grupal',
 );
 
 /**
+ * Analizar colisión y obtener opciones de resolución
+ * Roles: Marketing completo
+ */
+router.post('/actividades/analizar-colision',
+    authenticateToken,
+    requireRole(GRUPOS_ROLES.MARKETING_COMPLETO),
+    ActividadesController.analizarColision
+);
+
+/**
+ * Resolver colisión y crear actividad
+ * Roles: Marketing completo
+ */
+router.post('/actividades/resolver-colision',
+    authenticateToken,
+    requireRole(GRUPOS_ROLES.MARKETING_COMPLETO),
+    ActividadesController.resolverColision
+);
+
+/**
  * Editar actividad (requiere motivo)
  */
 router.put('/actividades/:id',

@@ -6,6 +6,7 @@ const { query } = require('../../../config/database');
 const reajusteService = require('../services/reajusteService');
 const actividadesService = require('../services/actividadesService');
 const colisionesService = require('../services/colisionesService');
+const resolucionColisionesService = require('../services/resolucionColisionesService');
 const { agregarZonaHorariaUTC } = require('../../../utils/timezoneHelper');
 
 // Mapeo de colores por categoría principal
@@ -256,7 +257,7 @@ class ActividadesController {
                         console.log('✅ Actividad prioritaria vs normal - Se ejecutará reajuste automático');
                         // No hacer nada, continuar con la creación
                     } else {
-                        // Si colisiona con PRIORITARIA o GRUPAL → devolver 409 (requiere confirmación)
+                        // Si colisiona con PRIORITARIA, GRUPAL o PROGRAMADA → devolver 409 (requiere confirmación)
                         console.log(`⚠️ Actividad prioritaria vs ${colision.tipo} - Requiere confirmación`);
                         return res.status(409).json({
                             success: false,
@@ -1701,6 +1702,281 @@ class ActividadesController {
             res.status(500).json({
                 success: false,
                 message: error.message || 'Error al gestionar actividad vencida',
+                error: process.env.NODE_ENV === 'development' ? error.message : undefined
+            });
+        }
+    }
+
+    /**
+     * Analizar colisión y generar opciones de resolución
+     * POST /api/marketing/actividades/analizar-colision
+     */
+    static async analizarColision(req, res) {
+        try {
+            const { user_id: usuarioLogueado } = req.user;
+            const {
+                usuario_id,
+                fecha_inicio,
+                duracion_minutos,
+                es_prioritaria = false,
+                categoria_principal,
+                subcategoria,
+                descripcion
+            } = req.body;
+
+            // Validaciones
+            if (!fecha_inicio || !duracion_minutos) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Faltan campos requeridos: fecha_inicio, duracion_minutos'
+                });
+            }
+
+            const usuarioDestino = usuario_id || usuarioLogueado;
+
+            // Detectar colisión
+            const colision = await colisionesService.detectarColisionesPrioritaria(
+                usuarioDestino,
+                fecha_inicio,
+                duracion_minutos
+            );
+
+            if (!colision.hayColision) {
+                return res.json({
+                    success: true,
+                    hay_colision: false,
+                    mensaje: 'No hay colisiones. Puedes crear la actividad directamente.'
+                });
+            }
+
+            // Si hay colisión, generar opciones
+            const opciones = await resolucionColisionesService.generarOpcionesResolucion(
+                {
+                    usuario_id: usuarioDestino,
+                    fecha_inicio,
+                    duracion_minutos,
+                    es_prioritaria,
+                    categoria_principal,
+                    subcategoria,
+                    descripcion
+                },
+                colision.actividad,
+                colision.tipo
+            );
+
+            res.json({
+                success: true,
+                hay_colision: true,
+                tipo_colision: colision.tipo,
+                actividad_conflicto: colision.actividad,
+                mensaje: colision.mensaje,
+                advertencia: colision.advertencia,
+                opciones_resolucion: opciones
+            });
+
+        } catch (error) {
+            console.error('Error analizando colisión:', error);
+            res.status(500).json({
+                success: false,
+                message: error.message || 'Error al analizar colisión',
+                error: process.env.NODE_ENV === 'development' ? error.message : undefined
+            });
+        }
+    }
+
+    /**
+     * Resolver colisión ejecutando la opción seleccionada
+     * POST /api/marketing/actividades/resolver-colision
+     */
+    static async resolverColision(req, res) {
+        try {
+            const { user_id: usuarioLogueado, rol } = req.user;
+            const {
+                opcion_id,
+                datos_actividad_nueva,
+                actividad_conflicto_id,
+                detalles_opcion,
+                espacio_seleccionado // Para la opción de buscar otro espacio
+            } = req.body;
+
+            // Validaciones
+            if (!opcion_id || !datos_actividad_nueva) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Faltan campos requeridos: opcion_id, datos_actividad_nueva'
+                });
+            }
+
+            // Si cancelar, solo retornar
+            if (opcion_id === 'cancelar') {
+                return res.json({
+                    success: true,
+                    accion: 'cancelado',
+                    mensaje: 'Operación cancelada por el usuario'
+                });
+            }
+
+            // Determinar usuario destino
+            const usuarioDestino = datos_actividad_nueva.usuario_id || usuarioLogueado;
+
+            // Validar permisos
+            if (datos_actividad_nueva.usuario_id && datos_actividad_nueva.usuario_id !== usuarioLogueado) {
+                const puedeCrearParaOtros = ['JEFE_MARKETING', 'SUPER_ADMIN', 'GERENTE', 'ADMIN'].includes(rol);
+                if (!puedeCrearParaOtros) {
+                    return res.status(403).json({
+                        success: false,
+                        message: 'Solo el jefe de marketing y superiores pueden crear actividades para otros usuarios'
+                    });
+                }
+            }
+
+            // Ejecutar la resolución
+            let resultadoResolucion;
+
+            if (opcion_id === 'buscar_otro_espacio') {
+                if (!espacio_seleccionado) {
+                    return res.status(400).json({
+                        success: false,
+                        message: 'Debes seleccionar un espacio disponible'
+                    });
+                }
+
+                resultadoResolucion = await resolucionColisionesService.ejecutarResolucion(
+                    opcion_id,
+                    datos_actividad_nueva,
+                    actividad_conflicto_id,
+                    { espacio_seleccionado }
+                );
+
+                // Modificar fecha de inicio con el espacio seleccionado
+                datos_actividad_nueva.fecha_inicio = espacio_seleccionado.inicio;
+
+            } else if (opcion_id === 'forzar_solapamiento' || opcion_id === 'forzar_sobre_grupal') {
+                // Forzar creación con solapamiento
+                resultadoResolucion = {
+                    success: true,
+                    accion: 'forzar_creacion',
+                    confirmar_colision: true
+                };
+            } else {
+                // Otras opciones (mover_programada, acortar_programada, etc)
+                resultadoResolucion = await resolucionColisionesService.ejecutarResolucion(
+                    opcion_id,
+                    datos_actividad_nueva,
+                    actividad_conflicto_id,
+                    detalles_opcion
+                );
+            }
+
+            if (!resultadoResolucion.success) {
+                return res.status(500).json(resultadoResolucion);
+            }
+
+            // Ahora crear la actividad nueva
+            const {
+                categoria_principal,
+                subcategoria,
+                descripcion,
+                duracion_minutos,
+                fecha_inicio,
+                es_prioritaria = false
+            } = datos_actividad_nueva;
+
+            // Validar tipo de actividad
+            const tipoResult = await query(
+                'SELECT 1 FROM tipos_actividad_marketing WHERE categoria_principal = $1 AND subcategoria = $2',
+                [categoria_principal, subcategoria]
+            );
+
+            if (tipoResult.rows.length === 0) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Tipo de actividad no válido'
+                });
+            }
+
+            // Obtener color
+            const color_hex = obtenerColorCategoria(categoria_principal);
+
+            // Calcular fecha de inicio (puede haber sido modificada por la resolución)
+            const fechaInicioPlaneada = new Date(fecha_inicio);
+
+            // Calcular fecha fin
+            const fechaFinPlaneada = reajusteService.agregarMinutosEfectivos(
+                fechaInicioPlaneada,
+                duracion_minutos
+            );
+
+            // Registrar huecos pasados
+            await actividadesService.registrarHuecosPasados(usuarioDestino, fechaInicioPlaneada);
+
+            // Generar código
+            const codigo = await actividadesService.generarCodigoActividad();
+
+            // Insertar actividad
+            const esProgramada = true; // Siempre es programada si pasó por resolución de colisión
+
+            const insertQuery = `
+                INSERT INTO actividades_marketing (
+                    codigo, categoria_principal, subcategoria, descripcion,
+                    usuario_id, creado_por, tipo, es_prioritaria, es_programada,
+                    fecha_inicio_planeada, fecha_fin_planeada, duracion_planeada_minutos,
+                    color_hex, estado
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, 'pendiente')
+                RETURNING *
+            `;
+
+            const result = await query(insertQuery, [
+                codigo,
+                categoria_principal,
+                subcategoria,
+                descripcion,
+                usuarioDestino,
+                usuarioLogueado,
+                'individual',
+                es_prioritaria,
+                esProgramada,
+                fechaInicioPlaneada,
+                fechaFinPlaneada,
+                duracion_minutos,
+                color_hex
+            ]);
+
+            const actividadCreada = result.rows[0];
+
+            // Si es prioritaria, reajustar actividades normales
+            if (es_prioritaria) {
+                await reajusteService.reajustarActividades(
+                    usuarioDestino,
+                    fechaInicioPlaneada,
+                    duracion_minutos,
+                    actividadCreada.id,
+                    true // Solo mover normales
+                );
+            }
+
+            res.json({
+                success: true,
+                resolucion_aplicada: resultadoResolucion,
+                actividad_creada: {
+                    id: actividadCreada.id,
+                    codigo: actividadCreada.codigo,
+                    descripcion: actividadCreada.descripcion,
+                    fecha_inicio: actividadCreada.fecha_inicio_planeada,
+                    fecha_fin: actividadCreada.fecha_fin_planeada,
+                    duracion_minutos: actividadCreada.duracion_planeada_minutos,
+                    es_prioritaria: actividadCreada.es_prioritaria,
+                    es_programada: actividadCreada.es_programada,
+                    estado: actividadCreada.estado
+                },
+                mensaje: 'Colisión resuelta y actividad creada exitosamente'
+            });
+
+        } catch (error) {
+            console.error('Error resolviendo colisión:', error);
+            res.status(500).json({
+                success: false,
+                message: error.message || 'Error al resolver colisión',
                 error: process.env.NODE_ENV === 'development' ? error.message : undefined
             });
         }
