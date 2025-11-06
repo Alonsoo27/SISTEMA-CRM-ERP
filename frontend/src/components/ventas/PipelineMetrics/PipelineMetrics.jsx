@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 import pipelineService from '../../../services/pipelineService';
 import PipelineCharts from '../PipelineCharts/PipelineCharts';
-import PeriodSelectorAdvanced from '../PeriodSelector/PeriodSelectorAdvanced';
+import PeriodSelectorSimple from '../PeriodSelector/PeriodSelectorSimple';
 import { ENDPOINTS } from '../../../config/dashboardConfig';
 import { fetchWithErrorHandling, determinarModoVistaInicial, puedeAlternarModos } from '../../../utils/dashboardUtils';
 
@@ -450,9 +450,8 @@ const PipelineMetrics = ({
         </div>
       )}
 
-      {/* Selector de Período */}
-      <PeriodSelectorAdvanced
-        asesorId={asesorSeleccionado}
+      {/* Selector de Período - Simple (no depende de períodos disponibles) */}
+      <PeriodSelectorSimple
         onPeriodChange={setPeriodoSeleccionado}
         initialPeriod={periodoSeleccionado}
         loading={loading}
