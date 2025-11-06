@@ -1201,8 +1201,8 @@ class ActividadesController {
                 const result = await query(`
                     UPDATE actividades_marketing SET
                         estado = 'completada',
-                        fecha_fin_real = (NOW() AT TIME ZONE 'America/Lima'),
-                        duracion_real_minutos = calcular_minutos_laborales(fecha_inicio_real, (NOW() AT TIME ZONE 'America/Lima'))
+                        fecha_fin_real = timezone('America/Lima', NOW()),
+                        duracion_real_minutos = calcular_minutos_laborales(fecha_inicio_real, timezone('America/Lima', NOW()))
                     WHERE participantes_ids = $1
                       AND es_grupal = true
                       AND estado != 'completada'
@@ -1223,8 +1223,8 @@ class ActividadesController {
             const result = await query(`
                 UPDATE actividades_marketing SET
                     estado = 'completada',
-                    fecha_fin_real = (NOW() AT TIME ZONE 'America/Lima'),
-                    duracion_real_minutos = calcular_minutos_laborales(fecha_inicio_real, (NOW() AT TIME ZONE 'America/Lima'))
+                    fecha_fin_real = timezone('America/Lima', NOW()),
+                    duracion_real_minutos = calcular_minutos_laborales(fecha_inicio_real, timezone('America/Lima', NOW()))
                 WHERE id = $1
                 RETURNING *
             `, [id]);
