@@ -6,17 +6,33 @@ import { useState } from 'react';
 import ModalNotificacion from '../common/ModalNotificacion';
 
 const ModalEditarActividad = ({ actividad, onClose, onSuccess }) => {
-    // Calcular si se puede editar fecha_inicio (regla de 5 minutos)
-    const puedeEditarFechaInicio = (() => {
-        if (actividad.estado !== 'en_progreso') return true;
-        if (!actividad.fecha_inicio_real) return true;
+    // Calcular tiempo transcurrido si está en progreso
+    const tiempoTranscurrido = (() => {
+        if (actividad.estado !== 'en_progreso' || !actividad.fecha_inicio_real) {
+            return null;
+        }
 
         const ahora = new Date();
         const inicioReal = new Date(actividad.fecha_inicio_real);
-        const minutosDesdeInicio = (ahora - inicioReal) / 60000;
+        const minutosTranscurridos = Math.floor((ahora - inicioReal) / 60000);
 
-        return minutosDesdeInicio <= 5;
+        return {
+            minutos: minutosTranscurridos,
+            horas: Math.floor(minutosTranscurridos / 60),
+            minutosRestantes: minutosTranscurridos % 60,
+            porcentaje: Math.min((minutosTranscurridos / actividad.duracion_planeada_minutos) * 100, 100)
+        };
     })();
+
+    // Calcular si se puede editar fecha_inicio (regla de 5 minutos)
+    const puedeEditarFechaInicio = (() => {
+        if (actividad.estado !== 'en_progreso') return true;
+        if (!tiempoTranscurrido) return true;
+        return tiempoTranscurrido.minutos <= 5;
+    })();
+
+    // Duración mínima permitida (el tiempo ya trabajado)
+    const duracionMinima = tiempoTranscurrido ? tiempoTranscurrido.minutos : 15;
 
     const [formData, setFormData] = useState({
         duracion_minutos: actividad.duracion_planeada_minutos,
@@ -44,6 +60,17 @@ const ModalEditarActividad = ({ actividad, onClose, onSuccess }) => {
                 tipo: 'warning',
                 titulo: 'Campo obligatorio',
                 mensaje: 'El motivo de edición es obligatorio. Por favor, explica por qué estás editando esta actividad.'
+            });
+            return;
+        }
+
+        // Validar duración mínima si está en progreso
+        if (tiempoTranscurrido && parseInt(formData.duracion_minutos) < tiempoTranscurrido.minutos) {
+            setNotificacion({
+                isOpen: true,
+                tipo: 'warning',
+                titulo: 'Duración inválida',
+                mensaje: `La actividad ya lleva ${tiempoTranscurrido.horas}h ${tiempoTranscurrido.minutosRestantes}min en progreso. No puedes establecer una duración menor al tiempo ya trabajado.`
             });
             return;
         }
@@ -108,6 +135,54 @@ const ModalEditarActividad = ({ actividad, onClose, onSuccess }) => {
                         <div className="text-xs text-blue-700 mt-1">{actividad.codigo}</div>
                     </div>
 
+                    {/* Indicador de tiempo transcurrido (solo si está en progreso) */}
+                    {tiempoTranscurrido && (
+                        <div className="bg-green-50 border border-green-200 p-4 rounded-lg">
+                            <div className="flex items-center justify-between mb-2">
+                                <div className="text-xs font-medium text-green-700">
+                                    ⏱️ Actividad en Progreso
+                                </div>
+                                <div className="text-xs text-green-600">
+                                    {Math.round(tiempoTranscurrido.porcentaje)}% completado
+                                </div>
+                            </div>
+
+                            {/* Barra de progreso */}
+                            <div className="w-full bg-green-200 rounded-full h-2 mb-3">
+                                <div
+                                    className="bg-green-600 h-2 rounded-full transition-all duration-300"
+                                    style={{ width: `${tiempoTranscurrido.porcentaje}%` }}
+                                ></div>
+                            </div>
+
+                            {/* Información de tiempo */}
+                            <div className="grid grid-cols-2 gap-3 text-xs">
+                                <div className="bg-white p-2 rounded border border-green-200">
+                                    <div className="text-gray-500 mb-1">⏰ Tiempo Trabajado</div>
+                                    <div className="text-green-700 font-bold text-base">
+                                        {tiempoTranscurrido.horas}h {tiempoTranscurrido.minutosRestantes}min
+                                    </div>
+                                    <div className="text-gray-400 text-xs mt-1">
+                                        ({tiempoTranscurrido.minutos} minutos)
+                                    </div>
+                                </div>
+                                <div className="bg-white p-2 rounded border border-green-200">
+                                    <div className="text-gray-500 mb-1">⏳ Tiempo Restante</div>
+                                    <div className="text-blue-700 font-bold text-base">
+                                        {Math.floor((actividad.duracion_planeada_minutos - tiempoTranscurrido.minutos) / 60)}h {(actividad.duracion_planeada_minutos - tiempoTranscurrido.minutos) % 60}min
+                                    </div>
+                                    <div className="text-gray-400 text-xs mt-1">
+                                        ({actividad.duracion_planeada_minutos - tiempoTranscurrido.minutos} minutos)
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="mt-2 text-xs text-green-700 bg-green-100 p-2 rounded">
+                                💡 <strong>Mínimo:</strong> La nueva duración no puede ser menor a {tiempoTranscurrido.horas}h {tiempoTranscurrido.minutosRestantes}min (tiempo ya trabajado)
+                            </div>
+                        </div>
+                    )}
+
                     {/* Duración */}
                     <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -118,29 +193,41 @@ const ModalEditarActividad = ({ actividad, onClose, onSuccess }) => {
                             name="duracion_minutos"
                             value={formData.duracion_minutos}
                             onChange={handleChange}
-                            min="15"
+                            min={duracionMinima}
                             step="15"
                             className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                             required
                         />
                         <p className="mt-1 text-sm text-gray-500">
                             Equivale a: {duracionHoras}h {duracionMinutos}min
+                            {tiempoTranscurrido && (
+                                <span className="ml-2 text-orange-600">
+                                    (Mínimo: {Math.floor(duracionMinima / 60)}h {duracionMinima % 60}min)
+                                </span>
+                            )}
                         </p>
                         <div className="mt-2 flex gap-2">
-                            {[30, 60, 120, 180, 240].map(mins => (
-                                <button
-                                    key={mins}
-                                    type="button"
-                                    onClick={() => setFormData(prev => ({ ...prev, duracion_minutos: mins }))}
-                                    className={`px-3 py-1 text-xs rounded ${
-                                        formData.duracion_minutos === mins
-                                            ? 'bg-blue-600 text-white'
-                                            : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                                    }`}
-                                >
-                                    {mins >= 60 ? `${mins / 60}h` : `${mins}min`}
-                                </button>
-                            ))}
+                            {[30, 60, 120, 180, 240].map(mins => {
+                                const deshabilitado = tiempoTranscurrido && mins < tiempoTranscurrido.minutos;
+                                return (
+                                    <button
+                                        key={mins}
+                                        type="button"
+                                        onClick={() => !deshabilitado && setFormData(prev => ({ ...prev, duracion_minutos: mins }))}
+                                        disabled={deshabilitado}
+                                        className={`px-3 py-1 text-xs rounded ${
+                                            deshabilitado
+                                                ? 'bg-gray-200 text-gray-400 cursor-not-allowed line-through'
+                                                : formData.duracion_minutos === mins
+                                                    ? 'bg-blue-600 text-white'
+                                                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                        }`}
+                                        title={deshabilitado ? 'Menor al tiempo ya trabajado' : ''}
+                                    >
+                                        {mins >= 60 ? `${mins / 60}h` : `${mins}min`}
+                                    </button>
+                                );
+                            })}
                         </div>
                     </div>
 
