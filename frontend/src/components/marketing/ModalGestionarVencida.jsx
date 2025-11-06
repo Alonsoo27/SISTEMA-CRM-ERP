@@ -17,8 +17,8 @@ const obtenerAccionesPorDefecto = (ventana) => {
             { id: 'posponer', label: 'Recordarme en 5 minutos', descripcion: 'Aún no termino pero estoy en ello' }
         ],
         vencida: [
-            { id: 'completar_retroactivo', label: 'La completé fuera de tiempo', descripcion: 'Indica a qué hora terminaste' },
-            { id: 'reprogramar', label: 'Reprogramar continuación', descripcion: 'Crear PARTE 2' },
+            { id: 'completar_retroactivo', label: 'La completé fuera de tiempo', descripcion: 'Indica a qué hora terminaste realmente' },
+            { id: 'reprogramar', label: 'Reprogramar como continuación', descripcion: 'No pude completarla, crear PARTE 2' },
             { id: 'cancelar', label: 'No la pude hacer', descripcion: 'Cancelar con motivo' }
         ],
         muy_vencida: [
@@ -81,6 +81,16 @@ const ModalGestionarVencida = ({ actividad, indiceActual = 1, totalActividades =
                         setLoading(false);
                         return;
                     }
+                    if (!motivo || motivo.trim() === '') {
+                        setNotificacion({
+                            isOpen: true,
+                            tipo: 'warning',
+                            titulo: 'Campo obligatorio',
+                            mensaje: 'Debes explicar el motivo de la extensión.'
+                        });
+                        setLoading(false);
+                        return;
+                    }
                     datos = {
                         minutos_adicionales: parseInt(minutosAdicionales),
                         motivo
@@ -124,12 +134,12 @@ const ModalGestionarVencida = ({ actividad, indiceActual = 1, totalActividades =
 
                 case 'cancelar':
                 case 'completar_fuera_tiempo':
-                    if (!motivo) {
+                    if (!motivo || motivo.trim() === '') {
                         setNotificacion({
                             isOpen: true,
                             tipo: 'warning',
                             titulo: 'Campo obligatorio',
-                            mensaje: `El motivo es obligatorio para ${accion === 'cancelar' ? 'cancelar' : 'completar fuera de tiempo'} una actividad.`
+                            mensaje: `El motivo es obligatorio para ${accionSeleccionada === 'cancelar' ? 'cancelar' : 'completar fuera de tiempo'} una actividad.`
                         });
                         setLoading(false);
                         return;

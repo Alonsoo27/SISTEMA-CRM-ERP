@@ -366,12 +366,29 @@ class GestionVencidasService {
             throw new Error('Debes especificar la hora real de finalización');
         }
 
+        // Obtener actividad para validar fecha de inicio
+        const actResult = await query(
+            'SELECT fecha_inicio_real, fecha_inicio_planeada FROM actividades_marketing WHERE id = $1',
+            [actividadId]
+        );
+
+        if (actResult.rows.length === 0) {
+            throw new Error('Actividad no encontrada');
+        }
+
+        const actividad = actResult.rows[0];
         const fechaFinReal = new Date(hora_fin_real);
         const ahora = new Date();
 
         // Validar que no sea en el futuro
         if (fechaFinReal > ahora) {
             throw new Error('La hora de finalización no puede ser en el futuro');
+        }
+
+        // Validar que no sea antes del inicio de la actividad
+        const fechaInicioBase = actividad.fecha_inicio_real || actividad.fecha_inicio_planeada;
+        if (fechaFinReal < new Date(fechaInicioBase)) {
+            throw new Error('La hora de finalización no puede ser anterior al inicio de la actividad');
         }
 
         await query(`
