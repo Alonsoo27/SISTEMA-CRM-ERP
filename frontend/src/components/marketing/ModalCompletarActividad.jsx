@@ -7,14 +7,35 @@ import { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
+import ModalConfirmarCompletarGrupal from './ModalConfirmarCompletarGrupal';
 
 const ModalCompletarActividad = ({ actividad, onClose, onSuccess }) => {
     const [loading, setLoading] = useState(false);
+    const [mostrarModalGrupal, setMostrarModalGrupal] = useState(false);
 
     const handleConfirmar = async () => {
+        // Verificar si es actividad grupal
+        if (actividad?.es_grupal === true) {
+            setMostrarModalGrupal(true);
+            return;
+        }
+
+        // Si no es grupal, completar directamente
         setLoading(true);
         try {
-            await onSuccess();
+            await onSuccess(false); // false = no completar todos
+        } catch (error) {
+            console.error('Error:', error);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleConfirmarGrupal = async (completarTodos) => {
+        setMostrarModalGrupal(false);
+        setLoading(true);
+        try {
+            await onSuccess(completarTodos);
         } catch (error) {
             console.error('Error:', error);
         } finally {
@@ -131,6 +152,15 @@ const ModalCompletarActividad = ({ actividad, onClose, onSuccess }) => {
                     </button>
                 </div>
             </div>
+
+            {/* Modal de Confirmación Grupal */}
+            {mostrarModalGrupal && (
+                <ModalConfirmarCompletarGrupal
+                    actividad={actividad}
+                    onConfirm={handleConfirmarGrupal}
+                    onCancel={() => setMostrarModalGrupal(false)}
+                />
+            )}
         </div>,
         document.body
     );

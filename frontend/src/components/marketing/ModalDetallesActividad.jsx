@@ -91,14 +91,19 @@ const ModalDetallesActividad = ({ actividad, onClose, onActividadActualizada }) 
         setShowModalCompletar(true);
     };
 
-    const handleCompletarSuccess = async () => {
+    const handleCompletarSuccess = async (completarTodos = false) => {
         try {
-            await marketingService.completarActividad(actividad.id);
+            await marketingService.completarActividad(actividad.id, completarTodos);
+
+            const mensaje = actividad.es_grupal && completarTodos
+                ? `Actividad grupal completada para ${actividad.participantes_ids?.length || 'todos'} participante(s).`
+                : 'La actividad ha sido completada exitosamente.';
+
             setNotificacion({
                 isOpen: true,
                 tipo: 'success',
                 titulo: 'Actividad completada',
-                mensaje: 'La actividad ha sido completada exitosamente.'
+                mensaje
             });
             setShowModalCompletar(false);
             setTimeout(() => {

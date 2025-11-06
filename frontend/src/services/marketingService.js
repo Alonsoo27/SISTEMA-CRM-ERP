@@ -92,8 +92,10 @@ const marketingService = {
     /**
      * Completar actividad
      */
-    async completarActividad(id) {
-        const response = await apiClient.post(`/marketing/actividades/${id}/completar`);
+    async completarActividad(id, completarTodosParticipantes = false) {
+        const response = await apiClient.post(`/marketing/actividades/${id}/completar`, {
+            completar_todos_participantes: completarTodosParticipantes
+        });
         return response.data;
     },
 
