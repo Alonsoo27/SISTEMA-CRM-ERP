@@ -79,9 +79,12 @@ const VistaSemanalCompacta = ({ actividades, fechaInicio, onActividadClick, onRe
             const finDia = fin.getDate();
             const diaActual = fecha.getDate();
 
+            // Duración total = duración planeada + tiempo adicional (extensiones)
+            const duracionTotal = act.duracion_planeada_minutos + (act.tiempo_adicional_minutos || 0);
+
             if (inicioDia === finDia && inicioDia === diaActual) {
                 // Actividad completa en este día
-                totalMinutos += act.duracion_planeada_minutos;
+                totalMinutos += duracionTotal;
             } else if (inicioDia === diaActual && finDia !== diaActual) {
                 // Empieza hoy pero continúa mañana
                 const esSabado = fecha.getDay() === 6;
@@ -438,7 +441,7 @@ const VistaSemanalCompacta = ({ actividades, fechaInicio, onActividadClick, onRe
 
                                         // CASO 4: Actividad COMPLETA en este día (sin cruzar almuerzo ni días)
                                         if (!cruzaDia || (inicioDia === diaActual && finDia === diaActual)) {
-                                            const duracionMinutos = actividad.duracion_planeada_minutos;
+                                            const duracionMinutos = actividad.duracion_planeada_minutos + (actividad.tiempo_adicional_minutos || 0);
                                             const altura = (duracionMinutos / 60) * ALTURA_HORA;
                                             const top = calcularPosicionVertical(inicio, esSabado);
 
@@ -485,6 +488,7 @@ const ActividadCardCompacta = ({ actividad, onClick, onRecargar, esParte1, esPar
         es_grupal,
         transferida_de,
         duracion_planeada_minutos,
+        tiempo_adicional_minutos,
         fecha_fin_planeada
     } = actividad;
 
@@ -512,8 +516,9 @@ const ActividadCardCompacta = ({ actividad, onClick, onRecargar, esParte1, esPar
     if (desdeAyer) indicador = '←';
 
     // Texto de duración
-    const horas = Math.floor(duracion_planeada_minutos / 60);
-    const minutos = duracion_planeada_minutos % 60;
+    const duracionTotal = duracion_planeada_minutos + (tiempo_adicional_minutos || 0);
+    const horas = Math.floor(duracionTotal / 60);
+    const minutos = duracionTotal % 60;
     const duracionTexto = horas > 0 ? `${horas}h ${minutos}m` : `${minutos}m`;
 
     const handleCardClick = () => {

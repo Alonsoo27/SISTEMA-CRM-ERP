@@ -135,8 +135,14 @@ const ModalDetallesActividad = ({ actividad, onClose, onActividadActualizada }) 
                 mensaje: 'La actividad ha sido extendida exitosamente.'
             });
             setShowModalExtender(false);
+
+            // Recargar el calendario inmediatamente para reflejar los cambios
+            if (onActividadActualizada) {
+                onActividadActualizada();
+            }
+
+            // Cerrar el modal después de un breve delay
             setTimeout(() => {
-                if (onActividadActualizada) onActividadActualizada();
                 onClose();
             }, 1500);
         } catch (error) {

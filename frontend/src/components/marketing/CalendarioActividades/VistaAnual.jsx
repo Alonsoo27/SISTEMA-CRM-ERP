@@ -20,7 +20,7 @@ const VistaAnual = ({ actividades, anio }) => {
             completadas: actsMes.filter(a => a.estado === 'completada').length,
             enProgreso: actsMes.filter(a => a.estado === 'en_progreso').length,
             pendientes: actsMes.filter(a => a.estado === 'pendiente').length,
-            horasPlaneadas: actsMes.reduce((sum, a) => sum + a.duracion_planeada_minutos, 0) / 60
+            horasPlaneadas: actsMes.reduce((sum, a) => sum + a.duracion_planeada_minutos + (a.tiempo_adicional_minutos || 0), 0) / 60
         };
     });
 
@@ -30,7 +30,7 @@ const VistaAnual = ({ actividades, anio }) => {
         completadas: actividades.filter(a => a.estado === 'completada').length,
         enProgreso: actividades.filter(a => a.estado === 'en_progreso').length,
         pendientes: actividades.filter(a => a.estado === 'pendiente').length,
-        horasPlaneadas: actividades.reduce((sum, a) => sum + a.duracion_planeada_minutos, 0) / 60
+        horasPlaneadas: actividades.reduce((sum, a) => sum + a.duracion_planeada_minutos + (a.tiempo_adicional_minutos || 0), 0) / 60
     };
 
     const maxActividades = Math.max(...estadisticasPorMes.map(m => m.total), 1);

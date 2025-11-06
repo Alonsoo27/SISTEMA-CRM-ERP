@@ -50,7 +50,7 @@ const VistaSemanal = ({ actividades, fechaInicio, onActividadClick, onRecargar }
     // Calcular estadísticas del día
     const obtenerEstadisticasDia = (fecha) => {
         const actividadesDia = obtenerActividadesDia(fecha);
-        const totalMinutos = actividadesDia.reduce((sum, act) => sum + act.duracion_planeada_minutos, 0);
+        const totalMinutos = actividadesDia.reduce((sum, act) => sum + act.duracion_planeada_minutos + (act.tiempo_adicional_minutos || 0), 0);
         const completadas = actividadesDia.filter(act => act.estado === 'completada').length;
         const enProgreso = actividadesDia.filter(act => act.estado === 'en_progreso').length;
 

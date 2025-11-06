@@ -26,7 +26,7 @@ const VistaTrimestral = ({ actividades, trimestre, anio }) => {
                 completadas: actsMes.filter(a => a.estado === 'completada').length,
                 enProgreso: actsMes.filter(a => a.estado === 'en_progreso').length,
                 pendientes: actsMes.filter(a => a.estado === 'pendiente').length,
-                horasPlaneadas: actsMes.reduce((sum, a) => sum + a.duracion_planeada_minutos, 0) / 60
+                horasPlaneadas: actsMes.reduce((sum, a) => sum + a.duracion_planeada_minutos + (a.tiempo_adicional_minutos || 0), 0) / 60
             }
         };
     });
