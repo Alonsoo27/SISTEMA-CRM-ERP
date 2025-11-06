@@ -6,9 +6,22 @@ import { useState } from 'react';
 import ModalNotificacion from '../common/ModalNotificacion';
 
 const ModalEditarActividad = ({ actividad, onClose, onSuccess }) => {
+    // Calcular si se puede editar fecha_inicio (regla de 5 minutos)
+    const puedeEditarFechaInicio = (() => {
+        if (actividad.estado !== 'en_progreso') return true;
+        if (!actividad.fecha_inicio_real) return true;
+
+        const ahora = new Date();
+        const inicioReal = new Date(actividad.fecha_inicio_real);
+        const minutosDesdeInicio = (ahora - inicioReal) / 60000;
+
+        return minutosDesdeInicio <= 5;
+    })();
+
     const [formData, setFormData] = useState({
         duracion_minutos: actividad.duracion_planeada_minutos,
         fecha_inicio: new Date(actividad.fecha_inicio_planeada).toISOString().slice(0, 16),
+        fecha_inicio_original: new Date(actividad.fecha_inicio_planeada).toISOString().slice(0, 16),
         motivo_edicion: ''
     });
     const [loading, setLoading] = useState(false);
@@ -39,9 +52,13 @@ const ModalEditarActividad = ({ actividad, onClose, onSuccess }) => {
         try {
             const datos = {
                 duracion_minutos: parseInt(formData.duracion_minutos),
-                fecha_inicio: formData.fecha_inicio,
                 motivo_edicion: formData.motivo_edicion
             };
+
+            // Solo enviar fecha_inicio si realmente cambió (evita bug de timezone)
+            if (formData.fecha_inicio !== formData.fecha_inicio_original) {
+                datos.fecha_inicio = formData.fecha_inicio;
+            }
 
             await onSuccess(datos);
         } catch (error) {
@@ -137,9 +154,19 @@ const ModalEditarActividad = ({ actividad, onClose, onSuccess }) => {
                             name="fecha_inicio"
                             value={formData.fecha_inicio}
                             onChange={handleChange}
-                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                            className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
+                                !puedeEditarFechaInicio
+                                    ? 'bg-gray-100 text-gray-500 cursor-not-allowed'
+                                    : 'border-gray-300'
+                            }`}
+                            disabled={!puedeEditarFechaInicio}
                             required
                         />
+                        {!puedeEditarFechaInicio && (
+                            <p className="mt-1 text-xs text-orange-600">
+                                ⚠️ La actividad lleva más de 5 minutos en progreso. Solo puedes editar la duración.
+                            </p>
+                        )}
                     </div>
 
                     {/* Motivo */}

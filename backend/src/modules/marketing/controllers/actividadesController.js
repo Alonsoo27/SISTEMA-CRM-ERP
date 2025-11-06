@@ -791,6 +791,19 @@ class ActividadesController {
                 });
             }
 
+            // VALIDACIÓN: Regla de 5 minutos para editar fecha_inicio en actividades EN_PROGRESO
+            if (actividad.estado === 'en_progreso' && fecha_inicio) {
+                const fechaInicioReal = new Date(actividad.fecha_inicio_real);
+                const minutosDesdeInicio = (ahora - fechaInicioReal) / 60000;
+
+                if (minutosDesdeInicio > 5) {
+                    return res.status(400).json({
+                        success: false,
+                        message: 'No se puede cambiar la fecha de inicio de una actividad que lleva más de 5 minutos en progreso. Solo puedes editar la duración.'
+                    });
+                }
+            }
+
             // ======================================
             // MANEJO ESPECIAL PARA ACTIVIDADES GRUPALES
             // ======================================
@@ -818,9 +831,25 @@ class ActividadesController {
             }
 
             // Calcular nueva fecha inicio y fin
-            const nuevaFechaInicio = fecha_inicio ? new Date(fecha_inicio) : new Date(actividad.fecha_inicio_planeada);
-            const nuevaDuracion = duracion_minutos || actividad.duracion_planeada_minutos;
+            // LÓGICA: Si la actividad está en progreso y NO se cambia fecha_inicio, partir desde fecha_inicio_real
+            let nuevaFechaInicio;
+            if (fecha_inicio) {
+                // Usuario cambió explícitamente la fecha de inicio (reprogramar)
+                nuevaFechaInicio = new Date(fecha_inicio);
+            } else if (actividad.estado === 'en_progreso' && actividad.fecha_inicio_real) {
+                // Actividad en progreso, calcular desde fecha_inicio_real
+                nuevaFechaInicio = new Date(actividad.fecha_inicio_real);
+            } else {
+                // Actividad pendiente, usar fecha_inicio_planeada
+                nuevaFechaInicio = new Date(actividad.fecha_inicio_planeada);
+            }
+
+            const duracionOriginal = actividad.duracion_planeada_minutos;
+            const nuevaDuracion = duracion_minutos || duracionOriginal;
             const nuevaFechaFin = reajusteService.agregarMinutosEfectivos(nuevaFechaInicio, nuevaDuracion);
+
+            // Detectar si se redujo duración (para optimizar calendario)
+            const seReduceDuracion = duracion_minutos && duracion_minutos < duracionOriginal && !fecha_inicio;
 
             // VALIDACIÓN: Detectar colisiones para TODOS los participantes
             let todosConflictos = [];
@@ -942,6 +971,28 @@ class ActividadesController {
                 }
             }
 
+            // OPTIMIZACIÓN AUTOMÁTICA: Si se redujo duración, adelantar actividades posteriores
+            let resultadoOptimizacion = null;
+            if (seReduceDuracion) {
+                console.log(`📊 Duración reducida de ${duracionOriginal} a ${nuevaDuracion} minutos - Optimizando calendario...`);
+                const optimizacionService = require('../services/optimizacionService');
+
+                try {
+                    // Ejecutar optimización para cada actividad actualizada (por si es grupal)
+                    for (const actividadActualizada of result.rows) {
+                        const optimizacion = await optimizacionService.ejecutarOptimizacion(actividadActualizada.id);
+
+                        if (optimizacion.success) {
+                            console.log(`✅ Optimización aplicada: ${optimizacion.message}`);
+                            resultadoOptimizacion = optimizacion;
+                        }
+                    }
+                } catch (errorOptimizacion) {
+                    console.warn('⚠️ Error en optimización automática (no crítico):', errorOptimizacion.message);
+                    // No fallar la edición si la optimización falla
+                }
+            }
+
             // Agregar 'Z' a los timestamps para indicar que son UTC
             const actividadConTimezone = agregarZonaHorariaUTC(result.rows[0]);
 
@@ -952,7 +1003,8 @@ class ActividadesController {
                     : 'Actividad editada exitosamente',
                 data: actividadConTimezone,
                 participantes_actualizados: actividad.es_grupal ? result.rows.length : 1,
-                info_desplazamiento: infoDesplazamiento
+                info_desplazamiento: infoDesplazamiento,
+                optimizacion: resultadoOptimizacion  // Incluir info de optimización si se aplicó
             });
 
         } catch (error) {
