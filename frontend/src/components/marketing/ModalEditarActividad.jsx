@@ -188,15 +188,46 @@ const ModalEditarActividad = ({ actividad, onClose, onSuccess }) => {
                         <label className="block text-sm font-medium text-gray-700 mb-2">
                             Nueva duración (minutos) *
                         </label>
-                        <input
-                            type="number"
-                            name="duracion_minutos"
-                            value={formData.duracion_minutos}
-                            onChange={handleChange}
-                            min={duracionMinima}
-                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                            required
-                        />
+                        <div className="flex gap-2 items-center">
+                            {/* Botón -15 */}
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    const nuevo = Math.max(duracionMinima, parseInt(formData.duracion_minutos) - 15);
+                                    setFormData(prev => ({ ...prev, duracion_minutos: nuevo }));
+                                }}
+                                className="px-3 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg font-bold transition disabled:opacity-50 disabled:cursor-not-allowed"
+                                disabled={parseInt(formData.duracion_minutos) - 15 < duracionMinima}
+                                title="Reducir 15 minutos"
+                            >
+                                -15
+                            </button>
+
+                            {/* Input */}
+                            <input
+                                type="number"
+                                name="duracion_minutos"
+                                value={formData.duracion_minutos}
+                                onChange={handleChange}
+                                min={duracionMinima}
+                                step="any"
+                                className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                required
+                            />
+
+                            {/* Botón +15 */}
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    const nuevo = parseInt(formData.duracion_minutos) + 15;
+                                    setFormData(prev => ({ ...prev, duracion_minutos: nuevo }));
+                                }}
+                                className="px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold transition"
+                                title="Agregar 15 minutos"
+                            >
+                                +15
+                            </button>
+                        </div>
                         <p className="mt-1 text-sm text-gray-500">
                             Equivale a: {duracionHoras}h {duracionMinutos}min
                             {tiempoTranscurrido && (
