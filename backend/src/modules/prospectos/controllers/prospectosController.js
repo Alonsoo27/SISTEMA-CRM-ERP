@@ -3362,6 +3362,20 @@ static async obtenerPorId(req, res) {
                 });
             }
 
+            // ✅ FIX: VALIDAR estado del prospecto - No permitir tomar prospectos cerrados/perdidos/convertidos
+            if (['Cerrado', 'Perdido', 'Convertido'].includes(prospecto.estado)) {
+                await client.query('ROLLBACK');
+
+                logger.warn(`❌ Intento fallido: Asesor ${asesor_id} intentó tomar prospecto ${prospecto.codigo} en estado ${prospecto.estado}`);
+
+                return res.status(400).json({
+                    success: false,
+                    error: `Este prospecto ya está en estado ${prospecto.estado} y no puede ser tomado`,
+                    codigo: prospecto.codigo,
+                    estado: prospecto.estado
+                });
+            }
+
             // ✅ FIX: VALIDAR con conversión de tipos: Asesor no puede retomar un prospecto que él mismo perdió
             // Comparar como enteros para evitar type mismatch (string vs number)
             if (prospecto.asesor_anterior_id && parseInt(prospecto.asesor_anterior_id) === parseInt(asesor_id)) {

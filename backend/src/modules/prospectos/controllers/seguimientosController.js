@@ -1,4 +1,4 @@
-const { query } = require('../../../config/database');
+const { query, pool } = require('../../../config/database');
 const winston = require('winston');
 const cron = require('node-cron');
 
@@ -381,7 +381,36 @@ class SeguimientosController {
                     });
                 }
             }
-            
+
+            // ============================================
+            // ✅ VALIDACIÓN: PROSPECTO ACTIVO DEBE TENER SEGUIMIENTO FUTURO
+            // ============================================
+            // Verificar que si el prospecto sigue activo, se haya programado al menos un seguimiento
+            const prospectoResult = await query('SELECT estado FROM prospectos WHERE id = $1', [data.prospecto_id]);
+            const prospecto = prospectoResult.rows[0];
+
+            // Resultados que cierran automáticamente el prospecto (no requieren seguimiento)
+            const resultadosCierran = ['no_interesado', 'Cliente No Interesado'];
+            const debeConvertir = SeguimientosController.debeConvertirAutomaticamente(resultado);
+
+            // Si el prospecto sigue activo y NO se programó ningún seguimiento futuro
+            if (prospecto &&
+                !['Cerrado', 'Perdido', 'Convertido'].includes(prospecto.estado) &&
+                seguimientosCreados === 0 &&
+                !resultadosCierran.includes(resultado) &&
+                !debeConvertir) {
+
+                logger.warn(`⚠️ Intento de completar seguimiento sin programar siguiente - Prospecto ${data.prospecto_id} en estado ${prospecto.estado}`);
+
+                return res.status(400).json({
+                    success: false,
+                    error: 'Debes programar al menos un seguimiento futuro para este prospecto activo',
+                    requiere_seguimiento: true,
+                    prospecto_estado: prospecto.estado,
+                    ayuda: 'Usa el modal de completar seguimiento y programa la próxima acción con el cliente'
+                });
+            }
+
             // Respuesta normal (sin conversión)
             res.json({
                 success: true,
@@ -814,18 +843,31 @@ class SeguimientosController {
      * Reasignar prospecto a otro asesor
      */
     static async reasignarProspecto(prospecto_id, motivo = 'manual') {
+        const client = await pool.connect();
+
         try {
-            // Obtener prospecto actual
-            const prospectoResult = await query(
-                'SELECT * FROM prospectos WHERE id = $1 AND activo = $2',
+            // 🔒 INICIAR TRANSACCIÓN ATÓMICA - Fix race condition
+            await client.query('BEGIN');
+
+            // 🎯 SELECT FOR UPDATE: Bloquear el prospecto para esta transacción
+            const prospectoResult = await client.query(
+                'SELECT * FROM prospectos WHERE id = $1 AND activo = $2 FOR UPDATE',
                 [prospecto_id, true]
             );
-            
+
             if (!prospectoResult.rows || prospectoResult.rows.length === 0) {
+                await client.query('ROLLBACK');
                 throw new Error('Prospecto no encontrado');
             }
 
             const prospecto = prospectoResult.rows[0];
+
+            // ✅ Validar que el prospecto esté en estado válido para reasignar
+            if (['Cerrado', 'Perdido', 'Convertido'].includes(prospecto.estado)) {
+                await client.query('ROLLBACK');
+                logger.warn(`⚠️ Intento de reasignar prospecto ${prospecto.codigo} en estado ${prospecto.estado}`);
+                throw new Error(`No se puede reasignar prospecto en estado ${prospecto.estado}`);
+            }
 
             // ============================================
             // DESVINCULACIÓN DE CAMPAÑA (si está asignado)
@@ -837,13 +879,13 @@ class SeguimientosController {
                     logger.info(`🔗 Desvinculando prospecto ${prospecto.codigo} de campaña ${prospecto.campana_id} antes de traspaso`);
 
                     // Registrar desvinculación en historial usando función SQL
-                    await query(
+                    await client.query(
                         `SELECT registrar_desvinculacion_campana($1, $2) as desvinculado`,
                         [prospecto_id, `Traspaso por ${motivo}`]
                     );
 
                     // Limpiar campos de campaña en el prospecto
-                    await query(`
+                    await client.query(`
                         UPDATE prospectos
                         SET campana_id = NULL,
                             campana_linea_detectada = NULL,
@@ -868,17 +910,19 @@ class SeguimientosController {
             // - Si no hay VENDEDOREs disponibles → MODO LIBRE automático
             // - EXCLUYE asesor ID 19 (EMPRESA S.A.C. - usuario ficticio)
             // ============================================
-            const asesoresResult = await query(`
+            const asesoresResult = await client.query(`
                 SELECT u.id, u.nombre, u.apellido
                 FROM usuarios u
                 WHERE u.rol_id = $1 AND u.activo = $2 AND u.id != $3 AND u.id != 19
                 ORDER BY RANDOM()
                 LIMIT 1
             `, [7, true, prospecto.asesor_id]); // rol_id = 7 (VENDEDOR)
-            
+
             if (!asesoresResult.rows || asesoresResult.rows.length === 0) {
                 // ✅ FIX: Si no hay VENDEDOREs disponibles, activar MODO LIBRE + LIMPIAR asesor_id
-                await query(`
+                const asesorAnteriorId = prospecto.asesor_id; // Guardar para invalidar cache
+
+                await client.query(`
                     UPDATE prospectos
                     SET asesor_anterior_id = asesor_id,
                         asesor_id = NULL,
@@ -890,6 +934,15 @@ class SeguimientosController {
                         motivo_traspaso = $3
                     WHERE id = $4
                 `, [true, prospecto.numero_reasignaciones + 1, 'sin_vendedores_disponibles', prospecto.id]);
+
+                // ✅ COMMIT: Todo exitoso
+                await client.query('COMMIT');
+
+                // ✅ FIX: Invalidar cache del asesor anterior
+                const cacheService = require('../utils/sincronizarSeguimientos');
+                if (asesorAnteriorId && cacheService.invalidarPorAsesor) {
+                    await cacheService.invalidarPorAsesor(asesorAnteriorId);
+                }
 
                 logger.info(`🔄 Prospecto ${prospecto.codigo} activado en MODO LIBRE (sin vendedores disponibles)`, {
                     service: 'seguimientos-avanzado',
@@ -907,9 +960,10 @@ class SeguimientosController {
             
             // Seleccionar asesor aleatorio
             const asesorSeleccionado = asesoresResult.rows[0];
-            
+            const asesorAnteriorId = prospecto.asesor_id; // Guardar para invalidar cache
+
             // Actualizar prospecto con auditoría completa
-            await query(`
+            await client.query(`
                 UPDATE prospectos
                 SET asesor_anterior_id = asesor_id,
                     asesor_id = $1,
@@ -935,6 +989,7 @@ class SeguimientosController {
 
             // ✅ FIX: Validar que fechaProgramada sea válida antes de crear seguimiento
             if (!fechaProgramada || isNaN(fechaProgramada.getTime())) {
+                await client.query('ROLLBACK');
                 logger.error(`❌ Error: fechaProgramada inválida para prospecto ${prospecto_id}`, {
                     fechaProgramada,
                     ahora: ahora.toISOString()
@@ -947,11 +1002,12 @@ class SeguimientosController {
 
             // Validar fechaLimite también
             if (!fechaLimite) {
+                await client.query('ROLLBACK');
                 logger.error(`❌ Error: fechaLimite inválida para prospecto ${prospecto_id}`);
                 throw new Error('No se pudo calcular fecha límite válida');
             }
 
-            await query(`
+            await client.query(`
                 INSERT INTO seguimientos (
                     prospecto_id, asesor_id, fecha_programada, fecha_limite,
                     tipo, descripcion, completado, visible_para_asesor
@@ -979,17 +1035,33 @@ class SeguimientosController {
                 motivo
             );
 
+            // ✅ COMMIT: Todo exitoso
+            await client.query('COMMIT');
+
+            // ✅ FIX: Invalidar cache del asesor anterior y nuevo
+            const cacheService = require('../utils/sincronizarSeguimientos');
+            if (asesorAnteriorId && cacheService.invalidarPorAsesor) {
+                await cacheService.invalidarPorAsesor(asesorAnteriorId);
+            }
+            if (asesorSeleccionado.id && cacheService.invalidarPorAsesor) {
+                await cacheService.invalidarPorAsesor(asesorSeleccionado.id);
+            }
+
             logger.info(`🔄 Prospecto ${prospecto.codigo} reasignado de ${prospecto.asesor_nombre} a ${asesorSeleccionado.nombre}`);
-            
+
             return {
                 asesor_anterior: prospecto.asesor_nombre,
                 asesor_nuevo: `${asesorSeleccionado.nombre} ${asesorSeleccionado.apellido}`,
                 motivo
             };
-            
+
         } catch (error) {
+            // ❌ ROLLBACK en caso de error
+            await client.query('ROLLBACK');
             logger.error('Error en reasignarProspecto:', error);
             throw error;
+        } finally {
+            client.release();
         }
     }
     
@@ -998,6 +1070,10 @@ class SeguimientosController {
      */
     static async activarModoLibre(prospecto_id) {
         try {
+            // ✅ FIX: Obtener datos del prospecto antes de actualizar (para invalidar cache)
+            const prospectoActualResult = await query('SELECT asesor_id FROM prospectos WHERE id = $1', [prospecto_id]);
+            const asesorAnteriorId = prospectoActualResult.rows[0]?.asesor_id;
+
             // Obtener todos los asesores de ventas (VENDEDORES activos, excluir usuario ficticio)
             const asesoresResult = await query(`
                 SELECT id FROM usuarios
@@ -1069,8 +1145,17 @@ class SeguimientosController {
 
             logger.info(`🏁 Modo libre activado para prospecto ${prospecto_id}`);
 
+            // ✅ FIX: Invalidar cache del asesor anterior para que vea los cambios inmediatamente
+            if (asesorAnteriorId) {
+                const cacheService = require('../utils/sincronizarSeguimientos');
+                if (cacheService.invalidarPorAsesor) {
+                    await cacheService.invalidarPorAsesor(asesorAnteriorId);
+                    logger.info(`✅ Cache invalidado para asesor ${asesorAnteriorId}`);
+                }
+            }
+
             return { modo_libre: true, asesores_con_acceso: asesor_ids.length };
-            
+
         } catch (error) {
             logger.error('Error en activarModoLibre:', error);
             throw error;
