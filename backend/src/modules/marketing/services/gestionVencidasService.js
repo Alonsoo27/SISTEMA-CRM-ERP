@@ -307,11 +307,11 @@ class GestionVencidasService {
             const result = await query(`
                 UPDATE actividades_marketing SET
                     estado = 'completada',
-                    fecha_fin_real = timezone('America/Lima', NOW()),
-                    duracion_real_minutos = calcular_minutos_laborales(fecha_inicio_real, timezone('America/Lima', NOW())),
+                    fecha_fin_real = NOW(),
+                    duracion_real_minutos = calcular_minutos_laborales(fecha_inicio_real, NOW()),
                     fue_vencida = true,
                     minutos_vencimiento = $1,
-                    gestionada_vencimiento_en = timezone('America/Lima', NOW())
+                    gestionada_vencimiento_en = NOW()
                 WHERE participantes_ids = $2
                   AND es_grupal = true
                   AND estado != 'completada'
@@ -329,11 +329,11 @@ class GestionVencidasService {
         await query(`
             UPDATE actividades_marketing SET
                 estado = 'completada',
-                fecha_fin_real = timezone('America/Lima', NOW()),
-                duracion_real_minutos = calcular_minutos_laborales(fecha_inicio_real, timezone('America/Lima', NOW())),
+                fecha_fin_real = NOW(),
+                duracion_real_minutos = calcular_minutos_laborales(fecha_inicio_real, NOW()),
                 fue_vencida = true,
                 minutos_vencimiento = $1,
-                gestionada_vencimiento_en = timezone('America/Lima', NOW())
+                gestionada_vencimiento_en = NOW()
             WHERE id = $2
         `, [minutosVencimiento, actividadId]);
 
@@ -586,11 +586,11 @@ class GestionVencidasService {
             const result = await query(`
                 UPDATE actividades_marketing SET
                     estado = 'completada',
-                    fecha_fin_real = timezone('America/Lima', NOW()),
-                    duracion_real_minutos = calcular_minutos_laborales(fecha_inicio_real, timezone('America/Lima', NOW())),
+                    fecha_fin_real = NOW(),
+                    duracion_real_minutos = calcular_minutos_laborales(fecha_inicio_real, NOW()),
                     fue_vencida = true,
                     minutos_vencimiento = $1,
-                    gestionada_vencimiento_en = timezone('America/Lima', NOW()),
+                    gestionada_vencimiento_en = NOW(),
                     motivo_edicion = $2
                 WHERE participantes_ids = $3
                   AND es_grupal = true
@@ -609,11 +609,11 @@ class GestionVencidasService {
         await query(`
             UPDATE actividades_marketing SET
                 estado = 'completada',
-                fecha_fin_real = timezone('America/Lima', NOW()),
-                duracion_real_minutos = calcular_minutos_laborales(fecha_inicio_real, timezone('America/Lima', NOW())),
+                fecha_fin_real = NOW(),
+                duracion_real_minutos = calcular_minutos_laborales(fecha_inicio_real, NOW()),
                 fue_vencida = true,
                 minutos_vencimiento = $1,
-                gestionada_vencimiento_en = timezone('America/Lima', NOW()),
+                gestionada_vencimiento_en = NOW(),
                 motivo_edicion = $2
             WHERE id = $3
         `, [minutosVencimiento, `Completada fuera de tiempo: ${motivo}`, actividadId]);

@@ -400,7 +400,7 @@ class ActividadesService {
             await query(`
                 UPDATE actividades_marketing SET
                     estado = 'en_progreso',
-                    fecha_inicio_real = timezone('America/Lima', NOW())
+                    fecha_inicio_real = NOW()
                 WHERE estado = 'pendiente'
                   AND activo = true
                   AND fecha_inicio_planeada <= $1
