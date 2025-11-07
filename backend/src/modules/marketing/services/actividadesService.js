@@ -204,18 +204,23 @@ class ActividadesService {
             // Obtener TODAS las actividades pasadas del usuario
             // LÍMITE INFERIOR: Primera actividad existente (puede ser hace 100 años)
             // LÍMITE SUPERIOR: AHORA (NOW())
+            // IMPORTANTE: Usar fecha_fin_real si existe, si no usar fecha_fin_planeada
             const result = await query(`
                 SELECT
                     id,
                     codigo,
                     fecha_inicio_planeada,
-                    fecha_fin_planeada
+                    fecha_fin_planeada,
+                    fecha_inicio_real,
+                    fecha_fin_real,
+                    COALESCE(fecha_fin_real, fecha_fin_planeada) as fecha_fin_efectiva,
+                    COALESCE(fecha_inicio_real, fecha_inicio_planeada) as fecha_inicio_efectiva
                 FROM actividades_marketing
                 WHERE usuario_id = $1
                   AND activo = true
-                  AND fecha_fin_planeada < NOW()
+                  AND COALESCE(fecha_fin_real, fecha_fin_planeada) < NOW()
                   AND tipo != 'sistema'
-                ORDER BY fecha_fin_planeada ASC
+                ORDER BY COALESCE(fecha_fin_real, fecha_fin_planeada) ASC
             `, [usuarioId]);
 
             if (result.rows.length === 0) {
@@ -231,8 +236,9 @@ class ActividadesService {
                 const actividadActual = actividades[i];
                 const actividadSiguiente = actividades[i + 1];
 
-                const finActual = actividadActual.fecha_fin_planeada;
-                const inicioSiguiente = actividadSiguiente.fecha_inicio_planeada;
+                // Usar fecha_fin_efectiva (real si existe, planeada si no)
+                const finActual = actividadActual.fecha_fin_efectiva;
+                const inicioSiguiente = actividadSiguiente.fecha_inicio_efectiva;
 
                 // Calcular minutos laborales entre las dos actividades usando PostgreSQL
                 const resultMinutos = await query(`
@@ -285,7 +291,8 @@ class ActividadesService {
 
             // Último hueco: desde la última actividad hasta AHORA
             const ultimaActividad = actividades[actividades.length - 1];
-            const finUltima = ultimaActividad.fecha_fin_planeada;
+            // Usar fecha_fin_efectiva (real si existe, planeada si no)
+            const finUltima = ultimaActividad.fecha_fin_efectiva;
 
             // Calcular minutos laborales hasta NOW
             const resultMinutosFinales = await query(`
