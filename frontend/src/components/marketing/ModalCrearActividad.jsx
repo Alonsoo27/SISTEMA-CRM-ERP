@@ -126,11 +126,10 @@ const ModalCrearActividad = ({ onClose, onSuccess, usuarioId }) => {
             };
 
             if (formData.fecha_inicio && formData.fecha_inicio.trim() !== '') {
-                // Convertir datetime-local (hora local) a ISO string completo con timezone
-                const fechaLocal = new Date(formData.fecha_inicio);
-                const offsetMinutos = fechaLocal.getTimezoneOffset();
-                const fechaUTC = new Date(fechaLocal.getTime() + (offsetMinutos * 60000));
-                actividadData.fecha_inicio = fechaUTC.toISOString();
+                // Convertir datetime-local a ISO string con timezone de Perú
+                // Input: "2025-11-10T08:00" → Output: "2025-11-10T08:00:00-05:00"
+                const fechaConTimezone = formData.fecha_inicio + ':00-05:00';
+                actividadData.fecha_inicio = new Date(fechaConTimezone).toISOString();
             }
 
             if (usuarioId) {
@@ -196,11 +195,15 @@ const ModalCrearActividad = ({ onClose, onSuccess, usuarioId }) => {
     const handleSeleccionarSlot = async (fechaSlot) => {
         console.log('📅 Slot seleccionado:', fechaSlot);
 
-        // Actualizar la fecha en el formulario (convertir UTC a hora local para el input)
+        // Convertir la fecha del backend (ISO con timezone) a formato para datetime-local
+        // toLocaleString con opciones específicas para obtener formato compatible
         const fecha = new Date(fechaSlot);
-        const offsetMinutos = fecha.getTimezoneOffset();
-        const fechaLocal = new Date(fecha.getTime() - (offsetMinutos * 60000));
-        const fechaFormateada = fechaLocal.toISOString().slice(0, 16);
+        const año = fecha.getFullYear();
+        const mes = String(fecha.getMonth() + 1).padStart(2, '0');
+        const dia = String(fecha.getDate()).padStart(2, '0');
+        const horas = String(fecha.getHours()).padStart(2, '0');
+        const minutos = String(fecha.getMinutes()).padStart(2, '0');
+        const fechaFormateada = `${año}-${mes}-${dia}T${horas}:${minutos}`;
         setFormData(prev => ({
             ...prev,
             fecha_inicio: fechaFormateada

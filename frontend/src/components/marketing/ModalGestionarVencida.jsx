@@ -130,8 +130,10 @@ const ModalGestionarVencida = ({ actividad, indiceActual = 1, totalActividades =
                         setLoading(false);
                         return;
                     }
+                    // Convertir datetime-local a ISO string con timezone de Perú
+                    const fechaFinConTimezone = horaFinReal + ':00-05:00';
                     datos = {
-                        hora_fin_real: horaFinReal,
+                        hora_fin_real: new Date(fechaFinConTimezone).toISOString(),
                         motivo
                     };
                     break;

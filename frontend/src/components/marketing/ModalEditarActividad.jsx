@@ -34,13 +34,15 @@ const ModalEditarActividad = ({ actividad, onClose, onSuccess }) => {
     // Duración mínima permitida (el tiempo ya trabajado)
     const duracionMinima = tiempoTranscurrido ? tiempoTranscurrido.minutos : 15;
 
-    // Convertir fecha UTC a hora local para el input datetime-local
+    // Convertir fecha del backend (ISO con timezone) a formato datetime-local
     const formatearFechaParaInput = (fechaUTC) => {
         const fecha = new Date(fechaUTC);
-        // Restar el offset de timezone para obtener la hora local correcta
-        const offsetMinutos = fecha.getTimezoneOffset();
-        const fechaLocal = new Date(fecha.getTime() - (offsetMinutos * 60000));
-        return fechaLocal.toISOString().slice(0, 16);
+        const año = fecha.getFullYear();
+        const mes = String(fecha.getMonth() + 1).padStart(2, '0');
+        const dia = String(fecha.getDate()).padStart(2, '0');
+        const horas = String(fecha.getHours()).padStart(2, '0');
+        const minutos = String(fecha.getMinutes()).padStart(2, '0');
+        return `${año}-${mes}-${dia}T${horas}:${minutos}`;
     };
 
     const [formData, setFormData] = useState({
@@ -93,13 +95,10 @@ const ModalEditarActividad = ({ actividad, onClose, onSuccess }) => {
 
             // Solo enviar fecha_inicio si realmente cambió
             if (formData.fecha_inicio !== formData.fecha_inicio_original) {
-                // Convertir datetime-local (hora local) a ISO string completo con timezone
-                // El input datetime-local da "2025-11-07T14:00" y debemos interpretarlo como hora local
-                const fechaLocal = new Date(formData.fecha_inicio);
-                // Agregar el offset de timezone para obtener UTC correcto
-                const offsetMinutos = fechaLocal.getTimezoneOffset();
-                const fechaUTC = new Date(fechaLocal.getTime() + (offsetMinutos * 60000));
-                datos.fecha_inicio = fechaUTC.toISOString();
+                // Convertir datetime-local a ISO string con timezone de Perú
+                // Input: "2025-11-10T08:00" → Output: "2025-11-10T08:00:00-05:00"
+                const fechaConTimezone = formData.fecha_inicio + ':00-05:00';
+                datos.fecha_inicio = new Date(fechaConTimezone).toISOString();
             }
 
             await onSuccess(datos);
