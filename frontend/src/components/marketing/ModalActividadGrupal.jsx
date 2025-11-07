@@ -145,7 +145,11 @@ const ModalActividadGrupal = ({ onClose, onSuccess }) => {
             };
 
             if (formData.fecha_inicio && formData.fecha_inicio.trim() !== '') {
-                actividadData.fecha_inicio = formData.fecha_inicio;
+                // Convertir datetime-local (hora local) a ISO string completo con timezone
+                const fechaLocal = new Date(formData.fecha_inicio);
+                const offsetMinutos = fechaLocal.getTimezoneOffset();
+                const fechaUTC = new Date(fechaLocal.getTime() + (offsetMinutos * 60000));
+                actividadData.fecha_inicio = fechaUTC.toISOString();
             }
 
             await marketingService.crearActividadGrupal(actividadData);
@@ -185,8 +189,11 @@ const ModalActividadGrupal = ({ onClose, onSuccess }) => {
     const handleSeleccionarHorario = (fechaSlot) => {
         console.log('📅 Horario alternativo seleccionado:', fechaSlot);
 
-        // Actualizar la fecha en el formulario
-        const fechaFormateada = new Date(fechaSlot).toISOString().slice(0, 16);
+        // Actualizar la fecha en el formulario (convertir UTC a hora local para el input)
+        const fecha = new Date(fechaSlot);
+        const offsetMinutos = fecha.getTimezoneOffset();
+        const fechaLocal = new Date(fecha.getTime() - (offsetMinutos * 60000));
+        const fechaFormateada = fechaLocal.toISOString().slice(0, 16);
         setFormData(prev => ({
             ...prev,
             fecha_inicio: fechaFormateada

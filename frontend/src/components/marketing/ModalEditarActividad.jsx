@@ -34,10 +34,19 @@ const ModalEditarActividad = ({ actividad, onClose, onSuccess }) => {
     // Duración mínima permitida (el tiempo ya trabajado)
     const duracionMinima = tiempoTranscurrido ? tiempoTranscurrido.minutos : 15;
 
+    // Convertir fecha UTC a hora local para el input datetime-local
+    const formatearFechaParaInput = (fechaUTC) => {
+        const fecha = new Date(fechaUTC);
+        // Restar el offset de timezone para obtener la hora local correcta
+        const offsetMinutos = fecha.getTimezoneOffset();
+        const fechaLocal = new Date(fecha.getTime() - (offsetMinutos * 60000));
+        return fechaLocal.toISOString().slice(0, 16);
+    };
+
     const [formData, setFormData] = useState({
         duracion_minutos: actividad.duracion_planeada_minutos,
-        fecha_inicio: new Date(actividad.fecha_inicio_planeada).toISOString().slice(0, 16),
-        fecha_inicio_original: new Date(actividad.fecha_inicio_planeada).toISOString().slice(0, 16),
+        fecha_inicio: formatearFechaParaInput(actividad.fecha_inicio_planeada),
+        fecha_inicio_original: formatearFechaParaInput(actividad.fecha_inicio_planeada),
         motivo_edicion: ''
     });
     const [loading, setLoading] = useState(false);
@@ -82,9 +91,15 @@ const ModalEditarActividad = ({ actividad, onClose, onSuccess }) => {
                 motivo_edicion: formData.motivo_edicion
             };
 
-            // Solo enviar fecha_inicio si realmente cambió (evita bug de timezone)
+            // Solo enviar fecha_inicio si realmente cambió
             if (formData.fecha_inicio !== formData.fecha_inicio_original) {
-                datos.fecha_inicio = formData.fecha_inicio;
+                // Convertir datetime-local (hora local) a ISO string completo con timezone
+                // El input datetime-local da "2025-11-07T14:00" y debemos interpretarlo como hora local
+                const fechaLocal = new Date(formData.fecha_inicio);
+                // Agregar el offset de timezone para obtener UTC correcto
+                const offsetMinutos = fechaLocal.getTimezoneOffset();
+                const fechaUTC = new Date(fechaLocal.getTime() + (offsetMinutos * 60000));
+                datos.fecha_inicio = fechaUTC.toISOString();
             }
 
             await onSuccess(datos);
