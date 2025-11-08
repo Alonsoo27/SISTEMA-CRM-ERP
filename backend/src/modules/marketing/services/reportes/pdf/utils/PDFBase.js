@@ -357,9 +357,31 @@ class PDFBase {
      * AUXILIAR: Dibujar arco para donut
      */
     static _dibujarArcoDonut(doc, cx, cy, radiusOuter, radiusInner, startAngle, endAngle, color) {
+        console.log('🔍 _dibujarArcoDonut recibió:', { cx, cy, radiusOuter, radiusInner, startAngle, endAngle, color });
+
         // Validar que todos los parámetros sean números válidos
+        if (typeof cx !== 'number' || typeof cy !== 'number' ||
+            typeof radiusOuter !== 'number' || typeof radiusInner !== 'number' ||
+            typeof startAngle !== 'number' || typeof endAngle !== 'number') {
+            console.error('❌ Parámetros no son números:', { cx, cy, radiusOuter, radiusInner, startAngle, endAngle });
+            return;
+        }
+
         if (isNaN(cx) || isNaN(cy) || isNaN(radiusOuter) || isNaN(radiusInner) || isNaN(startAngle) || isNaN(endAngle)) {
-            console.warn('⚠️ Valores inválidos en _dibujarArcoDonut:', { cx, cy, radiusOuter, radiusInner, startAngle, endAngle });
+            console.error('❌ Valores NaN en _dibujarArcoDonut:', { cx, cy, radiusOuter, radiusInner, startAngle, endAngle });
+            return;
+        }
+
+        // Validar que el color sea válido
+        if (!color || typeof color !== 'string') {
+            console.error('❌ Color inválido:', color);
+            color = PDFStyles.COLORES.GRIS; // Color por defecto
+        }
+
+        // Validar rango de ángulos
+        const angleDiff = endAngle - startAngle;
+        if (angleDiff <= 0 || angleDiff > 360) {
+            console.error('❌ Rango de ángulos inválido:', { startAngle, endAngle, diff: angleDiff });
             return;
         }
 
@@ -382,21 +404,45 @@ class PDFBase {
         const x4 = cx + radiusInner * Math.cos(startRad);
         const y4 = cy + radiusInner * Math.sin(startRad);
 
+        console.log('🔍 Puntos calculados:', { x1, y1, x2, y2, x3, y3, x4, y4 });
+
         // Validar puntos calculados
         if (isNaN(x1) || isNaN(y1) || isNaN(x2) || isNaN(y2) || isNaN(x3) || isNaN(y3) || isNaN(x4) || isNaN(y4)) {
-            console.warn('⚠️ Puntos calculados inválidos en _dibujarArcoDonut');
+            console.error('❌ Puntos calculados inválidos en _dibujarArcoDonut:', { x1, y1, x2, y2, x3, y3, x4, y4 });
             return;
         }
 
         const largeArc = endAngle - startAngle > 180 ? 1 : 0;
 
-        doc.path(`
-            M ${x1} ${y1}
-            A ${radiusOuter} ${radiusOuter} 0 ${largeArc} 1 ${x2} ${y2}
-            L ${x3} ${y3}
-            A ${radiusInner} ${radiusInner} 0 ${largeArc} 0 ${x4} ${y4}
-            Z
-        `).fill(color);
+        console.log('🔍 largeArc:', largeArc, 'color:', color);
+
+        // Redondear todos los valores a 2 decimales para evitar problemas de precisión
+        const x1r = Number(x1.toFixed(2));
+        const y1r = Number(y1.toFixed(2));
+        const x2r = Number(x2.toFixed(2));
+        const y2r = Number(y2.toFixed(2));
+        const x3r = Number(x3.toFixed(2));
+        const y3r = Number(y3.toFixed(2));
+        const x4r = Number(x4.toFixed(2));
+        const y4r = Number(y4.toFixed(2));
+        const rOuter = Number(radiusOuter.toFixed(2));
+        const rInner = Number(radiusInner.toFixed(2));
+
+        console.log('🔍 Valores redondeados:', { x1r, y1r, x2r, y2r, x3r, y3r, x4r, y4r, rOuter, rInner });
+
+        // Crear path sin espacios ni saltos de línea
+        const pathString = `M ${x1r} ${y1r} A ${rOuter} ${rOuter} 0 ${largeArc} 1 ${x2r} ${y2r} L ${x3r} ${y3r} A ${rInner} ${rInner} 0 ${largeArc} 0 ${x4r} ${y4r} Z`;
+
+        console.log('🔍 pathString:', pathString);
+        console.log('✅ Dibujando arco con valores válidos');
+
+        try {
+            doc.path(pathString).fill(color);
+        } catch (error) {
+            console.error('❌ Error en doc.path():', error.message);
+            console.error('❌ pathString que causó el error:', pathString);
+            throw error;
+        }
     }
 
     /**
