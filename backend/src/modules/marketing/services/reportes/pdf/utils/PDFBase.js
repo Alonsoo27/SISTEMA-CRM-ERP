@@ -500,6 +500,34 @@ class PDFBase {
      * AUXILIAR: Dibujar arco para gauge
      */
     static _dibujarArcoGauge(doc, cx, cy, radius, startAngle, endAngle, color) {
+        console.log('🔍 _dibujarArcoGauge recibió:', { cx, cy, radius, startAngle, endAngle, color });
+
+        // Validar que todos los parámetros sean números válidos
+        if (typeof cx !== 'number' || typeof cy !== 'number' ||
+            typeof radius !== 'number' || typeof startAngle !== 'number' ||
+            typeof endAngle !== 'number') {
+            console.error('❌ Parámetros no son números en _dibujarArcoGauge:', { cx, cy, radius, startAngle, endAngle });
+            return;
+        }
+
+        if (isNaN(cx) || isNaN(cy) || isNaN(radius) || isNaN(startAngle) || isNaN(endAngle)) {
+            console.error('❌ Valores NaN en _dibujarArcoGauge:', { cx, cy, radius, startAngle, endAngle });
+            return;
+        }
+
+        // Validar que el color sea válido
+        if (!color || typeof color !== 'string') {
+            console.error('❌ Color inválido en _dibujarArcoGauge:', color);
+            color = PDFStyles.COLORES.GRIS; // Color por defecto
+        }
+
+        // Validar rango de ángulos
+        const angleDiff = endAngle - startAngle;
+        if (angleDiff <= 0 || angleDiff > 360) {
+            console.error('❌ Rango de ángulos inválido en _dibujarArcoGauge:', { startAngle, endAngle, diff: angleDiff });
+            return;
+        }
+
         const startRad = (startAngle * Math.PI) / 180;
         const endRad = (endAngle * Math.PI) / 180;
 
@@ -508,14 +536,37 @@ class PDFBase {
         const x2 = cx + radius * Math.cos(endRad);
         const y2 = cy + radius * Math.sin(endRad);
 
-        const largeArc = endAngle - startAngle > 180 ? 1 : 0;
+        console.log('🔍 Puntos calculados (gauge):', { x1, y1, x2, y2 });
 
-        doc.path(`
-            M ${x1} ${y1}
-            A ${radius} ${radius} 0 ${largeArc} 1 ${x2} ${y2}
-        `)
-        .lineWidth(15)
-        .stroke(color);
+        // Validar puntos calculados
+        if (isNaN(x1) || isNaN(y1) || isNaN(x2) || isNaN(y2)) {
+            console.error('❌ Puntos calculados inválidos en _dibujarArcoGauge:', { x1, y1, x2, y2 });
+            return;
+        }
+
+        const largeArc = angleDiff > 180 ? 1 : 0;
+
+        // Redondear todos los valores a 2 decimales
+        const x1r = Number(x1.toFixed(2));
+        const y1r = Number(y1.toFixed(2));
+        const x2r = Number(x2.toFixed(2));
+        const y2r = Number(y2.toFixed(2));
+        const radiusR = Number(radius.toFixed(2));
+
+        console.log('🔍 Valores redondeados (gauge):', { x1r, y1r, x2r, y2r, radiusR, largeArc });
+
+        // Crear path sin espacios ni saltos de línea
+        const pathString = `M ${x1r} ${y1r} A ${radiusR} ${radiusR} 0 ${largeArc} 1 ${x2r} ${y2r}`;
+
+        console.log('🔍 pathString (gauge):', pathString);
+
+        try {
+            doc.path(pathString).lineWidth(15).stroke(color);
+        } catch (error) {
+            console.error('❌ Error en doc.path() (gauge):', error.message);
+            console.error('❌ pathString que causó el error:', pathString);
+            throw error;
+        }
     }
 
     /**
