@@ -271,6 +271,249 @@ class ReportesQueries {
             actividades_recientes: actividades
         };
     }
+
+    // ============================================
+    // QUERIES AVANZADAS - COMPARATIVAS Y ANÁLISIS
+    // ============================================
+
+    /**
+     * Obtener datos del período anterior para comparativas
+     * Maneja períodos vacíos (sin datos) retornando null
+     */
+    static async obtenerDatosPeriodoAnterior(usuarioId, fechaInicio, fechaFin) {
+        // Calcular duración del período
+        const inicio = new Date(fechaInicio);
+        const fin = new Date(fechaFin);
+        const duracionDias = Math.ceil((fin - inicio) / (1000 * 60 * 60 * 24));
+
+        // Calcular fechas del período anterior
+        const fechaInicioAnterior = new Date(inicio);
+        fechaInicioAnterior.setDate(fechaInicioAnterior.getDate() - duracionDias);
+        const fechaFinAnterior = new Date(inicio);
+
+        // Obtener totales básicos del período anterior
+        const result = await query(`
+            SELECT
+                COUNT(*) as total,
+                COUNT(*) FILTER (WHERE estado = 'completada') as completadas,
+                SUM(CASE WHEN estado = 'completada' THEN duracion_real_minutos ELSE 0 END) as tiempo_real
+            FROM actividades_marketing
+            WHERE usuario_id = $1
+            AND activo = true
+            AND tipo != 'sistema'
+            AND fecha_inicio_planeada BETWEEN $2 AND $3
+        `, [usuarioId, fechaInicioAnterior, fechaFinAnterior]);
+
+        const datos = result.rows[0];
+
+        // Si no hay datos del período anterior, retornar null
+        if (parseInt(datos.total) === 0) {
+            return null;
+        }
+
+        const tasaCompletitud = datos.total > 0
+            ? ((parseInt(datos.completadas) / parseInt(datos.total)) * 100).toFixed(1)
+            : 0;
+
+        return {
+            total: parseInt(datos.total),
+            completadas: parseInt(datos.completadas),
+            tasa_completitud: parseFloat(tasaCompletitud),
+            tiempo_real_minutos: parseInt(datos.tiempo_real || 0)
+        };
+    }
+
+    /**
+     * Obtener ranking del usuario vs equipo (mismo rol/área)
+     */
+    static async obtenerRankingEquipo(usuarioId, fechaInicio, fechaFin) {
+        // Obtener área del usuario
+        const usuarioInfo = await query(`
+            SELECT area_id, rol_id FROM usuarios WHERE id = $1
+        `, [usuarioId]);
+
+        if (usuarioInfo.rows.length === 0) return null;
+
+        const { area_id, rol_id } = usuarioInfo.rows[0];
+
+        // Obtener ranking de productividad del equipo
+        const ranking = await query(`
+            WITH metricas_equipo AS (
+                SELECT
+                    u.id,
+                    u.nombre || ' ' || u.apellido as nombre_completo,
+                    COUNT(a.id) as total_actividades,
+                    COUNT(a.id) FILTER (WHERE a.estado = 'completada') as completadas,
+                    CASE
+                        WHEN COUNT(a.id) > 0
+                        THEN (COUNT(a.id) FILTER (WHERE a.estado = 'completada')::float / COUNT(a.id)::float * 100)
+                        ELSE 0
+                    END as tasa_completitud,
+                    SUM(CASE WHEN a.estado = 'completada' THEN a.duracion_real_minutos ELSE 0 END) as tiempo_productivo
+                FROM usuarios u
+                LEFT JOIN actividades_marketing a ON a.usuario_id = u.id
+                    AND a.activo = true
+                    AND a.tipo != 'sistema'
+                    AND a.fecha_inicio_planeada BETWEEN $1 AND $2
+                WHERE u.activo = true
+                AND u.area_id = $3
+                AND u.rol_id = $4
+                GROUP BY u.id, u.nombre, u.apellido
+            ),
+            ranking_calculado AS (
+                SELECT
+                    *,
+                    RANK() OVER (ORDER BY tasa_completitud DESC, tiempo_productivo DESC) as posicion
+                FROM metricas_equipo
+            )
+            SELECT
+                (SELECT COUNT(*) FROM metricas_equipo) as total_equipo,
+                posicion,
+                total_actividades,
+                completadas,
+                ROUND(tasa_completitud::numeric, 1) as tasa_completitud
+            FROM ranking_calculado
+            WHERE id = $5
+        `, [fechaInicio, fechaFin, area_id, rol_id, usuarioId]);
+
+        if (ranking.rows.length === 0) return null;
+
+        return ranking.rows[0];
+    }
+
+    /**
+     * Obtener productividad por día de la semana
+     */
+    static async obtenerProductividadPorDia(usuarioId, fechaInicio, fechaFin) {
+        const result = await query(`
+            SELECT
+                EXTRACT(DOW FROM fecha_inicio_planeada) as dia_semana,
+                CASE EXTRACT(DOW FROM fecha_inicio_planeada)
+                    WHEN 0 THEN 'Domingo'
+                    WHEN 1 THEN 'Lunes'
+                    WHEN 2 THEN 'Martes'
+                    WHEN 3 THEN 'Miércoles'
+                    WHEN 4 THEN 'Jueves'
+                    WHEN 5 THEN 'Viernes'
+                    WHEN 6 THEN 'Sábado'
+                END as nombre_dia,
+                COUNT(*) as total_actividades,
+                COUNT(*) FILTER (WHERE estado = 'completada') as completadas,
+                SUM(CASE WHEN estado = 'completada' THEN duracion_real_minutos ELSE 0 END) as tiempo_productivo
+            FROM actividades_marketing
+            WHERE usuario_id = $1
+            AND activo = true
+            AND tipo != 'sistema'
+            AND fecha_inicio_planeada BETWEEN $2 AND $3
+            GROUP BY EXTRACT(DOW FROM fecha_inicio_planeada)
+            ORDER BY dia_semana
+        `, [usuarioId, fechaInicio, fechaFin]);
+
+        return result.rows.map(row => ({
+            dia_semana: parseInt(row.dia_semana),
+            nombre_dia: row.nombre_dia,
+            total_actividades: parseInt(row.total_actividades),
+            completadas: parseInt(row.completadas),
+            tiempo_productivo_minutos: parseInt(row.tiempo_productivo || 0),
+            tasa_completitud: row.total_actividades > 0
+                ? ((parseInt(row.completadas) / parseInt(row.total_actividades)) * 100).toFixed(1)
+                : 0
+        }));
+    }
+
+    /**
+     * Obtener conclusiones automáticas basadas en métricas
+     */
+    static generarConclusiones(metricas, comparativa, ranking) {
+        const conclusiones = [];
+        const recomendaciones = [];
+
+        // Análisis de completitud
+        if (metricas.tasas.completitud >= 90) {
+            conclusiones.push('Excelente tasa de completitud, superando el 90% de las actividades planificadas.');
+        } else if (metricas.tasas.completitud >= 70) {
+            conclusiones.push('Buena tasa de completitud, aunque hay margen de mejora.');
+            recomendaciones.push('Revisar causas de actividades no completadas para optimizar planificación.');
+        } else {
+            conclusiones.push('La tasa de completitud está por debajo del 70%, requiere atención.');
+            recomendaciones.push('Analizar carga de trabajo y redistribuir actividades si es necesario.');
+        }
+
+        // Análisis de eficiencia
+        if (metricas.tasas.eficiencia <= 100) {
+            conclusiones.push('El tiempo ejecutado está dentro o por debajo de lo planeado (eficiencia óptima).');
+        } else if (metricas.tasas.eficiencia <= 120) {
+            conclusiones.push('Ligero exceso en tiempo de ejecución respecto a lo planeado.');
+            recomendaciones.push('Revisar estimaciones de tiempo para actividades similares.');
+        } else {
+            conclusiones.push('Tiempo de ejecución significativamente mayor a lo planeado.');
+            recomendaciones.push('Considerar factores que retrasan la ejecución y ajustar planificación.');
+        }
+
+        // Análisis de problemas
+        if (metricas.problemas.vencidas > 0) {
+            conclusiones.push(`Se detectaron ${metricas.problemas.vencidas} actividades vencidas.`);
+            recomendaciones.push('Establecer alertas tempranas para actividades próximas a vencer.');
+        }
+
+        // Comparativa vs período anterior
+        if (comparativa) {
+            const mejora = metricas.tasas.completitud - comparativa.tasa_completitud;
+            if (mejora > 5) {
+                conclusiones.push(`Mejora significativa (+${mejora.toFixed(1)}%) vs período anterior.`);
+            } else if (mejora < -5) {
+                conclusiones.push(`Disminución en rendimiento (-${Math.abs(mejora).toFixed(1)}%) vs período anterior.`);
+                recomendaciones.push('Identificar causas de la disminución en productividad.');
+            }
+        }
+
+        // Ranking
+        if (ranking && ranking.total_equipo > 1) {
+            if (ranking.posicion === 1) {
+                conclusiones.push(`Top 1 del equipo (${ranking.total_equipo} personas). ¡Excelente desempeño!`);
+            } else if (ranking.posicion <= 3) {
+                conclusiones.push(`Top ${ranking.posicion} de ${ranking.total_equipo} en el equipo.`);
+            } else {
+                conclusiones.push(`Posición ${ranking.posicion} de ${ranking.total_equipo} en el equipo.`);
+                recomendaciones.push('Revisar mejores prácticas de compañeros con mejor rendimiento.');
+            }
+        }
+
+        return { conclusiones, recomendaciones };
+    }
+
+    /**
+     * Método consolidado con análisis avanzado
+     */
+    static async obtenerDatosCompletos(usuarioId, fechaInicio, fechaFin) {
+        // Datos básicos
+        const datosBasicos = await this.obtenerDatosProductividadPersonal(usuarioId, fechaInicio, fechaFin);
+
+        // Datos avanzados en paralelo
+        const [comparativa, ranking, productividadDiaria] = await Promise.all([
+            this.obtenerDatosPeriodoAnterior(usuarioId, fechaInicio, fechaFin),
+            this.obtenerRankingEquipo(usuarioId, fechaInicio, fechaFin),
+            this.obtenerProductividadPorDia(usuarioId, fechaInicio, fechaFin)
+        ]);
+
+        // Generar conclusiones
+        const { conclusiones, recomendaciones } = this.generarConclusiones(
+            datosBasicos.metricas,
+            comparativa,
+            ranking
+        );
+
+        return {
+            ...datosBasicos,
+            analisis_avanzado: {
+                comparativa_periodo_anterior: comparativa,
+                ranking_equipo: ranking,
+                productividad_por_dia: productividadDiaria,
+                conclusiones,
+                recomendaciones
+            }
+        };
+    }
 }
 
 module.exports = ReportesQueries;

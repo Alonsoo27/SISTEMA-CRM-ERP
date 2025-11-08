@@ -48,20 +48,27 @@ class PDFStyles {
     // ============================================
     static DIMENSIONES = {
         MARGEN_SUPERIOR: 50,
-        MARGEN_INFERIOR: 50,
+        MARGEN_INFERIOR: 70,
         MARGEN_IZQUIERDO: 50,
         MARGEN_DERECHO: 50,
 
         ALTURA_ENCABEZADO: 80,
-        ALTURA_PIE: 50,
+        ALTURA_PIE: 60,
 
-        // KPI Cards
+        // KPI Cards (mejorado para más respiración)
         KPI_ANCHO: 240,
-        KPI_ALTO: 80,
-        KPI_GAP: 20,
+        KPI_ALTO: 95,        // Aumentado de 80 a 95
+        KPI_GAP: 25,         // Aumentado de 20 a 25
+        KPI_PADDING: 15,     // Nuevo: padding interno
 
-        // Tablas
-        TABLA_FILA_ALTURA: 25
+        // Tablas (mejorado para legibilidad)
+        TABLA_FILA_ALTURA: 32,        // Aumentado de 25 a 32
+        TABLA_PADDING_VERTICAL: 10,   // Nuevo: padding vertical
+        TABLA_PADDING_HORIZONTAL: 8,  // Nuevo: padding horizontal
+
+        // Espaciado entre secciones
+        ESPACIO_ENTRE_SECCIONES: 25,  // Nuevo: espacio estándar
+        ESPACIO_ENTRE_ELEMENTOS: 15   // Nuevo: espacio menor
     };
 
     // ============================================

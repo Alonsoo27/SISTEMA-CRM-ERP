@@ -9,6 +9,7 @@ const PDFStyles = require('../utils/PDFStyles');
 class ProductividadPersonalPDF {
     /**
      * Generar reporte completo de productividad personal
+     * Versión mejorada con análisis avanzado, gráficos y conclusiones
      */
     static async generar(datos) {
         try {
@@ -20,6 +21,7 @@ class ProductividadPersonalPDF {
             const bufferPromise = PDFBase.documentoABuffer(doc);
 
             const tieneActividades = datos.metricas.totales.total > 0;
+            const tieneAnalisisAvanzado = datos.analisis_avanzado;
 
             // ========================================
             // PÁGINA 1: RESUMEN EJECUTIVO
@@ -46,6 +48,24 @@ class ProductividadPersonalPDF {
             if (datos.categorias && datos.categorias.length > 0) {
                 doc.addPage();
                 this._generarPaginaCategorias(doc, datos);
+                PDFBase.dibujarPiePagina(doc, datos.usuario.nombre_completo, datos.periodo.descripcion);
+            }
+
+            // ========================================
+            // PÁGINA 4: ANÁLISIS AVANZADO (si hay datos)
+            // ========================================
+            if (tieneAnalisisAvanzado) {
+                doc.addPage();
+                this._generarPaginaAnalisisAvanzado(doc, datos);
+                PDFBase.dibujarPiePagina(doc, datos.usuario.nombre_completo, datos.periodo.descripcion);
+            }
+
+            // ========================================
+            // PÁGINA 5: CONCLUSIONES Y RECOMENDACIONES (si hay)
+            // ========================================
+            if (tieneAnalisisAvanzado && datos.analisis_avanzado.conclusiones.length > 0) {
+                doc.addPage();
+                this._generarPaginaConclusiones(doc, datos);
                 PDFBase.dibujarPiePagina(doc, datos.usuario.nombre_completo, datos.periodo.descripcion);
             }
 
@@ -291,6 +311,188 @@ class ProductividadPersonalPDF {
         });
 
         return tabla;
+    }
+
+    // ============================================
+    // NUEVAS PÁGINAS: ANÁLISIS AVANZADO
+    // ============================================
+
+    /**
+     * Generar página de análisis avanzado con comparativas y ranking
+     */
+    static _generarPaginaAnalisisAvanzado(doc, datos) {
+        PDFBase.dibujarEncabezado(doc, 'ANÁLISIS AVANZADO');
+
+        const analisis = datos.analisis_avanzado;
+
+        // ========================================
+        // COMPARATIVA VS PERÍODO ANTERIOR
+        // ========================================
+        doc.moveDown(2);
+        doc.fontSize(14).fillColor(PDFStyles.COLORES.AZUL_OSCURO)
+            .text('COMPARATIVA CON PERÍODO ANTERIOR', { align: 'left', underline: true });
+        doc.moveDown(1);
+
+        if (analisis.comparativa_periodo_anterior) {
+            const comp = analisis.comparativa_periodo_anterior;
+
+            // Gráfico comparativo de actividades
+            PDFBase.dibujarComparativa(doc, {
+                label: 'Total de Actividades',
+                valorAnterior: comp.total,
+                valorActual: datos.metricas.totales.total,
+                unidad: '',
+                mejoraEsMejor: true
+            });
+
+            // Gráfico comparativo de completitud
+            PDFBase.dibujarComparativa(doc, {
+                label: 'Tasa de Completitud',
+                valorAnterior: comp.tasa_completitud,
+                valorActual: datos.metricas.tasas.completitud,
+                unidad: '%',
+                mejoraEsMejor: true
+            });
+
+            // Gráfico comparativo de tiempo
+            PDFBase.dibujarComparativa(doc, {
+                label: 'Tiempo Productivo (horas)',
+                valorAnterior: Math.round(comp.tiempo_real_minutos / 60),
+                valorActual: Math.round(datos.metricas.tiempos.total_real_minutos / 60),
+                unidad: 'h',
+                mejoraEsMejor: true
+            });
+        } else {
+            doc.fontSize(10).fillColor(PDFStyles.COLORES.GRIS)
+                .text('No hay datos del período anterior para comparar.', { indent: 20 });
+            doc.moveDown(1);
+        }
+
+        // ========================================
+        // RANKING EN EL EQUIPO
+        // ========================================
+        doc.moveDown(1);
+        doc.fontSize(14).fillColor(PDFStyles.COLORES.AZUL_OSCURO)
+            .text('RANKING EN EL EQUIPO', { align: 'left', underline: true });
+        doc.moveDown(1);
+
+        if (analisis.ranking_equipo) {
+            const ranking = analisis.ranking_equipo;
+
+            doc.fontSize(10).fillColor(PDFStyles.COLORES.GRIS_TEXTO);
+            doc.text(`Posición: ${ranking.posicion} de ${ranking.total_equipo}`, { indent: 20 });
+            doc.text(`Tasa de Completitud: ${ranking.tasa_completitud}%`, { indent: 20 });
+            doc.text(`Total Actividades: ${ranking.total_actividades}`, { indent: 20 });
+            doc.text(`Actividades Completadas: ${ranking.completadas}`, { indent: 20 });
+
+            // Medalla visual si está en top 3
+            if (ranking.posicion <= 3) {
+                doc.moveDown(0.5);
+                const medalla = ranking.posicion === 1 ? '[1°]' :
+                               ranking.posicion === 2 ? '[2°]' : '[3°]';
+                doc.fontSize(12).fillColor(PDFStyles.COLORES.VERDE)
+                    .text(`${medalla} Top ${ranking.posicion} del equipo!`, { indent: 20 });
+            }
+        } else {
+            doc.fontSize(10).fillColor(PDFStyles.COLORES.GRIS)
+                .text('No hay datos de equipo disponibles para ranking.', { indent: 20 });
+        }
+
+        // ========================================
+        // PRODUCTIVIDAD POR DÍA
+        // ========================================
+        doc.moveDown(2);
+        doc.fontSize(14).fillColor(PDFStyles.COLORES.AZUL_OSCURO)
+            .text('PRODUCTIVIDAD POR DÍA DE LA SEMANA', { align: 'left', underline: true });
+        doc.moveDown(1);
+
+        if (analisis.productividad_por_dia && analisis.productividad_por_dia.length > 0) {
+            const datosBarra = analisis.productividad_por_dia.map(dia => ({
+                label: dia.nombre_dia,
+                valor: dia.completadas,
+                color: PDFStyles.COLORES.AZUL_MEDIO
+            }));
+
+            PDFBase.dibujarBarrasHorizontal(doc, datosBarra, {
+                titulo: '',
+                ancho: 320,
+                altoBarra: 22
+            });
+        } else {
+            doc.fontSize(10).fillColor(PDFStyles.COLORES.GRIS)
+                .text('Sin datos suficientes para análisis por día.', { indent: 20 });
+        }
+    }
+
+    /**
+     * Generar página de conclusiones y recomendaciones
+     */
+    static _generarPaginaConclusiones(doc, datos) {
+        PDFBase.dibujarEncabezado(doc, 'CONCLUSIONES Y RECOMENDACIONES');
+
+        const analisis = datos.analisis_avanzado;
+
+        // ========================================
+        // CONCLUSIONES PRINCIPALES
+        // ========================================
+        doc.moveDown(2);
+        doc.fontSize(14).fillColor(PDFStyles.COLORES.AZUL_OSCURO)
+            .text('CONCLUSIONES PRINCIPALES', { align: 'left', underline: true });
+        doc.moveDown(1);
+
+        if (analisis.conclusiones && analisis.conclusiones.length > 0) {
+            analisis.conclusiones.forEach((conclusion, idx) => {
+                doc.fontSize(10).fillColor(PDFStyles.COLORES.GRIS_TEXTO);
+                const bullet = `${idx + 1}.`;
+                doc.text(`${bullet} ${conclusion}`, 60, doc.y, {
+                    indent: 0,
+                    width: 480
+                });
+                doc.moveDown(0.5);
+            });
+        } else {
+            doc.fontSize(10).fillColor(PDFStyles.COLORES.GRIS)
+                .text('Sin conclusiones disponibles.', { indent: 20 });
+        }
+
+        // ========================================
+        // RECOMENDACIONES
+        // ========================================
+        doc.moveDown(2);
+        doc.fontSize(14).fillColor(PDFStyles.COLORES.AZUL_OSCURO)
+            .text('RECOMENDACIONES DE MEJORA', { align: 'left', underline: true });
+        doc.moveDown(1);
+
+        if (analisis.recomendaciones && analisis.recomendaciones.length > 0) {
+            analisis.recomendaciones.forEach((recomendacion, idx) => {
+                doc.fontSize(10).fillColor(PDFStyles.COLORES.AZUL_MEDIO);
+                const bullet = `[${idx + 1}]`;
+                doc.text(`${bullet} ${recomendacion}`, 60, doc.y, {
+                    indent: 0,
+                    width: 480
+                });
+                doc.moveDown(0.5);
+            });
+        } else {
+            doc.fontSize(10).fillColor(PDFStyles.COLORES.VERDE)
+                .text('¡Excelente trabajo! No hay recomendaciones específicas en este momento.', {
+                    indent: 20
+                });
+        }
+
+        // ========================================
+        // NOTA FINAL
+        // ========================================
+        doc.moveDown(3);
+        doc.fontSize(9).fillColor(PDFStyles.COLORES.GRIS)
+            .text(
+                'Este reporte fue generado automáticamente por el Sistema CRM/ERP. ' +
+                'Las conclusiones y recomendaciones se basan en el análisis de datos del período seleccionado.',
+                {
+                    align: 'center',
+                    width: 500
+                }
+            );
     }
 }
 
