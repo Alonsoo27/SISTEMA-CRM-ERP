@@ -169,14 +169,16 @@ class PDFBase {
         const { TABLA_FILA_ALTURA, TABLA_PADDING_HORIZONTAL, TABLA_PADDING_VERTICAL } = PDFStyles.DIMENSIONES;
         let currentX = startX;
 
-        // Verificar espacio disponible
+        // Verificar espacio disponible (FIXED: No agregar encabezado innecesario)
         const alturaTotal = datos.length * TABLA_FILA_ALTURA;
         const espacioDisponible = doc.page.height - doc.y - PDFStyles.DIMENSIONES.MARGEN_INFERIOR - 20;
 
         if (alturaTotal > espacioDisponible) {
+            // Solo agregar página nueva, SIN encabezado automático
+            // El encabezado debe ser controlado por el generador
             doc.addPage();
-            this.dibujarEncabezado(doc, 'CONTINUACIÓN');
-            doc.moveDown(2);
+            // Resetear posición Y con margen estándar
+            doc.y = PDFStyles.DIMENSIONES.MARGEN_SUPERIOR;
         }
 
         const actualStartY = doc.y;
@@ -255,16 +257,21 @@ class PDFBase {
     }
 
     /**
-     * Verificar espacio y agregar página si es necesario (MEJORADO)
+     * Verificar espacio y agregar página si es necesario (FIXED)
      */
     static verificarEspacio(doc, alturaRequerida, tituloNuevaPagina = '') {
         const espacioDisponible = doc.page.height - doc.y - PDFStyles.DIMENSIONES.MARGEN_INFERIOR;
 
         if (alturaRequerida > espacioDisponible) {
             doc.addPage();
+
+            // SIEMPRE establecer doc.y después de addPage
             if (tituloNuevaPagina) {
                 this.dibujarEncabezado(doc, tituloNuevaPagina);
                 doc.moveDown(2);
+            } else {
+                // Si no hay título, resetear Y al margen superior
+                doc.y = PDFStyles.DIMENSIONES.MARGEN_SUPERIOR;
             }
             return true;
         }
@@ -668,13 +675,16 @@ class PDFBase {
     }
 
     /**
-     * Dibujar comparativa de métricas (MEJORADO)
+     * Dibujar comparativa de métricas (FIXED: Guardar doc.y)
      */
     static dibujarComparativa(doc, datos) {
         const startX = 80;
         const startY = doc.y;
         const anchoBarra = 180;
         const alto = 18;
+
+        // IMPORTANTE: Guardar doc.y antes de usar coordenadas absolutas
+        const savedY = doc.y;
 
         // Label principal
         doc.fontSize(10).fillColor(PDFStyles.COLORES.AZUL_OSCURO)
@@ -710,6 +720,7 @@ class PDFBase {
                 .text(textoCambio, startX + 65 + anchoBarra + 80, startY + 45);
         }
 
+        // FIXED: Establecer Y explícitamente para evitar saltos
         doc.y = startY + 75;
     }
 }
