@@ -1,6 +1,7 @@
 // ============================================
 // CLASE BASE PARA GENERACIÓN DE PDFs
 // Métodos comunes reutilizables
+// VERSIÓN OPTIMIZADA v2.0 con nuevos gráficos
 // ============================================
 
 const PDFDocument = require('pdfkit');
@@ -116,7 +117,7 @@ class PDFBase {
     }
 
     /**
-     * Dibujar grid de KPIs (2x2) con mejor padding y respiración
+     * Dibujar grid de KPIs (2x2) OPTIMIZADO
      */
     static dibujarGridKPIs(doc, kpis) {
         const startY = doc.y;
@@ -128,7 +129,7 @@ class PDFBase {
             const x = 50 + (col * (KPI_ANCHO + KPI_GAP));
             const y = startY + (row * (KPI_ALTO + KPI_GAP));
 
-            // Fondo del KPI con borde más grueso
+            // Fondo del KPI con borde
             doc.rect(x, y, KPI_ANCHO, KPI_ALTO)
                 .lineWidth(2)
                 .fillAndStroke(kpi.color, PDFStyles.COLORES.GRIS_BORDE);
@@ -141,25 +142,26 @@ class PDFBase {
             // Label (abajo izquierda)
             doc.fontSize(PDFStyles.FUENTES.TEXTO_PEQUENO)
                 .fillColor(PDFStyles.COLORES.BLANCO)
-                .text(kpi.label, x + KPI_PADDING, y + KPI_ALTO - 35, {
-                    width: KPI_ANCHO - KPI_PADDING * 2 - 85
+                .text(kpi.label, x + KPI_PADDING, y + KPI_ALTO - 28, {
+                    width: KPI_ANCHO - KPI_PADDING * 2 - 80
                 });
 
-            // Valor (derecha, más grande y prominente)
-            doc.fontSize(22)
+            // Valor (derecha, destacado)
+            doc.fontSize(PDFStyles.FUENTES.VALOR_KPI)
                 .fillColor(PDFStyles.COLORES.BLANCO)
-                .text(String(kpi.valor), x + KPI_ANCHO - 85, y + KPI_PADDING + 5, {
-                    width: 75,
+                .text(String(kpi.valor), x + KPI_ANCHO - 80, y + KPI_PADDING + 5, {
+                    width: 70,
                     align: 'right'
                 });
         });
 
-        // Actualizar posición Y con espacio adicional
-        doc.y = startY + (Math.ceil(kpis.length / 2) * (KPI_ALTO + KPI_GAP)) + PDFStyles.DIMENSIONES.ESPACIO_ENTRE_SECCIONES;
+        // Actualizar posición Y
+        doc.y = startY + (Math.ceil(kpis.length / 2) * (KPI_ALTO + KPI_GAP)) + 
+                PDFStyles.DIMENSIONES.ESPACIO_ENTRE_SECCIONES;
     }
 
     /**
-     * Dibujar tabla con formato mejorado (mayor padding y respiración)
+     * Dibujar tabla con formato mejorado y filas dinámicas
      */
     static dibujarTabla(doc, datos, anchos) {
         const startX = 50;
@@ -253,7 +255,7 @@ class PDFBase {
     }
 
     /**
-     * Verificar espacio y agregar página si es necesario
+     * Verificar espacio y agregar página si es necesario (MEJORADO)
      */
     static verificarEspacio(doc, alturaRequerida, tituloNuevaPagina = '') {
         const espacioDisponible = doc.page.height - doc.y - PDFStyles.DIMENSIONES.MARGEN_INFERIOR;
@@ -270,22 +272,258 @@ class PDFBase {
     }
 
     // ============================================
-    // GRÁFICOS VISUALES
+    // NUEVOS GRÁFICOS VISUALES
     // ============================================
 
     /**
-     * Dibujar gráfico de barras horizontal
-     * @param {Object} doc - Documento PDF
-     * @param {Array} datos - Array de {label, valor, maxValor}
-     * @param {Object} opciones - {ancho, altoBarra, titulo}
+     * NUEVO: Dibujar gráfico donut (rosca)
+     * Para estados de actividades o distribución por categorías
+     */
+    static dibujarDonut(doc, datos, opciones = {}) {
+        // Validar que doc.y sea un número válido
+        const currentY = typeof doc.y === 'number' && !isNaN(doc.y) ? doc.y : 100;
+
+        const {
+            centerX = 120,
+            centerY = currentY + 80,
+            radius = 70,
+            innerRadius = 45,
+            mostrarLeyenda = true
+        } = opciones;
+
+        // Validar datos y filtrar valores inválidos
+        const datosValidos = datos.filter(item =>
+            item && typeof item.valor === 'number' && !isNaN(item.valor) && item.valor > 0
+        );
+
+        if (datosValidos.length === 0) {
+            doc.fontSize(10).fillColor(PDFStyles.COLORES.GRIS)
+                .text('Sin datos para mostrar', centerX - 50, centerY - 10);
+            return;
+        }
+
+        const total = datosValidos.reduce((sum, item) => sum + item.valor, 0);
+
+        if (total === 0) {
+            doc.fontSize(10).fillColor(PDFStyles.COLORES.GRIS)
+                .text('Sin datos para mostrar', centerX - 50, centerY - 10);
+            return;
+        }
+
+        let startAngle = -90;
+
+        // Dibujar segmentos
+        datosValidos.forEach((item, index) => {
+            const angle = (item.valor / total) * 360;
+            const endAngle = startAngle + angle;
+
+            // Solo dibujar si el ángulo es válido
+            if (!isNaN(angle) && angle > 0) {
+                this._dibujarArcoDonut(doc, centerX, centerY, radius, innerRadius, startAngle, endAngle, item.color);
+            }
+
+            startAngle = endAngle;
+        });
+
+        // Centro blanco
+        doc.circle(centerX, centerY, innerRadius).fill(PDFStyles.COLORES.BLANCO);
+
+        // Valor central
+        doc.fontSize(20).fillColor(PDFStyles.COLORES.GRIS_TEXTO)
+            .text(String(total), centerX - 30, centerY - 10, { width: 60, align: 'center' });
+
+        // Leyenda (a la derecha)
+        if (mostrarLeyenda) {
+            let legendY = centerY - (datosValidos.length * 10);
+            const legendX = centerX + radius + 30;
+
+            datosValidos.forEach((item) => {
+                // Cuadrado de color
+                doc.rect(legendX, legendY, 10, 10).fill(item.color);
+
+                // Texto
+                doc.fontSize(9).fillColor(PDFStyles.COLORES.GRIS_TEXTO)
+                    .text(`${item.label}: ${item.valor}`, legendX + 15, legendY, { width: 150 });
+
+                legendY += 20;
+            });
+        }
+
+        // Actualizar posición Y
+        doc.y = centerY + radius + 20;
+    }
+
+    /**
+     * AUXILIAR: Dibujar arco para donut
+     */
+    static _dibujarArcoDonut(doc, cx, cy, radiusOuter, radiusInner, startAngle, endAngle, color) {
+        // Validar que todos los parámetros sean números válidos
+        if (isNaN(cx) || isNaN(cy) || isNaN(radiusOuter) || isNaN(radiusInner) || isNaN(startAngle) || isNaN(endAngle)) {
+            console.warn('⚠️ Valores inválidos en _dibujarArcoDonut:', { cx, cy, radiusOuter, radiusInner, startAngle, endAngle });
+            return;
+        }
+
+        const startRad = (startAngle * Math.PI) / 180;
+        const endRad = (endAngle * Math.PI) / 180;
+
+        // Punto inicial exterior
+        const x1 = cx + radiusOuter * Math.cos(startRad);
+        const y1 = cy + radiusOuter * Math.sin(startRad);
+
+        // Punto final exterior
+        const x2 = cx + radiusOuter * Math.cos(endRad);
+        const y2 = cy + radiusOuter * Math.sin(endRad);
+
+        // Punto inicial interior
+        const x3 = cx + radiusInner * Math.cos(endRad);
+        const y3 = cy + radiusInner * Math.sin(endRad);
+
+        // Punto final interior
+        const x4 = cx + radiusInner * Math.cos(startRad);
+        const y4 = cy + radiusInner * Math.sin(startRad);
+
+        // Validar puntos calculados
+        if (isNaN(x1) || isNaN(y1) || isNaN(x2) || isNaN(y2) || isNaN(x3) || isNaN(y3) || isNaN(x4) || isNaN(y4)) {
+            console.warn('⚠️ Puntos calculados inválidos en _dibujarArcoDonut');
+            return;
+        }
+
+        const largeArc = endAngle - startAngle > 180 ? 1 : 0;
+
+        doc.path(`
+            M ${x1} ${y1}
+            A ${radiusOuter} ${radiusOuter} 0 ${largeArc} 1 ${x2} ${y2}
+            L ${x3} ${y3}
+            A ${radiusInner} ${radiusInner} 0 ${largeArc} 0 ${x4} ${y4}
+            Z
+        `).fill(color);
+    }
+
+    /**
+     * NUEVO: Dibujar gauge (medidor semicircular)
+     * Para métricas como eficiencia
+     */
+    static dibujarGauge(doc, valor, opciones = {}) {
+        // Validar que doc.y sea un número válido
+        const currentY = typeof doc.y === 'number' && !isNaN(doc.y) ? doc.y : 100;
+
+        const {
+            centerX = 150,
+            centerY = currentY + 100,
+            radius = 80,
+            label = 'Eficiencia',
+            valorMax = 150,
+            unidad = '%'
+        } = opciones;
+
+        // Validar valor
+        if (typeof valor !== 'number' || isNaN(valor)) {
+            console.warn('⚠️ Valor inválido en dibujarGauge:', valor);
+            return;
+        }
+
+        // Fondo del gauge (gris)
+        this._dibujarArcoGauge(doc, centerX, centerY, radius, -180, 0, PDFStyles.COLORES.GRIS_CLARO);
+
+        // Calcular ángulo del valor (de -180° a 0°)
+        const porcentaje = Math.min(valor / valorMax, 1);
+        const angulo = -180 + (porcentaje * 180);
+
+        // Determinar color según valor
+        let color;
+        if (valor <= 100) color = PDFStyles.COLORES.VERDE;
+        else if (valor <= 120) color = PDFStyles.COLORES.AMARILLO;
+        else color = PDFStyles.COLORES.ROJO;
+
+        // Arco de progreso
+        this._dibujarArcoGauge(doc, centerX, centerY, radius, -180, angulo, color);
+
+        // Valor central
+        doc.fontSize(24).fillColor(PDFStyles.COLORES.GRIS_TEXTO)
+            .text(`${valor}${unidad}`, centerX - 40, centerY - 15, { width: 80, align: 'center' });
+
+        // Label
+        doc.fontSize(10).fillColor(PDFStyles.COLORES.GRIS)
+            .text(label, centerX - 50, centerY + 15, { width: 100, align: 'center' });
+
+        // Actualizar posición Y
+        doc.y = centerY + radius + 10;
+    }
+
+    /**
+     * AUXILIAR: Dibujar arco para gauge
+     */
+    static _dibujarArcoGauge(doc, cx, cy, radius, startAngle, endAngle, color) {
+        const startRad = (startAngle * Math.PI) / 180;
+        const endRad = (endAngle * Math.PI) / 180;
+
+        const x1 = cx + radius * Math.cos(startRad);
+        const y1 = cy + radius * Math.sin(startRad);
+        const x2 = cx + radius * Math.cos(endRad);
+        const y2 = cy + radius * Math.sin(endRad);
+
+        const largeArc = endAngle - startAngle > 180 ? 1 : 0;
+
+        doc.path(`
+            M ${x1} ${y1}
+            A ${radius} ${radius} 0 ${largeArc} 1 ${x2} ${y2}
+        `)
+        .lineWidth(15)
+        .stroke(color);
+    }
+
+    /**
+     * NUEVO: Dibujar progress bar (barra de progreso)
+     */
+    static dibujarProgressBar(doc, porcentaje, opciones = {}) {
+        const {
+            ancho = PDFStyles.DIMENSIONES.PROGRESS_BAR_ANCHO,
+            alto = PDFStyles.DIMENSIONES.PROGRESS_BAR_ALTURA,
+            x = doc.x,
+            y = doc.y,
+            mostrarPorcentaje = true
+        } = opciones;
+
+        // Fondo
+        doc.rect(x, y, ancho, alto)
+            .fill(PDFStyles.COLORES.GRIS_CLARO);
+
+        // Progreso
+        const anchoProgreso = (ancho * porcentaje) / 100;
+        const color = porcentaje >= 80 ? PDFStyles.COLORES.VERDE :
+                      porcentaje >= 50 ? PDFStyles.COLORES.AMARILLO :
+                      PDFStyles.COLORES.ROJO;
+
+        doc.rect(x, y, anchoProgreso, alto)
+            .fill(color);
+
+        // Porcentaje
+        if (mostrarPorcentaje) {
+            doc.fontSize(8).fillColor(PDFStyles.COLORES.GRIS_TEXTO)
+                .text(`${porcentaje.toFixed(1)}%`, x + ancho + 8, y + 2);
+        }
+
+        doc.y = y + alto + PDFStyles.DIMENSIONES.ESPACIO_ENTRE_ELEMENTOS;
+    }
+
+    /**
+     * Dibujar gráfico de barras horizontal (MEJORADO)
      */
     static dibujarBarrasHorizontal(doc, datos, opciones = {}) {
         const {
-            ancho = 350,
-            altoBarra = 25,
-            espacio = 10,
+            ancho = 320,
+            altoBarra = 22,
+            espacio = 8,
             titulo = ''
         } = opciones;
+
+        // Validar datos
+        if (!datos || datos.length === 0) {
+            doc.fontSize(10).fillColor(PDFStyles.COLORES.GRIS)
+                .text('Sin datos para mostrar', 50, doc.y);
+            doc.moveDown(1);
+            return;
+        }
 
         const startX = 70;
         const startY = doc.y;
@@ -299,29 +537,32 @@ class PDFBase {
 
         let currentY = doc.y;
 
-        // Calcular valor máximo para escala
-        const maxValor = Math.max(...datos.map(d => d.valor));
+        // Calcular valor máximo para escala (con validación para array vacío)
+        const valores = datos.map(d => d.valor).filter(v => typeof v === 'number' && !isNaN(v));
+        const maxValor = valores.length > 0 ? Math.max(...valores, 1) : 1;
 
-        datos.forEach((item, idx) => {
-            const proporcion = maxValor > 0 ? item.valor / maxValor : 0;
+        datos.forEach((item) => {
+            const proporcion = item.valor / maxValor;
             const anchoBarra = ancho * proporcion;
 
             // Label
             doc.fontSize(9).fillColor(PDFStyles.COLORES.GRIS_TEXTO)
-                .text(item.label, 50, currentY + 7, { width: 130 });
+                .text(item.label, 50, currentY + 6, { width: 120 });
 
             // Barra de fondo
-            doc.rect(startX + 140, currentY, ancho, altoBarra)
+            doc.rect(startX + 130, currentY, ancho, altoBarra)
                 .fill(PDFStyles.COLORES.GRIS_CLARO);
 
             // Barra de progreso
             const color = item.color || PDFStyles.COLORES.AZUL_MEDIO;
-            doc.rect(startX + 140, currentY, anchoBarra, altoBarra)
-                .fill(color);
+            if (anchoBarra > 0) {
+                doc.rect(startX + 130, currentY, anchoBarra, altoBarra)
+                    .fill(color);
+            }
 
             // Valor
             doc.fontSize(9).fillColor(PDFStyles.COLORES.GRIS_TEXTO)
-                .text(String(item.valor), startX + 140 + ancho + 10, currentY + 7);
+                .text(String(item.valor), startX + 130 + ancho + 10, currentY + 6);
 
             currentY += altoBarra + espacio;
         });
@@ -330,9 +571,7 @@ class PDFBase {
     }
 
     /**
-     * Dibujar comparativa de métricas (antes vs ahora)
-     * @param {Object} doc - Documento PDF
-     * @param {Object} datos - {label, valorAnterior, valorActual, unidad, mejoraEsMejor}
+     * Dibujar comparativa de métricas (MEJORADO)
      */
     static dibujarComparativa(doc, datos) {
         const startX = 80;
