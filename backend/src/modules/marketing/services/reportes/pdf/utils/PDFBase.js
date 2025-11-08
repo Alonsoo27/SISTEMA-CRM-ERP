@@ -9,10 +9,10 @@ const PDFStyles = require('./PDFStyles');
 
 class PDFBase {
     /**
-     * Crear documento PDF con configuración estándar
+     * Crear documento PDF con configuración estándar y footer automático
      */
-    static crearDocumento(titulo, autor = 'Sistema CRM/ERP') {
-        return new PDFDocument({
+    static crearDocumento(titulo, autor = 'Sistema CRM/ERP', opciones = {}) {
+        const doc = new PDFDocument({
             size: 'A4',
             margins: {
                 top: PDFStyles.DIMENSIONES.MARGEN_SUPERIOR,
@@ -24,8 +24,59 @@ class PDFBase {
                 Title: titulo,
                 Author: autor,
                 Subject: 'Reporte Corporativo'
-            }
+            },
+            autoFirstPage: false  // Controlar manualmente la primera página
         });
+
+        // Si se proporciona información de footer, configurar evento pageAdded
+        if (opciones.usuario && opciones.periodo) {
+            let pageNumber = 0;
+
+            // Listener para CADA página creada (automático o manual)
+            doc.on('pageAdded', () => {
+                pageNumber++;
+
+                // Guardar posición actual
+                const savedY = doc.y;
+                const savedX = doc.x;
+
+                // Calcular posición del footer (DENTRO de los márgenes)
+                const pageWidth = doc.page.width;
+                const footerY = doc.page.height - PDFStyles.DIMENSIONES.MARGEN_INFERIOR + 10;
+
+                // Línea separadora
+                doc.save();
+                doc.strokeColor(PDFStyles.COLORES.GRIS_BORDE)
+                    .lineWidth(1)
+                    .moveTo(50, footerY)
+                    .lineTo(pageWidth - 50, footerY)
+                    .stroke();
+
+                // Texto del footer
+                doc.fontSize(PDFStyles.FUENTES.TEXTO_MUY_PEQUENO)
+                    .fillColor(PDFStyles.COLORES.GRIS);
+
+                doc.text('Sistema CRM/ERP - Reporte de Productividad', 50, footerY + 5, {
+                    lineBreak: false
+                });
+                doc.text(`Usuario: ${opciones.usuario} | Período: ${opciones.periodo}`, 50, footerY + 15, {
+                    lineBreak: false
+                });
+                doc.text('CONFIDENCIAL - Uso interno exclusivo', 50, footerY + 25, {
+                    lineBreak: false,
+                    align: 'center',
+                    width: pageWidth - 100
+                });
+
+                doc.restore();
+
+                // CRITICAL: Restaurar posición exacta
+                doc.x = savedX;
+                doc.y = savedY;
+            });
+        }
+
+        return doc;
     }
 
     /**
@@ -239,6 +290,9 @@ class PDFBase {
         }
 
         doc.y = currentY + PDFStyles.DIMENSIONES.ESPACIO_ENTRE_ELEMENTOS;
+
+        // CRITICAL: Resetear X a margen izquierdo después de tabla
+        doc.x = PDFStyles.DIMENSIONES.MARGEN_IZQUIERDO;
     }
 
     // ============================================

@@ -17,7 +17,11 @@ class ProductividadPersonalPDF {
         try {
             const doc = PDFBase.crearDocumento(
                 `Reporte de Productividad - ${datos.usuario.nombre_completo}`,
-                'Sistema CRM/ERP'
+                'Sistema CRM/ERP',
+                {
+                    usuario: datos.usuario.nombre_completo,
+                    periodo: datos.periodo.descripcion
+                }
             );
 
             const bufferPromise = PDFBase.documentoABuffer(doc);
@@ -27,10 +31,8 @@ class ProductividadPersonalPDF {
             // ========================================
             // PÁGINA 1: DASHBOARD EJECUTIVO
             // ========================================
+            doc.addPage(); // Primera página manual (autoFirstPage = false)
             await this._generarDashboardEjecutivo(doc, datos, tieneActividades);
-
-            // Pie de página 1
-            PDFBase.dibujarPiePagina(doc, datos.usuario.nombre_completo, datos.periodo.descripcion);
 
             // Si no hay actividades, terminar aquí
             if (!tieneActividades) {
@@ -62,9 +64,6 @@ class ProductividadPersonalPDF {
                 this._generarSeccionProblemas(doc, datos);
             }
 
-            // Pie de página
-            PDFBase.dibujarPiePagina(doc, datos.usuario.nombre_completo, datos.periodo.descripcion);
-
             // ========================================
             // PÁGINA 3: INSIGHTS (condicional)
             // ========================================
@@ -91,9 +90,6 @@ class ProductividadPersonalPDF {
                     PDFBase.verificarEspacio(doc, 200);
                     this._generarConclusionesYRecomendaciones(doc, datos);
                 }
-
-                // Pie de página final
-                PDFBase.dibujarPiePagina(doc, datos.usuario.nombre_completo, datos.periodo.descripcion);
             }
 
             doc.end();
@@ -219,6 +215,9 @@ class ProductividadPersonalPDF {
                 fit: [480, 250],
                 align: 'center'
             });
+
+            // CRITICAL: Resetear X a margen izquierdo después de imagen
+            doc.x = PDFStyles.DIMENSIONES.MARGEN_IZQUIERDO;
             doc.moveDown(1);
         } else {
             doc.fontSize(10).fillColor(PDFStyles.COLORES.GRIS)
@@ -248,6 +247,9 @@ class ProductividadPersonalPDF {
                 fit: [440, 250],
                 align: 'center'
             });
+
+            // CRITICAL: Resetear X a margen izquierdo después de imagen
+            doc.x = PDFStyles.DIMENSIONES.MARGEN_IZQUIERDO;
             doc.moveDown(0.5);
 
             // Interpretación textual
@@ -374,6 +376,9 @@ class ProductividadPersonalPDF {
                 fit: [520, 300],
                 align: 'center'
             });
+
+            // CRITICAL: Resetear X a margen izquierdo después de imagen
+            doc.x = PDFStyles.DIMENSIONES.MARGEN_IZQUIERDO;
             doc.moveDown(1);
         } else {
             doc.fontSize(10).fillColor(PDFStyles.COLORES.GRIS)
