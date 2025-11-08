@@ -1471,9 +1471,14 @@ class ActividadesController {
                 SELECT
                     fecha_inicio_planeada,
                     fecha_fin_planeada,
+                    fecha_inicio_real,
+                    fecha_fin_real,
+                    COALESCE(fecha_inicio_real, fecha_inicio_planeada) as inicio_efectivo,
+                    COALESCE(fecha_fin_real, fecha_fin_planeada) as fin_efectivo,
                     duracion_planeada_minutos,
                     codigo,
-                    descripcion
+                    descripcion,
+                    estado
                 FROM actividades_marketing
                 WHERE usuario_id = $1
                   AND activo = true
@@ -1486,15 +1491,18 @@ class ActividadesController {
             `, [usuarioId, inicioDelDia, finDelDia]);
 
             const actividades = actividadesResult.rows.map(row => ({
-                inicio: new Date(row.fecha_inicio_planeada),
-                fin: new Date(row.fecha_fin_planeada),
+                inicio: new Date(row.inicio_efectivo),
+                fin: new Date(row.fin_efectivo),
                 codigo: row.codigo,
-                descripcion: row.descripcion
+                descripcion: row.descripcion,
+                estado: row.estado
             }));
 
             console.log(`📋 Actividades encontradas del día: ${actividades.length}`);
 
             // Encontrar huecos en el día
+            // IMPORTANTE: Usa fecha_fin_real si existe, sino fecha_fin_planeada
+            // Esto detecta huecos reales entre actividades completadas
             const huecos = [];
             let cursorTiempo = inicioDelDia;
 
@@ -1515,7 +1523,7 @@ class ActividadesController {
                     }
                 }
 
-                // Mover cursor al final de esta actividad
+                // Mover cursor al final de esta actividad (usa fecha_fin_real si existe)
                 cursorTiempo = new Date(Math.max(cursorTiempo, actividad.fin));
             }
 
@@ -1538,6 +1546,21 @@ class ActividadesController {
             const huecosCreados = [];
 
             for (const hueco of huecos) {
+                // Verificar si ya existe un hueco SISTEMA en este rango exacto
+                const huecoExistente = await query(`
+                    SELECT id, codigo FROM actividades_marketing
+                    WHERE usuario_id = $1
+                    AND tipo = 'sistema'
+                    AND activo = true
+                    AND fecha_inicio_planeada = $2
+                    AND fecha_fin_planeada = $3
+                `, [usuarioId, hueco.inicio, hueco.fin]);
+
+                if (huecoExistente.rows.length > 0) {
+                    console.log(`⏭️  Hueco ya existe: ${huecoExistente.rows[0].codigo} - omitiendo`);
+                    continue;
+                }
+
                 // Categorizar hueco
                 const categoria = actividadesService.categorizarHueco(
                     hueco.inicio,
