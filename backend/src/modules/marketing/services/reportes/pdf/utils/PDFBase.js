@@ -75,9 +75,12 @@ class PDFBase {
     }
 
     /**
-     * Dibujar pie de página
+     * Dibujar pie de página (FIXED: Guardar/restaurar doc.y)
      */
     static dibujarPiePagina(doc, usuario, periodo) {
+        // CRITICAL: Guardar doc.y antes de usar coordenadas absolutas
+        const savedY = doc.y;
+
         const pageHeight = doc.page.height;
         const pageWidth = doc.page.width;
         const yPos = pageHeight - PDFStyles.DIMENSIONES.ALTURA_PIE;
@@ -99,6 +102,9 @@ class PDFBase {
             align: 'center',
             width: pageWidth - 100
         });
+
+        // CRITICAL: Restaurar doc.y para no romper flujo
+        doc.y = savedY;
     }
 
     /**

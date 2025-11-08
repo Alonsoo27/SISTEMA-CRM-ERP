@@ -209,14 +209,17 @@ class ProductividadPersonalPDF {
 
         if (datosDonut.length > 0) {
             const donutBuffer = await PDFCharts.generarDonut(datosDonut, {
-                width: 500,
-                height: 300,
+                width: 450,
+                height: 250,
                 showLegend: true
             });
 
-            const currentY = doc.y;
-            doc.image(donutBuffer, 60, currentY, { width: 480 });
-            doc.y = currentY + 310;
+            // FIXED: NO usar coordenadas absolutas - usar solo flujo automático
+            doc.image(donutBuffer, {
+                fit: [480, 250],
+                align: 'center'
+            });
+            doc.moveDown(1);
         } else {
             doc.fontSize(10).fillColor(PDFStyles.COLORES.GRIS)
                 .text('Sin datos para mostrar', { indent: 20 });
@@ -234,15 +237,18 @@ class ProductividadPersonalPDF {
                 {
                     max: 150,
                     label: 'Eficiencia de Tiempo',
-                    width: 450,
-                    height: 300,
+                    width: 400,
+                    height: 250,
                     unidad: '%'
                 }
             );
 
-            const currentY = doc.y;
-            doc.image(gaugeBuffer, 80, currentY, { width: 440 });
-            doc.y = currentY + 310;
+            // FIXED: NO usar coordenadas absolutas - usar solo flujo automático
+            doc.image(gaugeBuffer, {
+                fit: [440, 250],
+                align: 'center'
+            });
+            doc.moveDown(0.5);
 
             // Interpretación textual
             const interpretacion = PDFStyles.getInterpretacionEficiencia(datos.metricas.tasas.eficiencia);
@@ -358,14 +364,17 @@ class ProductividadPersonalPDF {
 
             // Usar gráfico profesional de Chart.js
             const barrasBuffer = await PDFCharts.generarBarrasHorizontal(datosBarra, {
-                width: 600,
-                height: 350,
+                width: 550,
+                height: 300,
                 title: ''
             });
 
-            const currentY = doc.y;
-            doc.image(barrasBuffer, 30, currentY, { width: 540 });
-            doc.y = currentY + 360;
+            // FIXED: NO usar coordenadas absolutas - usar solo flujo automático
+            doc.image(barrasBuffer, {
+                fit: [520, 300],
+                align: 'center'
+            });
+            doc.moveDown(1);
         } else {
             doc.fontSize(10).fillColor(PDFStyles.COLORES.GRIS)
                 .text('Sin datos suficientes para análisis por día.', { indent: 20 });
