@@ -1,16 +1,17 @@
 // ============================================
 // GENERADOR PDF: PRODUCTIVIDAD PERSONAL
 // Reporte completo de productividad individual
-// VERSIÓN 3.0 - SIMPLIFICADA Y ROBUSTA
+// VERSIÓN 4.0 - CON GRÁFICOS PROFESIONALES
 // ============================================
 
 const PDFBase = require('../utils/PDFBase');
 const PDFStyles = require('../utils/PDFStyles');
+const PDFCharts = require('../utils/PDFCharts');
 
 class ProductividadPersonalPDF {
     /**
      * Generar reporte completo de productividad personal
-     * VERSIÓN SIMPLIFICADA: Solo usa elementos que funcionan correctamente en PDFKit
+     * VERSIÓN CON GRÁFICOS: Usa Chart.js para gráficos profesionales
      */
     static async generar(datos) {
         try {
@@ -26,7 +27,7 @@ class ProductividadPersonalPDF {
             // ========================================
             // PÁGINA 1: DASHBOARD EJECUTIVO
             // ========================================
-            this._generarDashboardEjecutivo(doc, datos, tieneActividades);
+            await this._generarDashboardEjecutivo(doc, datos, tieneActividades);
 
             // Pie de página 1
             PDFBase.dibujarPiePagina(doc, datos.usuario.nombre_completo, datos.periodo.descripcion);
@@ -52,7 +53,7 @@ class ProductividadPersonalPDF {
             // Productividad por día
             if (this._tieneProductividadDiaria(datos)) {
                 PDFBase.verificarEspacio(doc, 250);
-                this._generarSeccionProductividadDiaria(doc, datos);
+                await this._generarSeccionProductividadDiaria(doc, datos);
             }
 
             // Problemas detectados
@@ -109,9 +110,9 @@ class ProductividadPersonalPDF {
     // ============================================
 
     /**
-     * Dashboard ejecutivo SIMPLIFICADO - solo elementos que funcionan
+     * Dashboard ejecutivo con GRÁFICOS PROFESIONALES
      */
-    static _generarDashboardEjecutivo(doc, datos, tieneActividades) {
+    static async _generarDashboardEjecutivo(doc, datos, tieneActividades) {
         PDFBase.dibujarEncabezado(doc, 'REPORTE DE PRODUCTIVIDAD PERSONAL');
 
         // Información del usuario
@@ -146,23 +147,21 @@ class ProductividadPersonalPDF {
         const kpis = this._construirKPIs(datos);
         PDFBase.dibujarGridKPIs(doc, kpis);
 
-        // Estado de actividades - SOLO TABLA
+        // Estado de actividades - GRÁFICO DONUT
         doc.moveDown(1);
         doc.fontSize(14).fillColor(PDFStyles.COLORES.AZUL_OSCURO)
             .text('ESTADO DE ACTIVIDADES', { align: 'left', underline: true });
         doc.moveDown(0.5);
 
-        const tablaEstados = this._construirTablaEstadosDinamica(datos);
-        PDFBase.dibujarTabla(doc, tablaEstados, [200, 100, 120]);
+        await this._generarEstadoActividadesConGrafico(doc, datos);
 
-        // Análisis de tiempo - SOLO TABLA
+        // Análisis de tiempo - GAUGE CHART
         doc.moveDown(1);
         doc.fontSize(14).fillColor(PDFStyles.COLORES.AZUL_OSCURO)
             .text('ANÁLISIS DE TIEMPO', { align: 'left', underline: true });
         doc.moveDown(0.5);
 
-        const tablaTiempos = this._construirTablaTiempos(datos);
-        PDFBase.dibujarTabla(doc, tablaTiempos, [220, 150]);
+        await this._generarAnalisisTiempoConGauge(doc, datos);
 
         // Actividades prioritarias - BARRA SIMPLE
         doc.moveDown(1);
@@ -171,6 +170,96 @@ class ProductividadPersonalPDF {
         doc.moveDown(0.5);
 
         this._generarActividadesPrioritarias(doc, datos);
+    }
+
+    /**
+     * NUEVO: Generar estado de actividades con gráfico donut real
+     */
+    static async _generarEstadoActividadesConGrafico(doc, datos) {
+        const datosDonut = [];
+
+        if (datos.metricas.totales.completadas > 0) {
+            datosDonut.push({
+                label: 'Completadas',
+                valor: datos.metricas.totales.completadas,
+                color: PDFStyles.COLORES.VERDE
+            });
+        }
+        if (datos.metricas.totales.en_progreso > 0) {
+            datosDonut.push({
+                label: 'En Progreso',
+                valor: datos.metricas.totales.en_progreso,
+                color: PDFStyles.COLORES.AZUL_MEDIO
+            });
+        }
+        if (datos.metricas.totales.pendientes > 0) {
+            datosDonut.push({
+                label: 'Pendientes',
+                valor: datos.metricas.totales.pendientes,
+                color: PDFStyles.COLORES.AMARILLO
+            });
+        }
+        if (datos.metricas.totales.canceladas > 0) {
+            datosDonut.push({
+                label: 'Canceladas',
+                valor: datos.metricas.totales.canceladas,
+                color: PDFStyles.COLORES.GRIS
+            });
+        }
+
+        if (datosDonut.length > 0) {
+            const donutBuffer = await PDFCharts.generarDonut(datosDonut, {
+                width: 500,
+                height: 300,
+                showLegend: true
+            });
+
+            const currentY = doc.y;
+            doc.image(donutBuffer, 60, currentY, { width: 480 });
+            doc.y = currentY + 310;
+        } else {
+            doc.fontSize(10).fillColor(PDFStyles.COLORES.GRIS)
+                .text('Sin datos para mostrar', { indent: 20 });
+            doc.moveDown(1);
+        }
+    }
+
+    /**
+     * NUEVO: Generar análisis de tiempo con gauge real
+     */
+    static async _generarAnalisisTiempoConGauge(doc, datos) {
+        if (datos.metricas.tiempos.total_real_minutos > 0) {
+            const gaugeBuffer = await PDFCharts.generarGauge(
+                datos.metricas.tasas.eficiencia,
+                {
+                    max: 150,
+                    label: 'Eficiencia de Tiempo',
+                    width: 450,
+                    height: 300,
+                    unidad: '%'
+                }
+            );
+
+            const currentY = doc.y;
+            doc.image(gaugeBuffer, 80, currentY, { width: 440 });
+            doc.y = currentY + 310;
+
+            // Interpretación textual
+            const interpretacion = PDFStyles.getInterpretacionEficiencia(datos.metricas.tasas.eficiencia);
+            doc.fontSize(10).fillColor(interpretacion.color)
+                .text(`${interpretacion.nivel}: ${interpretacion.texto}`, { indent: 20 });
+
+            // Métricas adicionales
+            doc.moveDown(0.5);
+            doc.fontSize(9).fillColor(PDFStyles.COLORES.GRIS_TEXTO);
+            doc.text(`Tiempo Planeado: ${PDFBase.minutosAHoras(datos.metricas.tiempos.total_planeado_minutos)}`, { indent: 20 });
+            doc.text(`Tiempo Real: ${PDFBase.minutosAHoras(datos.metricas.tiempos.total_real_minutos)}`, { indent: 20 });
+            doc.text(`Extensiones: ${datos.metricas.tiempos.con_extension}`, { indent: 20 });
+        } else {
+            doc.fontSize(10).fillColor(PDFStyles.COLORES.GRIS)
+                .text('Sin datos suficientes para análisis de tiempo', { indent: 20 });
+            doc.moveDown(1);
+        }
     }
 
     /**
@@ -253,7 +342,7 @@ class ProductividadPersonalPDF {
         doc.moveDown(1);
     }
 
-    static _generarSeccionProductividadDiaria(doc, datos) {
+    static async _generarSeccionProductividadDiaria(doc, datos) {
         doc.fontSize(14).fillColor(PDFStyles.COLORES.AZUL_OSCURO)
             .text('PRODUCTIVIDAD POR DÍA DE LA SEMANA', { align: 'left', underline: true });
         doc.moveDown(1);
@@ -267,11 +356,16 @@ class ProductividadPersonalPDF {
                 color: PDFStyles.COLORES.AZUL_MEDIO
             }));
 
-            PDFBase.dibujarBarrasHorizontal(doc, datosBarra, {
-                titulo: '',
-                ancho: 320,
-                altoBarra: 22
+            // Usar gráfico profesional de Chart.js
+            const barrasBuffer = await PDFCharts.generarBarrasHorizontal(datosBarra, {
+                width: 600,
+                height: 350,
+                title: ''
             });
+
+            const currentY = doc.y;
+            doc.image(barrasBuffer, 30, currentY, { width: 540 });
+            doc.y = currentY + 360;
         } else {
             doc.fontSize(10).fillColor(PDFStyles.COLORES.GRIS)
                 .text('Sin datos suficientes para análisis por día.', { indent: 20 });

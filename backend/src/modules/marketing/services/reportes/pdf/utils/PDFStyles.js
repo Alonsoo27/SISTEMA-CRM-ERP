@@ -1,6 +1,7 @@
 // ============================================
 // ESTILOS CORPORATIVOS PARA PDFs
 // Configuración centralizada de colores, fuentes y dimensiones
+// VERSIÓN OPTIMIZADA v2.0
 // ============================================
 
 class PDFStyles {
@@ -27,7 +28,13 @@ class PDFStyles {
 
         // Específicos
         PURPURA: '#8b5cf6',
-        NARANJA: '#f59e0b'
+        NARANJA: '#f59e0b',
+        
+        // Nuevos: para gráficos
+        AZUL_SUAVE: '#60a5fa',
+        VERDE_SUAVE: '#34d399',
+        AMARILLO_SUAVE: '#fbbf24',
+        ROJO_SUAVE: '#f87171'
     };
 
     // ============================================
@@ -40,35 +47,48 @@ class PDFStyles {
         SUBTITULO: 12,
         TEXTO_NORMAL: 10,
         TEXTO_PEQUENO: 9,
-        TEXTO_MUY_PEQUENO: 8
+        TEXTO_MUY_PEQUENO: 8,
+        // Nuevo: para valores destacados
+        VALOR_KPI: 22
     };
 
     // ============================================
-    // DIMENSIONES
+    // DIMENSIONES OPTIMIZADAS
     // ============================================
     static DIMENSIONES = {
+        // Márgenes de página
         MARGEN_SUPERIOR: 50,
         MARGEN_INFERIOR: 70,
         MARGEN_IZQUIERDO: 50,
         MARGEN_DERECHO: 50,
 
+        // Elementos de página
         ALTURA_ENCABEZADO: 80,
         ALTURA_PIE: 60,
 
-        // KPI Cards (mejorado para más respiración)
-        KPI_ANCHO: 240,
-        KPI_ALTO: 95,        // Aumentado de 80 a 95
-        KPI_GAP: 25,         // Aumentado de 20 a 25
-        KPI_PADDING: 15,     // Nuevo: padding interno
+        // KPI Cards (optimizado para mejor densidad)
+        KPI_ANCHO: 235,
+        KPI_ALTO: 75,         // Reducido de 95 → ahorro 20px por fila
+        KPI_GAP: 18,          // Reducido de 25 → ahorro 7px
+        KPI_PADDING: 12,      // Reducido de 15
 
-        // Tablas (mejorado para legibilidad)
-        TABLA_FILA_ALTURA: 32,        // Aumentado de 25 a 32
-        TABLA_PADDING_VERTICAL: 10,   // Nuevo: padding vertical
-        TABLA_PADDING_HORIZONTAL: 8,  // Nuevo: padding horizontal
+        // Tablas (optimizado para legibilidad sin exceso)
+        TABLA_FILA_ALTURA: 28,           // Reducido de 32
+        TABLA_PADDING_VERTICAL: 8,       // Reducido de 10
+        TABLA_PADDING_HORIZONTAL: 6,     // Reducido de 8
 
-        // Espaciado entre secciones
-        ESPACIO_ENTRE_SECCIONES: 25,  // Nuevo: espacio estándar
-        ESPACIO_ENTRE_ELEMENTOS: 15   // Nuevo: espacio menor
+        // Espaciado entre elementos
+        ESPACIO_ENTRE_SECCIONES: 20,     // Reducido de 25
+        ESPACIO_ENTRE_ELEMENTOS: 12,     // Reducido de 15
+        
+        // Nuevos: para gráficos
+        ALTURA_GRAFICO_PEQUENO: 120,
+        ALTURA_GRAFICO_MEDIANO: 180,
+        ALTURA_GRAFICO_GRANDE: 240,
+        
+        // Nuevos: para progress bars
+        PROGRESS_BAR_ALTURA: 12,
+        PROGRESS_BAR_ANCHO: 200
     };
 
     // ============================================
@@ -146,6 +166,35 @@ class PDFStyles {
                 color: this.COLORES.ROJO
             };
         }
+    }
+    
+    /**
+     * NUEVO: Obtener color para gráfico donut por índice
+     */
+    static getColorDonutPorIndice(indice) {
+        const colores = [
+            this.COLORES.VERDE,
+            this.COLORES.AZUL_MEDIO,
+            this.COLORES.AMARILLO,
+            this.COLORES.ROJO,
+            this.COLORES.PURPURA,
+            this.COLORES.NARANJA
+        ];
+        return colores[indice % colores.length];
+    }
+    
+    /**
+     * NUEVO: Obtener color por estado de actividad
+     */
+    static getColorPorEstado(estado) {
+        const coloresEstado = {
+            'completada': this.COLORES.VERDE,
+            'en_progreso': this.COLORES.AZUL_MEDIO,
+            'pendiente': this.COLORES.AMARILLO,
+            'cancelada': this.COLORES.GRIS,
+            'no_realizada': this.COLORES.ROJO
+        };
+        return coloresEstado[estado] || this.COLORES.GRIS;
     }
 }
 
