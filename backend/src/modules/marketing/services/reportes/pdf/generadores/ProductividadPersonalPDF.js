@@ -144,10 +144,10 @@ class ProductividadPersonalPDF {
         PDFBase.dibujarGridKPIs(doc, kpis);
 
         // Estado de actividades - GRÁFICO DONUT
-        doc.moveDown(1);
+        doc.moveDown(0.8);
         doc.fontSize(14).fillColor(PDFStyles.COLORES.AZUL_OSCURO)
-            .text('ESTADO DE ACTIVIDADES', { align: 'left', underline: true });
-        doc.moveDown(0.5);
+            .text('ESTADO DE ACTIVIDADES', { align: 'center', underline: true });
+        doc.moveDown(0.3);
 
         await this._generarEstadoActividadesConGrafico(doc, datos);
 
@@ -209,6 +209,9 @@ class ProductividadPersonalPDF {
                 height: 250,
                 showLegend: true
             });
+
+            // CRITICAL: Asegurar X está en margen izquierdo ANTES de insertar imagen
+            doc.x = PDFStyles.DIMENSIONES.MARGEN_IZQUIERDO;
 
             // FIXED: NO usar coordenadas absolutas - usar solo flujo automático
             doc.image(donutBuffer, {

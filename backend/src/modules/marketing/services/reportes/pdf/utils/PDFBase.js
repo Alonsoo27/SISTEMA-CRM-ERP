@@ -30,49 +30,64 @@ class PDFBase {
 
         // Si se proporciona información de footer, configurar evento pageAdded
         if (opciones.usuario && opciones.periodo) {
-            let pageNumber = 0;
+            let isDrawingFooter = false; // Flag para prevenir loop infinito
 
             // Listener para CADA página creada (automático o manual)
             doc.on('pageAdded', () => {
-                pageNumber++;
+                // CRITICAL: Prevenir loop infinito
+                if (isDrawingFooter) return;
 
-                // Guardar posición actual
-                const savedY = doc.y;
-                const savedX = doc.x;
+                isDrawingFooter = true;
 
-                // Calcular posición del footer (DENTRO de los márgenes)
-                const pageWidth = doc.page.width;
-                const footerY = doc.page.height - PDFStyles.DIMENSIONES.MARGEN_INFERIOR + 10;
+                try {
+                    // Guardar estado actual
+                    const savedY = doc.y;
+                    const savedX = doc.x;
+                    const savedBottomMargin = doc.page.margins.bottom;
 
-                // Línea separadora
-                doc.save();
-                doc.strokeColor(PDFStyles.COLORES.GRIS_BORDE)
-                    .lineWidth(1)
-                    .moveTo(50, footerY)
-                    .lineTo(pageWidth - 50, footerY)
-                    .stroke();
+                    // CRITICAL: Desactivar margen inferior temporalmente
+                    doc.page.margins.bottom = 0;
 
-                // Texto del footer
-                doc.fontSize(PDFStyles.FUENTES.TEXTO_MUY_PEQUENO)
-                    .fillColor(PDFStyles.COLORES.GRIS);
+                    // Calcular posición del footer (ahora SÍ podemos escribir aquí)
+                    const pageWidth = doc.page.width;
+                    const footerY = doc.page.height - 50;
 
-                doc.text('Sistema CRM/ERP - Reporte de Productividad', 50, footerY + 5, {
-                    lineBreak: false
-                });
-                doc.text(`Usuario: ${opciones.usuario} | Período: ${opciones.periodo}`, 50, footerY + 15, {
-                    lineBreak: false
-                });
-                doc.text('CONFIDENCIAL - Uso interno exclusivo', 50, footerY + 25, {
-                    lineBreak: false,
-                    align: 'center',
-                    width: pageWidth - 100
-                });
+                    // Línea separadora
+                    doc.strokeColor(PDFStyles.COLORES.GRIS_BORDE)
+                        .lineWidth(1)
+                        .moveTo(50, footerY)
+                        .lineTo(pageWidth - 50, footerY)
+                        .stroke();
 
-                doc.restore();
+                    // Texto del footer (sin align ni width para evitar page breaks)
+                    doc.fontSize(PDFStyles.FUENTES.TEXTO_MUY_PEQUENO)
+                        .fillColor(PDFStyles.COLORES.GRIS);
 
-                // CRITICAL: Restaurar posición exacta
-                doc.x = savedX;
-                doc.y = savedY;
+                    doc.text('Sistema CRM/ERP - Reporte de Productividad', 50, footerY + 5, {
+                        lineBreak: false
+                    });
+                    doc.text(`Usuario: ${opciones.usuario} | Período: ${opciones.periodo}`, 50, footerY + 15, {
+                        lineBreak: false
+                    });
+
+                    // Centrar manualmente el texto de confidencial
+                    const confidencialText = 'CONFIDENCIAL - Uso interno exclusivo';
+                    const textWidth = doc.widthOfString(confidencialText);
+                    const centeredX = (pageWidth - textWidth) / 2;
+                    doc.text(confidencialText, centeredX, footerY + 25, {
+                        lineBreak: false
+                    });
+
+                    // Restaurar margen inferior
+                    doc.page.margins.bottom = savedBottomMargin;
+
+                    // Restaurar posición
+                    doc.x = savedX;
+                    doc.y = savedY;
+
+                } finally {
+                    isDrawingFooter = false;
+                }
             });
         }
 
@@ -213,8 +228,11 @@ class PDFBase {
         });
 
         // Actualizar posición Y
-        doc.y = startY + (Math.ceil(kpis.length / 2) * (KPI_ALTO + KPI_GAP)) + 
+        doc.y = startY + (Math.ceil(kpis.length / 2) * (KPI_ALTO + KPI_GAP)) +
                 PDFStyles.DIMENSIONES.ESPACIO_ENTRE_SECCIONES;
+
+        // CRITICAL: Resetear X a margen izquierdo después de KPIs
+        doc.x = PDFStyles.DIMENSIONES.MARGEN_IZQUIERDO;
     }
 
     /**
