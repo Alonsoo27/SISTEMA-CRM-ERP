@@ -62,7 +62,8 @@ class PorCategoriaPDF {
             // RESUMEN EJECUTIVO
             // ========================================
             doc.moveDown(1.5);
-            PDFBase.dibujarSubtitulo(doc, '📊 RESUMEN EJECUTIVO');
+            doc.fontSize(14).fillColor(PDFStyles.COLORES.AZUL_OSCURO)
+                .text('📊 RESUMEN EJECUTIVO', { align: 'center', underline: true });
             doc.moveDown(0.5);
 
             const resumen = this._construirResumenEjecutivo(datos);
@@ -72,7 +73,8 @@ class PorCategoriaPDF {
             // DISTRIBUCIÓN POR CATEGORÍA PRINCIPAL
             // ========================================
             doc.moveDown(1.5);
-            PDFBase.dibujarSubtitulo(doc, '🎯 DISTRIBUCIÓN POR CATEGORÍA PRINCIPAL');
+            doc.fontSize(14).fillColor(PDFStyles.COLORES.AZUL_OSCURO)
+                .text('🎯 DISTRIBUCIÓN POR CATEGORÍA PRINCIPAL', { align: 'center', underline: true });
             doc.moveDown(0.5);
 
             const distribucion = this._construirDistribucionPrincipal(datos);
@@ -90,7 +92,8 @@ class PorCategoriaPDF {
             // TOP 5 CATEGORÍAS
             // ========================================
             doc.moveDown(1.5);
-            PDFBase.dibujarSubtitulo(doc, '🏆 TOP 5 CATEGORÍAS (Mayor Tiempo Invertido)');
+            doc.fontSize(14).fillColor(PDFStyles.COLORES.AZUL_OSCURO)
+                .text('🏆 TOP 5 CATEGORÍAS (Mayor Tiempo Invertido)', { align: 'center', underline: true });
             doc.moveDown(0.5);
 
             const top5 = this._construirTop5(datos);
@@ -101,7 +104,8 @@ class PorCategoriaPDF {
             // ========================================
             if (datos.categorias.length > 0) {
                 doc.moveDown(1.5);
-                PDFBase.dibujarSubtitulo(doc, '💡 INSIGHTS Y RECOMENDACIONES');
+                doc.fontSize(14).fillColor(PDFStyles.COLORES.AZUL_OSCURO)
+                    .text('💡 INSIGHTS Y RECOMENDACIONES', { align: 'center', underline: true });
                 doc.moveDown(0.5);
 
                 const insights = this._generarInsights(datos);
