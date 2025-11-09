@@ -457,6 +457,76 @@ const marketingService = {
         a.click();
         a.remove();
         window.URL.revokeObjectURL(url);
+    },
+
+    // ============================================
+    // REPORTES POR CATEGORÍA
+    // ============================================
+
+    /**
+     * Obtener datos para reporte por categoría (JSON)
+     */
+    async obtenerDatosReporteCategoria(usuarioId, periodo = 'mes_actual') {
+        const response = await apiClient.get(`/marketing/reportes/categoria/${usuarioId}/datos`, {
+            params: { periodo }
+        });
+        return response.data;
+    },
+
+    /**
+     * Descargar reporte por categoría en PDF
+     */
+    async descargarReporteCategoriaPDF(usuarioId, periodo = 'mes_actual') {
+        const response = await fetch(
+            `${apiClient.baseURL}/marketing/reportes/categoria/${usuarioId}/pdf?periodo=${periodo}`,
+            {
+                method: 'GET',
+                headers: apiClient.getHeaders()
+            }
+        );
+
+        if (!response.ok) {
+            const error = await response.json();
+            throw error;
+        }
+
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `Reporte_Categoria_${periodo}.pdf`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        window.URL.revokeObjectURL(url);
+    },
+
+    /**
+     * Descargar reporte por categoría en Excel
+     */
+    async descargarReporteCategoriaExcel(usuarioId, periodo = 'mes_actual') {
+        const response = await fetch(
+            `${apiClient.baseURL}/marketing/reportes/categoria/${usuarioId}/excel?periodo=${periodo}`,
+            {
+                method: 'GET',
+                headers: apiClient.getHeaders()
+            }
+        );
+
+        if (!response.ok) {
+            const error = await response.json();
+            throw error;
+        }
+
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `Reporte_Categoria_${periodo}.xlsx`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        window.URL.revokeObjectURL(url);
     }
 };
 

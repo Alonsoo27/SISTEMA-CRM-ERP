@@ -95,6 +95,38 @@ const ReportesMarketing = ({ usuarioId, esJefe }) => {
         }
     };
 
+    // ============================================
+    // HANDLERS REPORTE POR CATEGORÍA
+    // ============================================
+
+    const handleGenerarCategoriaPDF = async () => {
+        setLoading(prev => ({ ...prev, categoriaPdf: true }));
+        setError(null);
+
+        try {
+            await marketingService.descargarReporteCategoriaPDF(usuarioSeleccionado, periodo);
+        } catch (err) {
+            console.error('Error generando PDF por categoría:', err);
+            setError(err.message || 'Error al generar reporte PDF por categoría');
+        } finally {
+            setLoading(prev => ({ ...prev, categoriaPdf: false }));
+        }
+    };
+
+    const handleGenerarCategoriaExcel = async () => {
+        setLoading(prev => ({ ...prev, categoriaExcel: true }));
+        setError(null);
+
+        try {
+            await marketingService.descargarReporteCategoriaExcel(usuarioSeleccionado, periodo);
+        } catch (err) {
+            console.error('Error generando Excel por categoría:', err);
+            setError(err.message || 'Error al generar reporte Excel por categoría');
+        } finally {
+            setLoading(prev => ({ ...prev, categoriaExcel: false }));
+        }
+    };
+
     return (
         <div className="space-y-6">
             {/* Header */}
@@ -216,29 +248,53 @@ const ReportesMarketing = ({ usuarioId, esJefe }) => {
                 </div>
             </div>
 
-            {/* Otros reportes (próximamente) */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {/* Reporte por Categorías */}
-                <div className="bg-white rounded-lg shadow-lg p-6 opacity-60">
-                    <div className="flex items-center gap-3 mb-4">
-                        <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
-                            <span className="text-2xl">🎯</span>
-                        </div>
-                        <div>
-                            <h3 className="text-lg font-bold text-gray-900">Por Categoría</h3>
-                            <p className="text-sm text-gray-500">Distribución de trabajo</p>
-                        </div>
+            {/* Reporte por Categorías - ACTIVO */}
+            <div className="bg-gradient-to-br from-purple-50 to-pink-50 rounded-lg shadow-lg p-6 border border-purple-200">
+                <div className="flex items-center gap-3 mb-4">
+                    <div className="w-16 h-16 bg-gradient-to-br from-purple-500 to-pink-600 rounded-lg flex items-center justify-center shadow-md">
+                        <span className="text-3xl">🎯</span>
                     </div>
-                    <p className="text-sm text-gray-600 mb-4">
-                        Análisis del tiempo invertido por tipo de actividad con gráficos.
+                    <div>
+                        <h3 className="text-xl font-bold text-gray-900">Reporte por Categoría</h3>
+                        <p className="text-sm text-gray-600">Distribución de Trabajo</p>
+                    </div>
+                </div>
+
+                <div className="bg-white rounded-lg p-4 mb-4">
+                    <p className="text-sm text-gray-700 mb-2">
+                        <strong>📋 Incluye:</strong>
                     </p>
+                    <ul className="text-sm text-gray-600 space-y-1 ml-4">
+                        <li>• Totales de actividades por estado</li>
+                        <li>• Distribución por categoría y subcategoría</li>
+                        <li>• Tasas de completitud</li>
+                        <li>• Tiempos totales y promedios por categoría</li>
+                        <li>• Listado completo de actividades detalladas</li>
+                    </ul>
+                </div>
+
+                {/* Botones de acción */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     <button
-                        disabled
-                        className="w-full px-4 py-2 bg-gray-300 text-gray-500 rounded-lg cursor-not-allowed"
+                        onClick={handleGenerarCategoriaPDF}
+                        disabled={loading.categoriaPdf}
+                        className="px-4 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors font-medium shadow-sm"
                     >
-                        Próximamente
+                        {loading.categoriaPdf ? '⏳ Generando...' : '📄 Descargar PDF'}
+                    </button>
+
+                    <button
+                        onClick={handleGenerarCategoriaExcel}
+                        disabled={loading.categoriaExcel}
+                        className="px-4 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors font-medium shadow-sm"
+                    >
+                        {loading.categoriaExcel ? '⏳ Generando...' : '📗 Descargar Excel'}
                     </button>
                 </div>
+            </div>
+
+            {/* Otros reportes (próximamente) */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
 
                 {/* Reporte de Equipo */}
                 <div className="bg-white rounded-lg shadow-lg p-6 opacity-60">
