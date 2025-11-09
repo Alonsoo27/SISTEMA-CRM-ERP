@@ -5,6 +5,7 @@
 
 const ProductividadPersonalPDF = require('./reportes/pdf/generadores/ProductividadPersonalPDF');
 const PorCategoriaPDF = require('./reportes/pdf/generadores/PorCategoriaPDF');
+const EquipoPDF = require('./reportes/pdf/generadores/EquipoPDF');
 
 /**
  * Servicio principal que mantiene compatibilidad con código existente
@@ -25,17 +26,16 @@ class ReportePDFService {
         return await PorCategoriaPDF.generar(datos);
     }
 
+    /**
+     * Generar reporte de equipo en PDF
+     */
+    static async generarEquipo(datos) {
+        return await EquipoPDF.generar(datos);
+    }
+
     // ============================================
     // FUTUROS REPORTES (agregar aquí)
     // ============================================
-
-    /**
-     * Generar reporte de equipo (futuro)
-     */
-    // static async generarEquipo(datos) {
-    //     const EquipoPDF = require('./reportes/pdf/generadores/EquipoPDF');
-    //     return await EquipoPDF.generar(datos);
-    // }
 
     /**
      * Generar reporte mensual (futuro)

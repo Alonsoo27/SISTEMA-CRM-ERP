@@ -5,6 +5,7 @@
 
 const ProductividadPersonalExcel = require('./reportes/excel/generadores/ProductividadPersonalExcel');
 const PorCategoriaExcel = require('./reportes/excel/generadores/PorCategoriaExcel');
+const EquipoExcel = require('./reportes/excel/generadores/EquipoExcel');
 
 /**
  * Servicio principal que mantiene compatibilidad con código existente
@@ -26,17 +27,16 @@ class ReporteExcelService {
         return await PorCategoriaExcel.generar(datos);
     }
 
+    /**
+     * Generar reporte de equipo en Excel
+     */
+    static async generarEquipo(datos) {
+        return await EquipoExcel.generar(datos);
+    }
+
     // ============================================
     // FUTUROS REPORTES (agregar aquí)
     // ============================================
-
-    /**
-     * Generar reporte de equipo (futuro)
-     */
-    // static async generarEquipo(datos) {
-    //     const EquipoExcel = require('./reportes/excel/generadores/EquipoExcel');
-    //     return await EquipoExcel.generar(datos);
-    // }
 
     /**
      * Generar reporte mensual (futuro)
