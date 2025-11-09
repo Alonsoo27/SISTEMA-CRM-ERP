@@ -110,14 +110,21 @@ class ExcelBase {
             excelRow.values = row;
 
             if (idx === 0) {
-                // Encabezado
-                Object.assign(excelRow, ExcelStyles.ENCABEZADO_TABLA);
+                // Encabezado - aplicar estilo solo a celdas con datos
                 excelRow.height = 25;
+                row.forEach((_, colIdx) => {
+                    const cell = excelRow.getCell(colIdx + 1);
+                    Object.assign(cell, ExcelStyles.ENCABEZADO_TABLA);
+                });
             } else {
-                // Filas de datos
-                excelRow.fill = ExcelStyles.getFillFilaAlterna(idx);
-                excelRow.alignment = ExcelStyles.CELDA_DATOS.alignment;
-                excelRow.border = ExcelStyles.BORDE_COMPLETO;
+                // Filas de datos - aplicar estilo solo a celdas con datos
+                const fillAlterna = ExcelStyles.getFillFilaAlterna(idx);
+                row.forEach((_, colIdx) => {
+                    const cell = excelRow.getCell(colIdx + 1);
+                    cell.fill = fillAlterna;
+                    cell.alignment = ExcelStyles.CELDA_DATOS.alignment;
+                    cell.border = ExcelStyles.BORDE_COMPLETO;
+                });
             }
         });
 
@@ -159,10 +166,13 @@ class ExcelBase {
         const cellTexto = sheet.getCell(`${rangoColumnas.split(':')[0]}${rowInicio + 2}`);
         cellTexto.value = texto;
         cellTexto.font = { size: 10, italic: true };
+
+        // Calcular transparencia correctamente: reemplazar FF (opaco) por CC (80% opacidad)
+        const colorConTransparencia = color.replace(/^FF/, 'CC');
         cellTexto.fill = {
             type: 'pattern',
             pattern: 'solid',
-            fgColor: { argb: color + '20' } // Transparencia
+            fgColor: { argb: colorConTransparencia }
         };
         cellTexto.alignment = { vertical: 'middle', horizontal: 'left', wrapText: true };
         sheet.getRow(rowInicio + 2).height = 40;
