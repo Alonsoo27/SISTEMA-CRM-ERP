@@ -450,4 +450,34 @@ router.get('/reportes/categoria/:usuarioId/excel',
     ReportesController.generarReportePorCategoriaExcel
 );
 
+/**
+ * Obtener datos para reporte de equipo (JSON)
+ * Roles: Jefes y ejecutivos
+ */
+router.get('/reportes/equipo/datos',
+    authenticateToken,
+    requireRole(GRUPOS_ROLES.JEFES_Y_EJECUTIVOS),
+    ReportesController.obtenerDatosEquipo
+);
+
+/**
+ * Generar reporte de equipo en PDF
+ * Roles: Jefes y ejecutivos
+ */
+router.get('/reportes/equipo/pdf',
+    authenticateToken,
+    requireRole(GRUPOS_ROLES.JEFES_Y_EJECUTIVOS),
+    ReportesController.generarReporteEquipoPDF
+);
+
+/**
+ * Generar reporte de equipo en Excel
+ * Roles: Jefes y ejecutivos
+ */
+router.get('/reportes/equipo/excel',
+    authenticateToken,
+    requireRole(GRUPOS_ROLES.JEFES_Y_EJECUTIVOS),
+    ReportesController.generarReporteEquipoExcel
+);
+
 module.exports = router;

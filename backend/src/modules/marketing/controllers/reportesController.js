@@ -286,6 +286,90 @@ class ReportesController {
             });
         }
     }
+
+    // ============================================
+    // REPORTE DE EQUIPO
+    // ============================================
+
+    /**
+     * Obtener datos para reporte de equipo (endpoint JSON)
+     */
+    static async obtenerDatosEquipo(req, res) {
+        try {
+            const { periodo = 'mes_actual' } = req.query;
+
+            const datos = await ReportesQueries.obtenerDatosEquipo(periodo);
+
+            return res.json({
+                success: true,
+                data: datos
+            });
+
+        } catch (error) {
+            console.error('❌ Error obteniendo datos de equipo:', error);
+            return res.status(error.status || 500).json({
+                success: false,
+                message: error.message || 'Error al obtener datos de equipo',
+                error: error.message
+            });
+        }
+    }
+
+    /**
+     * Generar reporte de equipo en PDF
+     */
+    static async generarReporteEquipoPDF(req, res) {
+        try {
+            const { periodo = 'mes_actual' } = req.query;
+
+            // Obtener datos
+            const datos = await ReportesQueries.obtenerDatosEquipo(periodo);
+
+            // Generar PDF
+            const pdfBuffer = await ReportePDFService.generarEquipo(datos);
+
+            // Enviar PDF
+            res.setHeader('Content-Type', 'application/pdf');
+            res.setHeader('Content-Disposition', `attachment; filename="Reporte_Equipo_${periodo}.pdf"`);
+            res.send(pdfBuffer);
+
+        } catch (error) {
+            console.error('❌ Error generando PDF de equipo:', error);
+            return res.status(error.status || 500).json({
+                success: false,
+                message: error.message || 'Error al generar reporte PDF de equipo',
+                error: error.message
+            });
+        }
+    }
+
+    /**
+     * Generar reporte de equipo en Excel
+     */
+    static async generarReporteEquipoExcel(req, res) {
+        try {
+            const { periodo = 'mes_actual' } = req.query;
+
+            // Obtener datos
+            const datos = await ReportesQueries.obtenerDatosEquipo(periodo);
+
+            // Generar Excel
+            const excelBuffer = await ReporteExcelService.generarEquipo(datos);
+
+            // Enviar Excel
+            res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+            res.setHeader('Content-Disposition', `attachment; filename="Reporte_Equipo_${periodo}.xlsx"`);
+            res.send(excelBuffer);
+
+        } catch (error) {
+            console.error('❌ Error generando Excel de equipo:', error);
+            return res.status(error.status || 500).json({
+                success: false,
+                message: error.message || 'Error al generar reporte Excel de equipo',
+                error: error.message
+            });
+        }
+    }
 }
 
 // ============================================

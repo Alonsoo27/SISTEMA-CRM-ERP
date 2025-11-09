@@ -600,6 +600,93 @@ class ReportesQueries {
             actividades: actividades
         };
     }
+
+    /**
+     * Obtener datos consolidados del equipo de marketing
+     * Incluye métricas por miembro y totales generales
+     */
+    static async obtenerDatosEquipo(periodo) {
+        const { fechaInicio, fechaFin } = calcularPeriodo(periodo);
+
+        // Obtener todos los usuarios de marketing
+        const usuariosResult = await query(`
+            SELECT id, nombre, apellido, email, rol
+            FROM usuarios
+            WHERE rol IN ('MARKETING_EJECUTOR', 'JEFE_MARKETING')
+            AND activo = true
+            ORDER BY nombre, apellido
+        `);
+
+        const usuarios = usuariosResult.rows;
+
+        // Obtener métricas por cada miembro
+        const miembros = await Promise.all(usuarios.map(async (usuario) => {
+            const totales = await this.obtenerTotales(usuario.id, fechaInicio, fechaFin);
+            const categorias = await this.obtenerDistribucionCategorias(usuario.id, fechaInicio, fechaFin);
+
+            const tiempoTotal = categorias.reduce((sum, cat) =>
+                sum + parseInt(cat.tiempo_total_minutos || 0), 0
+            );
+
+            const tasaCompletitud = parseInt(totales.total) > 0
+                ? ((parseInt(totales.completadas) / parseInt(totales.total)) * 100).toFixed(1)
+                : 0;
+
+            return {
+                id: usuario.id,
+                nombre_completo: `${usuario.nombre} ${usuario.apellido}`,
+                email: usuario.email,
+                rol: usuario.rol,
+                totales: {
+                    total: parseInt(totales.total),
+                    completadas: parseInt(totales.completadas),
+                    pendientes: parseInt(totales.pendientes),
+                    en_progreso: parseInt(totales.en_progreso),
+                    canceladas: parseInt(totales.canceladas)
+                },
+                tiempo_total_minutos: tiempoTotal,
+                tasa_completitud: parseFloat(tasaCompletitud),
+                categorias_trabajadas: categorias.length
+            };
+        }));
+
+        // Calcular totales del equipo
+        const totalesEquipo = miembros.reduce((acc, miembro) => ({
+            total: acc.total + miembro.totales.total,
+            completadas: acc.completadas + miembro.totales.completadas,
+            pendientes: acc.pendientes + miembro.totales.pendientes,
+            en_progreso: acc.en_progreso + miembro.totales.en_progreso,
+            canceladas: acc.canceladas + miembro.totales.canceladas,
+            tiempo_total_minutos: acc.tiempo_total_minutos + miembro.tiempo_total_minutos
+        }), { total: 0, completadas: 0, pendientes: 0, en_progreso: 0, canceladas: 0, tiempo_total_minutos: 0 });
+
+        const tasaCompletitudEquipo = totalesEquipo.total > 0
+            ? ((totalesEquipo.completadas / totalesEquipo.total) * 100).toFixed(1)
+            : 0;
+
+        // Ordenar miembros por completitud (top performers)
+        const ranking = [...miembros].sort((a, b) => b.tasa_completitud - a.tasa_completitud);
+
+        return {
+            periodo: {
+                tipo: periodo,
+                fechaInicio,
+                fechaFin,
+                descripcion: obtenerDescripcionPeriodo(periodo)
+            },
+            totales: totalesEquipo,
+            tasas: {
+                completitud: parseFloat(tasaCompletitudEquipo)
+            },
+            miembros: miembros,
+            ranking: ranking,
+            estadisticas: {
+                total_miembros: miembros.length,
+                promedio_actividades: Math.round(totalesEquipo.total / miembros.length),
+                promedio_completitud: (miembros.reduce((sum, m) => sum + m.tasa_completitud, 0) / miembros.length).toFixed(1)
+            }
+        };
+    }
 }
 
 module.exports = ReportesQueries;
