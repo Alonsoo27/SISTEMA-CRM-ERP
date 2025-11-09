@@ -66,7 +66,7 @@ class PorCategoriaPDF {
                 .text('📊 RESUMEN EJECUTIVO', { align: 'center', underline: true });
             doc.moveDown(0.5);
 
-            const resumen = this._construirResumenEjecutivo(datos);
+            const resumen = PorCategoriaPDF._construirResumenEjecutivo(datos);
             PDFBase.dibujarTabla(doc, resumen);
 
             // ========================================
@@ -77,7 +77,7 @@ class PorCategoriaPDF {
                 .text('🎯 DISTRIBUCIÓN POR CATEGORÍA PRINCIPAL', { align: 'center', underline: true });
             doc.moveDown(0.5);
 
-            const distribucion = this._construirDistribucionPrincipal(datos);
+            const distribucion = PorCategoriaPDF._construirDistribucionPrincipal(datos);
             PDFBase.dibujarTabla(doc, distribucion);
 
             // ========================================
@@ -85,7 +85,7 @@ class PorCategoriaPDF {
             // ========================================
             PDFBase.verificarEspacio(doc, 250, '📋 DETALLE POR CATEGORÍA Y SUBCATEGORÍA');
 
-            const detalle = this._construirDetalleCompleto(datos);
+            const detalle = PorCategoriaPDF._construirDetalleCompleto(datos);
             PDFBase.dibujarTabla(doc, detalle);
 
             // ========================================
@@ -96,7 +96,7 @@ class PorCategoriaPDF {
                 .text('🏆 TOP 5 CATEGORÍAS (Mayor Tiempo Invertido)', { align: 'center', underline: true });
             doc.moveDown(0.5);
 
-            const top5 = this._construirTop5(datos);
+            const top5 = PorCategoriaPDF._construirTop5(datos);
             PDFBase.dibujarTabla(doc, top5);
 
             // ========================================
@@ -108,7 +108,7 @@ class PorCategoriaPDF {
                     .text('💡 INSIGHTS Y RECOMENDACIONES', { align: 'center', underline: true });
                 doc.moveDown(0.5);
 
-                const insights = this._generarInsights(datos);
+                const insights = PorCategoriaPDF._generarInsights(datos);
                 doc.fontSize(10).fillColor(PDFStyles.COLORES.GRIS_TEXTO);
                 insights.forEach(insight => {
                     doc.text(`• ${insight}`, { indent: 20 });
@@ -129,7 +129,7 @@ class PorCategoriaPDF {
     // CONSTRUCTORES DE DATOS
     // ============================================
 
-    _construirResumenEjecutivo(datos) {
+    static _construirResumenEjecutivo(datos) {
         if (!datos.categorias || datos.categorias.length === 0) {
             return [
                 ['Métrica', 'Valor'],
@@ -158,7 +158,7 @@ class PorCategoriaPDF {
         ];
     }
 
-    _construirDistribucionPrincipal(datos) {
+    static _construirDistribucionPrincipal(datos) {
         if (!datos.categorias || datos.categorias.length === 0) {
             return [
                 ['Categoría Principal', 'Actividades', 'Completadas', 'Tiempo Total', '% Tiempo'],
@@ -205,7 +205,7 @@ class PorCategoriaPDF {
         return tabla;
     }
 
-    _construirDetalleCompleto(datos) {
+    static _construirDetalleCompleto(datos) {
         if (!datos.categorias || datos.categorias.length === 0) {
             return [
                 ['Categoría / Subcategoría', 'Cant.', 'Compl.', 'Tiempo', '%'],
@@ -240,7 +240,7 @@ class PorCategoriaPDF {
         return tabla;
     }
 
-    _construirTop5(datos) {
+    static _construirTop5(datos) {
         const tabla = [['#', 'Categoría', 'Actividades', 'Tiempo Total', '% del Total']];
 
         if (!datos.categorias || datos.categorias.length === 0) {
@@ -277,7 +277,7 @@ class PorCategoriaPDF {
         return tabla;
     }
 
-    _generarInsights(datos) {
+    static _generarInsights(datos) {
         const insights = [];
         const tiempoTotal = datos.categorias.reduce((sum, cat) =>
             sum + parseInt(cat.tiempo_total_minutos), 0
