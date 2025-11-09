@@ -608,11 +608,12 @@ class ReportesQueries {
     static async obtenerDatosEquipo(fechaInicio, fechaFin) {
         // Obtener todos los usuarios de marketing
         const usuariosResult = await query(`
-            SELECT id, nombre, apellido, email, rol
-            FROM usuarios
-            WHERE rol IN ('MARKETING_EJECUTOR', 'JEFE_MARKETING')
-            AND activo = true
-            ORDER BY nombre, apellido
+            SELECT u.id, u.nombre, u.apellido, u.email, r.nombre as rol
+            FROM usuarios u
+            LEFT JOIN roles r ON u.rol_id = r.id
+            WHERE r.nombre IN ('MARKETING_EJECUTOR', 'JEFE_MARKETING')
+            AND u.activo = true
+            ORDER BY u.nombre, u.apellido
         `);
 
         const usuarios = usuariosResult.rows;
