@@ -22,7 +22,8 @@ app.set('trust proxy', 1);
 const allowedOrigins = [
     'http://localhost:5173',
     'http://localhost:3000',
-    process.env.FRONTEND_URL
+    process.env.FRONTEND_URL,
+    'https://reasonable-manifestation-production.up.railway.app' // Temporal: nuevo servicio frontend
 ].filter(Boolean); // Eliminar valores undefined/null
 
 app.use(cors({
