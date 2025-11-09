@@ -129,7 +129,7 @@ class PorCategoriaPDF {
     // CONSTRUCTORES DE DATOS
     // ============================================
 
-    static _construirResumenEjecutivo(datos) {
+    _construirResumenEjecutivo(datos) {
         if (!datos.categorias || datos.categorias.length === 0) {
             return [
                 ['Métrica', 'Valor'],
@@ -158,7 +158,7 @@ class PorCategoriaPDF {
         ];
     }
 
-    static _construirDistribucionPrincipal(datos) {
+    _construirDistribucionPrincipal(datos) {
         if (!datos.categorias || datos.categorias.length === 0) {
             return [
                 ['Categoría Principal', 'Actividades', 'Completadas', 'Tiempo Total', '% Tiempo'],
@@ -205,7 +205,7 @@ class PorCategoriaPDF {
         return tabla;
     }
 
-    static _construirDetalleCompleto(datos) {
+    _construirDetalleCompleto(datos) {
         if (!datos.categorias || datos.categorias.length === 0) {
             return [
                 ['Categoría / Subcategoría', 'Cant.', 'Compl.', 'Tiempo', '%'],
@@ -240,7 +240,7 @@ class PorCategoriaPDF {
         return tabla;
     }
 
-    static _construirTop5(datos) {
+    _construirTop5(datos) {
         const tabla = [['#', 'Categoría', 'Actividades', 'Tiempo Total', '% del Total']];
 
         if (!datos.categorias || datos.categorias.length === 0) {
@@ -277,7 +277,7 @@ class PorCategoriaPDF {
         return tabla;
     }
 
-    static _generarInsights(datos) {
+    _generarInsights(datos) {
         const insights = [];
         const tiempoTotal = datos.categorias.reduce((sum, cat) =>
             sum + parseInt(cat.tiempo_total_minutos), 0
