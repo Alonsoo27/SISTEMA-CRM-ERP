@@ -54,6 +54,46 @@ class ReportesController {
     }
 
     /**
+     * Método interno para obtener datos de categorías
+     * (usado por los 3 endpoints: JSON, PDF, Excel)
+     */
+    static async _obtenerDatosPorCategoria(usuarioId, periodo, userSolicitante) {
+        // Validar permisos: solo el mismo usuario o jefes/ejecutivos
+        if (parseInt(usuarioId) !== userSolicitante.id &&
+            !GRUPOS_ROLES.JEFES_Y_EJECUTIVOS.includes(userSolicitante.rol)) {
+            throw {
+                status: 403,
+                success: false,
+                message: 'No tienes permiso para generar reportes de otro usuario'
+            };
+        }
+
+        // Calcular fechas según período
+        const { fechaInicio, fechaFin } = calcularPeriodo(periodo);
+
+        // Obtener datos de categorías con actividades detalladas
+        const datos = await ReportesQueries.obtenerDatosPorCategoria(
+            usuarioId,
+            fechaInicio,
+            fechaFin
+        );
+
+        // RETORNAR DATOS CONSOLIDADOS con formato esperado
+        return {
+            success: true,
+            data: {
+                ...datos,
+                periodo: {
+                    tipo: periodo,
+                    fechaInicio,
+                    fechaFin,
+                    descripcion: obtenerDescripcionPeriodo(periodo)
+                }
+            }
+        };
+    }
+
+    /**
      * Obtener datos para reporte de productividad personal (endpoint JSON)
      */
     static async obtenerDatosProductividadPersonal(req, res) {
@@ -143,6 +183,105 @@ class ReportesController {
             return res.status(error.status || 500).json({
                 success: false,
                 message: error.message || 'Error al generar reporte Excel',
+                error: error.message
+            });
+        }
+    }
+
+    // ============================================
+    // REPORTE POR CATEGORÍA
+    // ============================================
+
+    /**
+     * Obtener datos para reporte por categoría (endpoint JSON)
+     */
+    static async obtenerDatosPorCategoria(req, res) {
+        try {
+            const { usuarioId } = req.params;
+            const { periodo = 'mes_actual' } = req.query;
+            const userSolicitante = req.user;
+
+            const resultado = await ReportesController._obtenerDatosPorCategoria(
+                usuarioId,
+                periodo,
+                userSolicitante
+            );
+
+            return res.json(resultado);
+
+        } catch (error) {
+            console.error('❌ Error obteniendo datos por categoría:', error);
+            return res.status(error.status || 500).json({
+                success: false,
+                message: error.message || 'Error al obtener datos por categoría',
+                error: error.message
+            });
+        }
+    }
+
+    /**
+     * Generar reporte por categoría en PDF
+     */
+    static async generarReportePorCategoriaPDF(req, res) {
+        try {
+            const { usuarioId } = req.params;
+            const { periodo = 'mes_actual' } = req.query;
+            const userSolicitante = req.user;
+
+            // Obtener datos
+            const resultado = await ReportesController._obtenerDatosPorCategoria(
+                usuarioId,
+                periodo,
+                userSolicitante
+            );
+
+            // Generar PDF
+            const pdfBuffer = await ReportePDFService.generarPorCategoria(resultado.data);
+
+            // Enviar PDF
+            res.setHeader('Content-Type', 'application/pdf');
+            res.setHeader('Content-Disposition', `attachment; filename="Por_Categoria_${resultado.data.usuario.nombre_completo.replace(/\s/g, '_')}_${periodo}.pdf"`);
+            res.send(pdfBuffer);
+
+        } catch (error) {
+            console.error('❌ Error generando PDF por categoría:', error);
+            return res.status(error.status || 500).json({
+                success: false,
+                message: error.message || 'Error al generar reporte PDF por categoría',
+                error: error.message
+            });
+        }
+    }
+
+    /**
+     * Generar reporte por categoría en Excel
+     */
+    static async generarReportePorCategoriaExcel(req, res) {
+        try {
+            const { usuarioId } = req.params;
+            const { periodo = 'mes_actual' } = req.query;
+            const userSolicitante = req.user;
+
+            // Obtener datos
+            const resultado = await ReportesController._obtenerDatosPorCategoria(
+                usuarioId,
+                periodo,
+                userSolicitante
+            );
+
+            // Generar Excel
+            const excelBuffer = await ReporteExcelService.generarPorCategoria(resultado.data);
+
+            // Enviar Excel
+            res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+            res.setHeader('Content-Disposition', `attachment; filename="Por_Categoria_${resultado.data.usuario.nombre_completo.replace(/\s/g, '_')}_${periodo}.xlsx"`);
+            res.send(excelBuffer);
+
+        } catch (error) {
+            console.error('❌ Error generando Excel por categoría:', error);
+            return res.status(error.status || 500).json({
+                success: false,
+                message: error.message || 'Error al generar reporte Excel por categoría',
                 error: error.message
             });
         }

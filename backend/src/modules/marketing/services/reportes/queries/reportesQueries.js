@@ -181,6 +181,39 @@ class ReportesQueries {
         return result.rows;
     }
 
+    /**
+     * Obtener todas las actividades con detalles completos
+     * Para exportación en Excel (reporte por categoría)
+     * EXCLUYE actividades SISTEMA
+     */
+    static async obtenerActividadesDetalladas(usuarioId, fechaInicio, fechaFin) {
+        const result = await query(`
+            SELECT
+                id,
+                codigo,
+                descripcion as titulo,
+                categoria_principal,
+                subcategoria,
+                estado,
+                prioridad,
+                fecha_inicio_planeada,
+                fecha_fin_planeada,
+                fecha_inicio_real,
+                fecha_fin_real,
+                duracion_planeada_minutos,
+                duracion_real_minutos,
+                es_prioritaria
+            FROM actividades_marketing
+            WHERE usuario_id = $1
+            AND activo = true
+            AND tipo != 'sistema'  -- ✅ EXCLUIR actividades SISTEMA
+            AND fecha_inicio_planeada BETWEEN $2 AND $3
+            ORDER BY fecha_inicio_planeada DESC
+        `, [usuarioId, fechaInicio, fechaFin]);
+
+        return result.rows;
+    }
+
     // ============================================
     // MÉTODOS CONSOLIDADOS
     // ============================================
@@ -512,6 +545,60 @@ class ReportesQueries {
                 conclusiones,
                 recomendaciones
             }
+        };
+    }
+
+    /**
+     * Obtener datos completos para reporte por categoría
+     * Incluye todas las actividades detalladas para exportación
+     */
+    static async obtenerDatosPorCategoria(usuarioId, fechaInicio, fechaFin) {
+        // Ejecutar queries en paralelo
+        const [
+            usuario,
+            totales,
+            categorias,
+            actividades
+        ] = await Promise.all([
+            this.obtenerInfoUsuario(usuarioId),
+            this.obtenerTotales(usuarioId, fechaInicio, fechaFin),
+            this.obtenerDistribucionCategorias(usuarioId, fechaInicio, fechaFin),
+            this.obtenerActividadesDetalladas(usuarioId, fechaInicio, fechaFin)
+        ]);
+
+        if (!usuario) {
+            throw new Error('Usuario no encontrado');
+        }
+
+        // Calcular tasas
+        const tasaCompletitud = totales.total > 0
+            ? ((parseInt(totales.completadas) / parseInt(totales.total)) * 100).toFixed(1)
+            : 0;
+
+        // Retornar datos consolidados
+        return {
+            usuario,
+            metricas: {
+                totales: {
+                    total: parseInt(totales.total),
+                    completadas: parseInt(totales.completadas),
+                    canceladas: parseInt(totales.canceladas),
+                    pendientes: parseInt(totales.pendientes),
+                    en_progreso: parseInt(totales.en_progreso)
+                },
+                tasas: {
+                    completitud: parseFloat(tasaCompletitud)
+                }
+            },
+            categorias: categorias.map(cat => ({
+                categoria_principal: cat.categoria_principal,
+                subcategoria: cat.subcategoria,
+                cantidad: parseInt(cat.cantidad),
+                completadas: parseInt(cat.completadas),
+                tiempo_total_minutos: parseInt(cat.tiempo_total_minutos || 0),
+                tiempo_promedio_minutos: parseFloat(cat.tiempo_promedio_minutos || 0).toFixed(1)
+            })),
+            actividades: actividades
         };
     }
 }

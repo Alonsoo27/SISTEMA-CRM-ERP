@@ -4,6 +4,7 @@
 // ============================================
 
 const ProductividadPersonalPDF = require('./reportes/pdf/generadores/ProductividadPersonalPDF');
+const PorCategoriaPDF = require('./reportes/pdf/generadores/PorCategoriaPDF');
 
 /**
  * Servicio principal que mantiene compatibilidad con código existente
@@ -12,23 +13,21 @@ const ProductividadPersonalPDF = require('./reportes/pdf/generadores/Productivid
 class ReportePDFService {
     /**
      * Generar reporte de productividad personal en PDF
-     * @deprecated Use ProductividadPersonalPDF.generar() directamente
      */
     static async generarProductividadPersonal(datos) {
         return await ProductividadPersonalPDF.generar(datos);
     }
 
+    /**
+     * Generar reporte por categoría en PDF
+     */
+    static async generarPorCategoria(datos) {
+        return await PorCategoriaPDF.generar(datos);
+    }
+
     // ============================================
     // FUTUROS REPORTES (agregar aquí)
     // ============================================
-
-    /**
-     * Generar reporte por categoría (futuro)
-     */
-    // static async generarPorCategoria(datos) {
-    //     const CategoriaPDF = require('./reportes/pdf/generadores/CategoriaPDF');
-    //     return await CategoriaPDF.generar(datos);
-    // }
 
     /**
      * Generar reporte de equipo (futuro)

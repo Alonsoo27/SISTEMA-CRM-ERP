@@ -420,4 +420,34 @@ router.get('/reportes/productividad/:usuarioId/excel',
     ReportesController.generarReporteProductividadExcel
 );
 
+/**
+ * Obtener datos para reporte por categoría (JSON)
+ * Roles: Marketing completo
+ */
+router.get('/reportes/categoria/:usuarioId/datos',
+    authenticateToken,
+    requireRole(GRUPOS_ROLES.MARKETING_COMPLETO),
+    ReportesController.obtenerDatosPorCategoria
+);
+
+/**
+ * Generar reporte por categoría en PDF
+ * Roles: Marketing completo
+ */
+router.get('/reportes/categoria/:usuarioId/pdf',
+    authenticateToken,
+    requireRole(GRUPOS_ROLES.MARKETING_COMPLETO),
+    ReportesController.generarReportePorCategoriaPDF
+);
+
+/**
+ * Generar reporte por categoría en Excel
+ * Roles: Marketing completo
+ */
+router.get('/reportes/categoria/:usuarioId/excel',
+    authenticateToken,
+    requireRole(GRUPOS_ROLES.MARKETING_COMPLETO),
+    ReportesController.generarReportePorCategoriaExcel
+);
+
 module.exports = router;
