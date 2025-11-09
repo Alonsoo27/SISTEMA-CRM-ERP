@@ -82,6 +82,7 @@ class PorCategoriaPDF {
         doc.moveDown(0.5);
 
         const resumen = this._construirResumenEjecutivo(datos);
+        console.log('🔍 DEBUG resumen:', resumen);
         PDFBase.dibujarTabla(doc, resumen);
 
         // ========================================
@@ -93,6 +94,7 @@ class PorCategoriaPDF {
         doc.moveDown(0.5);
 
         const distribucion = this._construirDistribucionPrincipal(datos);
+        console.log('🔍 DEBUG distribucion:', distribucion);
         PDFBase.dibujarTabla(doc, distribucion);
 
         // ========================================
@@ -101,6 +103,7 @@ class PorCategoriaPDF {
         PDFBase.verificarEspacio(doc, 250, '📋 DETALLE POR CATEGORÍA Y SUBCATEGORÍA');
 
         const detalle = this._construirDetalleCompleto(datos);
+        console.log('🔍 DEBUG detalle:', detalle);
         PDFBase.dibujarTabla(doc, detalle);
 
         // ========================================
@@ -112,6 +115,7 @@ class PorCategoriaPDF {
         doc.moveDown(0.5);
 
         const top5 = this._construirTop5(datos);
+        console.log('🔍 DEBUG top5:', top5);
         PDFBase.dibujarTabla(doc, top5);
 
         // ========================================
