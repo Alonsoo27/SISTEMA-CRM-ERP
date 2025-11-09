@@ -78,7 +78,7 @@ class PorCategoriaPDF {
         // ========================================
         doc.moveDown(1.5);
         doc.fontSize(14).fillColor(PDFStyles.COLORES.AZUL_OSCURO)
-            .text('📊 RESUMEN EJECUTIVO', { align: 'center', underline: true });
+            .text('RESUMEN EJECUTIVO', { align: 'center', underline: true });
         doc.moveDown(0.5);
 
         const resumen = this._construirResumenEjecutivo(datos);
@@ -89,7 +89,7 @@ class PorCategoriaPDF {
         // ========================================
         doc.moveDown(1.5);
         doc.fontSize(14).fillColor(PDFStyles.COLORES.AZUL_OSCURO)
-            .text('🎯 DISTRIBUCIÓN POR CATEGORÍA PRINCIPAL', { align: 'center', underline: true });
+            .text('DISTRIBUCIÓN POR CATEGORÍA PRINCIPAL', { align: 'center', underline: true });
         doc.moveDown(0.5);
 
         const distribucion = this._construirDistribucionPrincipal(datos);
@@ -98,7 +98,7 @@ class PorCategoriaPDF {
         // ========================================
         // DETALLE CON SUBCATEGORÍAS
         // ========================================
-        PDFBase.verificarEspacio(doc, 250, '📋 DETALLE POR CATEGORÍA Y SUBCATEGORÍA');
+        PDFBase.verificarEspacio(doc, 250, 'DETALLE POR CATEGORÍA Y SUBCATEGORÍA');
 
         const detalle = this._construirDetalleCompleto(datos);
         PDFBase.dibujarTabla(doc, detalle, [200, 60, 60, 90, 70]);
@@ -108,7 +108,7 @@ class PorCategoriaPDF {
         // ========================================
         doc.moveDown(1.5);
         doc.fontSize(14).fillColor(PDFStyles.COLORES.AZUL_OSCURO)
-            .text('🏆 TOP 5 CATEGORÍAS (Mayor Tiempo Invertido)', { align: 'center', underline: true });
+            .text('TOP 5 CATEGORÍAS (Mayor Tiempo Invertido)', { align: 'center', underline: true });
         doc.moveDown(0.5);
 
         const top5 = this._construirTop5(datos);
@@ -120,7 +120,7 @@ class PorCategoriaPDF {
         if (datos.categorias.length > 0) {
             doc.moveDown(1.5);
             doc.fontSize(14).fillColor(PDFStyles.COLORES.AZUL_OSCURO)
-                .text('💡 INSIGHTS Y RECOMENDACIONES', { align: 'center', underline: true });
+                .text('INSIGHTS Y RECOMENDACIONES', { align: 'center', underline: true });
             doc.moveDown(0.5);
 
             const insights = this._generarInsights(datos);
@@ -270,7 +270,7 @@ class PorCategoriaPDF {
                     ? `${cat.categoria_principal} - ${cat.subcategoria}`
                     : cat.categoria_principal;
 
-                const medalla = idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : `${idx + 1}°`;
+                const medalla = `${idx + 1}`;
 
                 tabla.push([
                     medalla,
