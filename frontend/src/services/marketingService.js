@@ -396,9 +396,10 @@ const marketingService = {
     /**
      * Obtener datos para reporte de productividad (JSON)
      */
-    async obtenerDatosReporteProductividad(usuarioId, periodo = 'mes_actual') {
+    async obtenerDatosReporteProductividad(usuarioId, periodoConfig = 'mes_actual') {
+        const params = this._construirParamsPeriodo(periodoConfig);
         const response = await apiClient.get(`/marketing/reportes/productividad/${usuarioId}/datos`, {
-            params: { periodo }
+            params
         });
         return response.data;
     },
@@ -406,14 +407,17 @@ const marketingService = {
     /**
      * Descargar reporte de productividad en PDF
      */
-    async descargarReporteProductividadPDF(usuarioId, periodo = 'mes_actual') {
-        const response = await fetch(
-            `${apiClient.baseURL}/marketing/reportes/productividad/${usuarioId}/pdf?periodo=${periodo}`,
-            {
-                method: 'GET',
-                headers: apiClient.getHeaders()
-            }
+    async descargarReporteProductividadPDF(usuarioId, periodoConfig = 'mes_actual') {
+        const params = this._construirParamsPeriodo(periodoConfig);
+        const url = this._construirURLConParams(
+            `${apiClient.baseURL}/marketing/reportes/productividad/${usuarioId}/pdf`,
+            params
         );
+
+        const response = await fetch(url, {
+            method: 'GET',
+            headers: apiClient.getHeaders()
+        });
 
         if (!response.ok) {
             const error = await response.json();
@@ -421,27 +425,30 @@ const marketingService = {
         }
 
         const blob = await response.blob();
-        const url = window.URL.createObjectURL(blob);
+        const urlBlob = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
-        a.href = url;
-        a.download = `Reporte_Productividad_${periodo}.pdf`;
+        a.href = urlBlob;
+        a.download = `Reporte_Productividad_${params.periodo}.pdf`;
         document.body.appendChild(a);
         a.click();
         a.remove();
-        window.URL.revokeObjectURL(url);
+        window.URL.revokeObjectURL(urlBlob);
     },
 
     /**
      * Descargar reporte de productividad en Excel
      */
-    async descargarReporteProductividadExcel(usuarioId, periodo = 'mes_actual') {
-        const response = await fetch(
-            `${apiClient.baseURL}/marketing/reportes/productividad/${usuarioId}/excel?periodo=${periodo}`,
-            {
-                method: 'GET',
-                headers: apiClient.getHeaders()
-            }
+    async descargarReporteProductividadExcel(usuarioId, periodoConfig = 'mes_actual') {
+        const params = this._construirParamsPeriodo(periodoConfig);
+        const url = this._construirURLConParams(
+            `${apiClient.baseURL}/marketing/reportes/productividad/${usuarioId}/excel`,
+            params
         );
+
+        const response = await fetch(url, {
+            method: 'GET',
+            headers: apiClient.getHeaders()
+        });
 
         if (!response.ok) {
             const error = await response.json();
@@ -449,14 +456,14 @@ const marketingService = {
         }
 
         const blob = await response.blob();
-        const url = window.URL.createObjectURL(blob);
+        const urlBlob = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
-        a.href = url;
-        a.download = `Reporte_Productividad_${periodo}.xlsx`;
+        a.href = urlBlob;
+        a.download = `Reporte_Productividad_${params.periodo}.xlsx`;
         document.body.appendChild(a);
         a.click();
         a.remove();
-        window.URL.revokeObjectURL(url);
+        window.URL.revokeObjectURL(urlBlob);
     },
 
     // ============================================
@@ -540,14 +547,17 @@ const marketingService = {
     /**
      * Descargar reporte por categoría en Excel
      */
-    async descargarReporteCategoriaExcel(usuarioId, periodo = 'mes_actual') {
-        const response = await fetch(
-            `${apiClient.baseURL}/marketing/reportes/categoria/${usuarioId}/excel?periodo=${periodo}`,
-            {
-                method: 'GET',
-                headers: apiClient.getHeaders()
-            }
+    async descargarReporteCategoriaExcel(usuarioId, periodoConfig = 'mes_actual') {
+        const params = this._construirParamsPeriodo(periodoConfig);
+        const url = this._construirURLConParams(
+            `${apiClient.baseURL}/marketing/reportes/categoria/${usuarioId}/excel`,
+            params
         );
+
+        const response = await fetch(url, {
+            method: 'GET',
+            headers: apiClient.getHeaders()
+        });
 
         if (!response.ok) {
             const error = await response.json();
@@ -555,14 +565,14 @@ const marketingService = {
         }
 
         const blob = await response.blob();
-        const url = window.URL.createObjectURL(blob);
+        const urlBlob = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
-        a.href = url;
-        a.download = `Reporte_Categoria_${periodo}.xlsx`;
+        a.href = urlBlob;
+        a.download = `Reporte_Categoria_${params.periodo}.xlsx`;
         document.body.appendChild(a);
         a.click();
         a.remove();
-        window.URL.revokeObjectURL(url);
+        window.URL.revokeObjectURL(urlBlob);
     },
 
     // ============================================
@@ -572,9 +582,10 @@ const marketingService = {
     /**
      * Obtener datos para reporte de equipo (JSON)
      */
-    async obtenerDatosReporteEquipo(periodo = 'mes_actual') {
+    async obtenerDatosReporteEquipo(periodoConfig = 'mes_actual') {
+        const params = this._construirParamsPeriodo(periodoConfig);
         const response = await apiClient.get(`/marketing/reportes/equipo/datos`, {
-            params: { periodo }
+            params
         });
         return response.data;
     },
@@ -582,14 +593,17 @@ const marketingService = {
     /**
      * Descargar reporte de equipo en PDF
      */
-    async descargarReporteEquipoPDF(periodo = 'mes_actual') {
-        const response = await fetch(
-            `${apiClient.baseURL}/marketing/reportes/equipo/pdf?periodo=${periodo}`,
-            {
-                method: 'GET',
-                headers: apiClient.getHeaders()
-            }
+    async descargarReporteEquipoPDF(periodoConfig = 'mes_actual') {
+        const params = this._construirParamsPeriodo(periodoConfig);
+        const url = this._construirURLConParams(
+            `${apiClient.baseURL}/marketing/reportes/equipo/pdf`,
+            params
         );
+
+        const response = await fetch(url, {
+            method: 'GET',
+            headers: apiClient.getHeaders()
+        });
 
         if (!response.ok) {
             const error = await response.json();
@@ -597,27 +611,30 @@ const marketingService = {
         }
 
         const blob = await response.blob();
-        const url = window.URL.createObjectURL(blob);
+        const urlBlob = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
-        a.href = url;
-        a.download = `Reporte_Equipo_${periodo}.pdf`;
+        a.href = urlBlob;
+        a.download = `Reporte_Equipo_${params.periodo}.pdf`;
         document.body.appendChild(a);
         a.click();
         a.remove();
-        window.URL.revokeObjectURL(url);
+        window.URL.revokeObjectURL(urlBlob);
     },
 
     /**
      * Descargar reporte de equipo en Excel
      */
-    async descargarReporteEquipoExcel(periodo = 'mes_actual') {
-        const response = await fetch(
-            `${apiClient.baseURL}/marketing/reportes/equipo/excel?periodo=${periodo}`,
-            {
-                method: 'GET',
-                headers: apiClient.getHeaders()
-            }
+    async descargarReporteEquipoExcel(periodoConfig = 'mes_actual') {
+        const params = this._construirParamsPeriodo(periodoConfig);
+        const url = this._construirURLConParams(
+            `${apiClient.baseURL}/marketing/reportes/equipo/excel`,
+            params
         );
+
+        const response = await fetch(url, {
+            method: 'GET',
+            headers: apiClient.getHeaders()
+        });
 
         if (!response.ok) {
             const error = await response.json();
@@ -625,14 +642,14 @@ const marketingService = {
         }
 
         const blob = await response.blob();
-        const url = window.URL.createObjectURL(blob);
+        const urlBlob = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
-        a.href = url;
-        a.download = `Reporte_Equipo_${periodo}.xlsx`;
+        a.href = urlBlob;
+        a.download = `Reporte_Equipo_${params.periodo}.xlsx`;
         document.body.appendChild(a);
         a.click();
         a.remove();
-        window.URL.revokeObjectURL(url);
+        window.URL.revokeObjectURL(urlBlob);
     }
 };
 
