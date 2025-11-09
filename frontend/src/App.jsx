@@ -74,6 +74,25 @@ const ChatPage = () => (
   </div>
 );
 
+const ReportesPage = () => (
+  <div className="h-full flex items-center justify-center">
+    <div className="text-center">
+      <div className="text-6xl mb-4">📊</div>
+      <h1 className="text-2xl font-bold text-gray-900 mb-2">Reportes Automatizados</h1>
+      <p className="text-gray-600 mb-4">Generación y envío programado de reportes</p>
+      <div className="text-sm text-gray-500">
+        <p>En desarrollo:</p>
+        <ul className="mt-2 space-y-1">
+          <li>• Configuración de tipo de reporte</li>
+          <li>• Frecuencia de envío (diaria, semanal, mensual)</li>
+          <li>• Lista de destinatarios</li>
+          <li>• Formatos: PDF, Excel, CSV</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+);
+
 function App() {
   return (
     <Router>
@@ -109,6 +128,7 @@ function App() {
 
           {/* Administración */}
           <Route path="admin/usuarios" element={<AdministracionUsuariosPage />} />
+          <Route path="reportes" element={<ReportesPage />} />
 
           {/* Ruta de desarrollo/testing (opcional) */}
           <Route path="dev" element={<DevPage />} />

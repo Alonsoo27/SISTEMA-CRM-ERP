@@ -115,6 +115,13 @@ const Layout = () => {
       icon: '👥',
       description: 'Administración de usuarios',
       moduleCode: 'usuarios'
+    },
+    {
+      name: 'Reportes',
+      path: '/reportes',
+      icon: '📊',
+      description: 'Reportes automatizados',
+      moduleCode: 'reportes'
     }
   ];
 
