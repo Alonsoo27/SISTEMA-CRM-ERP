@@ -30,91 +30,7 @@ class PorCategoriaPDF {
             // PÁGINA PRINCIPAL
             // ========================================
             doc.addPage();
-            PDFBase.dibujarEncabezado(doc, 'ANÁLISIS POR CATEGORÍA DE ACTIVIDADES');
-
-            // Información del usuario
-            doc.moveDown(2);
-            doc.fontSize(18).fillColor(PDFStyles.COLORES.AZUL_OSCURO)
-                .text(datos.usuario.nombre_completo, { align: 'center' });
-            doc.fontSize(12).fillColor(PDFStyles.COLORES.GRIS)
-                .text(datos.usuario.email, { align: 'center' });
-            doc.fontSize(11).fillColor(PDFStyles.COLORES.GRIS)
-                .text(`Área: ${datos.usuario.area || 'Marketing'}`, { align: 'center' });
-
-            // Período
-            doc.moveDown(1);
-            PDFBase.dibujarCaja(doc, datos.periodo.descripcion, PDFStyles.COLORES.PURPURA);
-
-            if (!tieneActividades || !tieneCategorias) {
-                doc.moveDown(3);
-                doc.fontSize(14).fillColor(PDFStyles.COLORES.AMARILLO)
-                    .text('SIN DATOS DE CATEGORÍAS', { align: 'center' });
-                doc.moveDown(1);
-                doc.fontSize(10).fillColor(PDFStyles.COLORES.GRIS).text(
-                    'No se encontraron actividades categorizadas para el período seleccionado.',
-                    { align: 'center', width: 500 }
-                );
-                doc.end();
-                return await bufferPromise;
-            }
-
-            // ========================================
-            // RESUMEN EJECUTIVO
-            // ========================================
-            doc.moveDown(1.5);
-            doc.fontSize(14).fillColor(PDFStyles.COLORES.AZUL_OSCURO)
-                .text('📊 RESUMEN EJECUTIVO', { align: 'center', underline: true });
-            doc.moveDown(0.5);
-
-            const resumen = PorCategoriaPDF._construirResumenEjecutivo(datos);
-            PDFBase.dibujarTabla(doc, resumen);
-
-            // ========================================
-            // DISTRIBUCIÓN POR CATEGORÍA PRINCIPAL
-            // ========================================
-            doc.moveDown(1.5);
-            doc.fontSize(14).fillColor(PDFStyles.COLORES.AZUL_OSCURO)
-                .text('🎯 DISTRIBUCIÓN POR CATEGORÍA PRINCIPAL', { align: 'center', underline: true });
-            doc.moveDown(0.5);
-
-            const distribucion = PorCategoriaPDF._construirDistribucionPrincipal(datos);
-            PDFBase.dibujarTabla(doc, distribucion);
-
-            // ========================================
-            // DETALLE CON SUBCATEGORÍAS (si cabe, sino nueva página)
-            // ========================================
-            PDFBase.verificarEspacio(doc, 250, '📋 DETALLE POR CATEGORÍA Y SUBCATEGORÍA');
-
-            const detalle = PorCategoriaPDF._construirDetalleCompleto(datos);
-            PDFBase.dibujarTabla(doc, detalle);
-
-            // ========================================
-            // TOP 5 CATEGORÍAS
-            // ========================================
-            doc.moveDown(1.5);
-            doc.fontSize(14).fillColor(PDFStyles.COLORES.AZUL_OSCURO)
-                .text('🏆 TOP 5 CATEGORÍAS (Mayor Tiempo Invertido)', { align: 'center', underline: true });
-            doc.moveDown(0.5);
-
-            const top5 = PorCategoriaPDF._construirTop5(datos);
-            PDFBase.dibujarTabla(doc, top5);
-
-            // ========================================
-            // ANÁLISIS Y RECOMENDACIONES
-            // ========================================
-            if (datos.categorias.length > 0) {
-                doc.moveDown(1.5);
-                doc.fontSize(14).fillColor(PDFStyles.COLORES.AZUL_OSCURO)
-                    .text('💡 INSIGHTS Y RECOMENDACIONES', { align: 'center', underline: true });
-                doc.moveDown(0.5);
-
-                const insights = PorCategoriaPDF._generarInsights(datos);
-                doc.fontSize(10).fillColor(PDFStyles.COLORES.GRIS_TEXTO);
-                insights.forEach(insight => {
-                    doc.text(`• ${insight}`, { indent: 20 });
-                    doc.moveDown(0.3);
-                });
-            }
+            await this._generarPaginaPrincipal(doc, datos, tieneActividades, tieneCategorias);
 
             doc.end();
             return await bufferPromise;
@@ -122,6 +38,97 @@ class PorCategoriaPDF {
         } catch (error) {
             console.error('❌ Error generando PDF por categoría:', error);
             throw error;
+        }
+    }
+
+    // ============================================
+    // PÁGINA PRINCIPAL
+    // ============================================
+
+    static async _generarPaginaPrincipal(doc, datos, tieneActividades, tieneCategorias) {
+        PDFBase.dibujarEncabezado(doc, 'ANÁLISIS POR CATEGORÍA DE ACTIVIDADES');
+
+        // Información del usuario
+        doc.moveDown(2);
+        doc.fontSize(18).fillColor(PDFStyles.COLORES.AZUL_OSCURO)
+            .text(datos.usuario.nombre_completo, { align: 'center' });
+        doc.fontSize(12).fillColor(PDFStyles.COLORES.GRIS)
+            .text(datos.usuario.email, { align: 'center' });
+        doc.fontSize(11).fillColor(PDFStyles.COLORES.GRIS)
+            .text(`Área: ${datos.usuario.area || 'Marketing'}`, { align: 'center' });
+
+        // Período
+        doc.moveDown(1);
+        PDFBase.dibujarCaja(doc, datos.periodo.descripcion, PDFStyles.COLORES.PURPURA);
+
+        if (!tieneActividades || !tieneCategorias) {
+            doc.moveDown(3);
+            doc.fontSize(14).fillColor(PDFStyles.COLORES.AMARILLO)
+                .text('SIN DATOS DE CATEGORÍAS', { align: 'center' });
+            doc.moveDown(1);
+            doc.fontSize(10).fillColor(PDFStyles.COLORES.GRIS).text(
+                'No se encontraron actividades categorizadas para el período seleccionado.',
+                { align: 'center', width: 500 }
+            );
+            return;
+        }
+
+        // ========================================
+        // RESUMEN EJECUTIVO
+        // ========================================
+        doc.moveDown(1.5);
+        doc.fontSize(14).fillColor(PDFStyles.COLORES.AZUL_OSCURO)
+            .text('📊 RESUMEN EJECUTIVO', { align: 'center', underline: true });
+        doc.moveDown(0.5);
+
+        const resumen = this._construirResumenEjecutivo(datos);
+        PDFBase.dibujarTabla(doc, resumen);
+
+        // ========================================
+        // DISTRIBUCIÓN POR CATEGORÍA PRINCIPAL
+        // ========================================
+        doc.moveDown(1.5);
+        doc.fontSize(14).fillColor(PDFStyles.COLORES.AZUL_OSCURO)
+            .text('🎯 DISTRIBUCIÓN POR CATEGORÍA PRINCIPAL', { align: 'center', underline: true });
+        doc.moveDown(0.5);
+
+        const distribucion = this._construirDistribucionPrincipal(datos);
+        PDFBase.dibujarTabla(doc, distribucion);
+
+        // ========================================
+        // DETALLE CON SUBCATEGORÍAS
+        // ========================================
+        PDFBase.verificarEspacio(doc, 250, '📋 DETALLE POR CATEGORÍA Y SUBCATEGORÍA');
+
+        const detalle = this._construirDetalleCompleto(datos);
+        PDFBase.dibujarTabla(doc, detalle);
+
+        // ========================================
+        // TOP 5 CATEGORÍAS
+        // ========================================
+        doc.moveDown(1.5);
+        doc.fontSize(14).fillColor(PDFStyles.COLORES.AZUL_OSCURO)
+            .text('🏆 TOP 5 CATEGORÍAS (Mayor Tiempo Invertido)', { align: 'center', underline: true });
+        doc.moveDown(0.5);
+
+        const top5 = this._construirTop5(datos);
+        PDFBase.dibujarTabla(doc, top5);
+
+        // ========================================
+        // ANÁLISIS Y RECOMENDACIONES
+        // ========================================
+        if (datos.categorias.length > 0) {
+            doc.moveDown(1.5);
+            doc.fontSize(14).fillColor(PDFStyles.COLORES.AZUL_OSCURO)
+                .text('💡 INSIGHTS Y RECOMENDACIONES', { align: 'center', underline: true });
+            doc.moveDown(0.5);
+
+            const insights = this._generarInsights(datos);
+            doc.fontSize(10).fillColor(PDFStyles.COLORES.GRIS_TEXTO);
+            insights.forEach(insight => {
+                doc.text(`• ${insight}`, { indent: 20 });
+                doc.moveDown(0.3);
+            });
         }
     }
 
@@ -279,45 +286,36 @@ class PorCategoriaPDF {
 
     static _generarInsights(datos) {
         const insights = [];
+
+        if (!datos.categorias || datos.categorias.length === 0) {
+            return ['No hay suficientes datos para generar insights.'];
+        }
+
         const tiempoTotal = datos.categorias.reduce((sum, cat) =>
-            sum + parseInt(cat.tiempo_total_minutos), 0
+            sum + parseInt(cat.tiempo_total_minutos || 0), 0
         );
 
-        // Categoría dominante
-        if (datos.categorias.length > 0) {
-            const top = datos.categorias[0];
-            const porcentaje = ((parseInt(top.tiempo_total_minutos) / tiempoTotal) * 100).toFixed(1);
-            insights.push(
-                `La categoría "${top.categoria_principal}" consume el ${porcentaje}% del tiempo total (${PDFBase.minutosAHoras(top.tiempo_total_minutos)}).`
-            );
+        // Top categoría
+        const topCategoria = datos.categorias[0];
+        if (topCategoria) {
+            const porcentaje = ((parseInt(topCategoria.tiempo_total_minutos || 0) / tiempoTotal) * 100).toFixed(1);
+            insights.push(`La categoría "${topCategoria.categoria_principal}" concentra el ${porcentaje}% del tiempo total.`);
+        }
+
+        // Tasa de completitud
+        const tasaCompletitud = datos.metricas?.tasas?.completitud || 0;
+        if (tasaCompletitud >= 80) {
+            insights.push(`Excelente tasa de completitud: ${tasaCompletitud}% de actividades completadas.`);
+        } else if (tasaCompletitud < 60) {
+            insights.push(`Alerta: Solo ${tasaCompletitud}% de actividades completadas. Revisar carga de trabajo.`);
         }
 
         // Diversificación
         const categoriasPrincipales = [...new Set(datos.categorias.map(c => c.categoria_principal))].length;
-        if (categoriasPrincipales < 3) {
-            insights.push('El trabajo está muy concentrado en pocas categorías. Considerar diversificar actividades.');
-        } else if (categoriasPrincipales > 8) {
-            insights.push('Alta diversificación de categorías. Evaluar si es necesario consolidar tareas similares.');
-        } else {
-            insights.push(`Distribución balanceada con ${categoriasPrincipales} categorías principales.`);
-        }
-
-        // Completitud por categoría
-        const categoriasBajaCompletitud = datos.categorias.filter(cat => {
-            const completitud = (parseInt(cat.completadas) / parseInt(cat.cantidad)) * 100;
-            return completitud < 70 && parseInt(cat.cantidad) >= 3;
-        });
-
-        if (categoriasBajaCompletitud.length > 0) {
-            insights.push(
-                `Atención: ${categoriasBajaCompletitud.length} categorías tienen baja tasa de completitud (<70%).`
-            );
-        }
-
-        // Promedio de actividades por categoría
-        const promedioPorCategoria = datos.metricas.totales.total / datos.categorias.length;
-        if (promedioPorCategoria < 2) {
-            insights.push('Muchas categorías con pocas actividades. Considerar reagrupar para mejor organización.');
+        if (categoriasPrincipales >= 5) {
+            insights.push(`Alta diversificación: Trabajo distribuido en ${categoriasPrincipales} categorías principales.`);
+        } else if (categoriasPrincipales <= 2) {
+            insights.push(`Baja diversificación: Trabajo concentrado en ${categoriasPrincipales} categorías. Considerar ampliar alcance.`);
         }
 
         return insights;
