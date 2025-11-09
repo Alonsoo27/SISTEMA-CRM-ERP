@@ -47,7 +47,7 @@ class ReportesController {
                     tipo: periodo,
                     fechaInicio,
                     fechaFin,
-                    descripcion: obtenerDescripcionPeriodo(periodo)
+                    descripcion: obtenerDescripcionPeriodo(periodo, fechaInicio, fechaFin)
                 }
             }
         };
@@ -87,7 +87,7 @@ class ReportesController {
                     tipo: periodo,
                     fechaInicio,
                     fechaFin,
-                    descripcion: obtenerDescripcionPeriodo(periodo)
+                    descripcion: obtenerDescripcionPeriodo(periodo, fechaInicio, fechaFin)
                 }
             }
         };
@@ -312,7 +312,7 @@ class ReportesController {
                         tipo: periodo,
                         fechaInicio,
                         fechaFin,
-                        descripcion: obtenerDescripcionPeriodo(periodo)
+                        descripcion: obtenerDescripcionPeriodo(periodo, fechaInicio, fechaFin)
                     }
                 }
             });
@@ -347,7 +347,7 @@ class ReportesController {
                     tipo: periodo,
                     fechaInicio,
                     fechaFin,
-                    descripcion: obtenerDescripcionPeriodo(periodo)
+                    descripcion: obtenerDescripcionPeriodo(periodo, fechaInicio, fechaFin)
                 }
             };
 
@@ -389,7 +389,7 @@ class ReportesController {
                     tipo: periodo,
                     fechaInicio,
                     fechaFin,
-                    descripcion: obtenerDescripcionPeriodo(periodo)
+                    descripcion: obtenerDescripcionPeriodo(periodo, fechaInicio, fechaFin)
                 }
             };
 
@@ -415,6 +415,26 @@ class ReportesController {
 // ============================================
 // FUNCIONES AUXILIARES
 // ============================================
+
+/**
+ * Obtener fechas de período considerando rangos personalizados
+ */
+function obtenerFechasPeriodo(req) {
+    const { periodo = 'mes_actual', fechaInicio: fechaInicioParam, fechaFin: fechaFinParam } = req.query;
+
+    // Si es rango personalizado, usar fechas provistas
+    if (periodo === 'custom' && fechaInicioParam && fechaFinParam) {
+        return {
+            fechaInicio: new Date(fechaInicioParam + 'T00:00:00'),
+            fechaFin: new Date(fechaFinParam + 'T23:59:59'),
+            periodo
+        };
+    }
+
+    // Si no, calcular según período predefinido
+    const { fechaInicio, fechaFin } = calcularPeriodo(periodo);
+    return { fechaInicio, fechaFin, periodo };
+}
 
 /**
  * Calcular fechas de inicio y fin según período
@@ -461,9 +481,32 @@ function calcularPeriodo(periodo) {
             fechaFin = new Date(ahora.getFullYear(), 11, 31, 23, 59, 59);
             break;
 
-        default: // mes_actual
-            fechaInicio = new Date(ahora.getFullYear(), ahora.getMonth(), 1, 0, 0, 0);
-            fechaFin = new Date(ahora.getFullYear(), ahora.getMonth() + 1, 0, 23, 59, 59);
+        default:
+            // Soportar períodos dinámicos del selector avanzado
+            if (periodo.startsWith('semana_')) {
+                const semanaNum = parseInt(periodo.split('_')[1]);
+                const primerDia = (semanaNum - 1) * 7 + 1;
+                const ultimoDiaMes = new Date(ahora.getFullYear(), ahora.getMonth() + 1, 0).getDate();
+                fechaInicio = new Date(ahora.getFullYear(), ahora.getMonth(), primerDia, 0, 0, 0);
+                fechaFin = new Date(ahora.getFullYear(), ahora.getMonth(), Math.min(primerDia + 6, ultimoDiaMes), 23, 59, 59);
+            } else if (periodo.startsWith('mes_')) {
+                const [_, anio, mes] = periodo.split('_');
+                fechaInicio = new Date(parseInt(anio), parseInt(mes), 1, 0, 0, 0);
+                fechaFin = new Date(parseInt(anio), parseInt(mes) + 1, 0, 23, 59, 59);
+            } else if (periodo.startsWith('trimestre_')) {
+                const [_, anio, q] = periodo.split('_');
+                const mesInicio = (parseInt(q) - 1) * 3;
+                fechaInicio = new Date(parseInt(anio), mesInicio, 1, 0, 0, 0);
+                fechaFin = new Date(parseInt(anio), mesInicio + 3, 0, 23, 59, 59);
+            } else if (periodo.startsWith('anio_')) {
+                const anio = parseInt(periodo.split('_')[1]);
+                fechaInicio = new Date(anio, 0, 1, 0, 0, 0);
+                fechaFin = new Date(anio, 11, 31, 23, 59, 59);
+            } else {
+                // Default: mes actual
+                fechaInicio = new Date(ahora.getFullYear(), ahora.getMonth(), 1, 0, 0, 0);
+                fechaFin = new Date(ahora.getFullYear(), ahora.getMonth() + 1, 0, 23, 59, 59);
+            }
     }
 
     return { fechaInicio, fechaFin };
@@ -472,10 +515,17 @@ function calcularPeriodo(periodo) {
 /**
  * Obtener descripción legible del período
  */
-function obtenerDescripcionPeriodo(periodo) {
+function obtenerDescripcionPeriodo(periodo, fechaInicio = null, fechaFin = null) {
     const ahora = new Date();
     const meses = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
                    'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+
+    // Rango personalizado
+    if (periodo === 'custom' && fechaInicio && fechaFin) {
+        const inicio = typeof fechaInicio === 'string' ? new Date(fechaInicio) : fechaInicio;
+        const fin = typeof fechaFin === 'string' ? new Date(fechaFin) : fechaFin;
+        return `${inicio.getDate()} ${meses[inicio.getMonth()]} ${inicio.getFullYear()} - ${fin.getDate()} ${meses[fin.getMonth()]} ${fin.getFullYear()}`;
+    }
 
     switch (periodo) {
         case 'hoy':
@@ -494,6 +544,20 @@ function obtenerDescripcionPeriodo(periodo) {
         case 'anio_actual':
             return `Año ${ahora.getFullYear()}`;
         default:
+            // Soportar períodos dinámicos
+            if (periodo.startsWith('semana_')) {
+                const semanaNum = parseInt(periodo.split('_')[1]);
+                return `Semana ${semanaNum} de ${meses[ahora.getMonth()]}`;
+            } else if (periodo.startsWith('mes_')) {
+                const [_, anio, mes] = periodo.split('_');
+                return `${meses[parseInt(mes)]} ${anio}`;
+            } else if (periodo.startsWith('trimestre_')) {
+                const [_, anio, q] = periodo.split('_');
+                return `Q${q} ${anio}`;
+            } else if (periodo.startsWith('anio_')) {
+                const anio = periodo.split('_')[1];
+                return `Año ${anio}`;
+            }
             return periodo;
     }
 }

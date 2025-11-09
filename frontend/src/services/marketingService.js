@@ -460,15 +460,48 @@ const marketingService = {
     },
 
     // ============================================
+    // HELPERS PARA PERÍODOS
+    // ============================================
+
+    /**
+     * Construir query params para períodos (soporta rangos personalizados)
+     */
+    _construirParamsPeriodo(periodoConfig) {
+        // Si es un string simple, usar como periodo
+        if (typeof periodoConfig === 'string') {
+            return { periodo: periodoConfig };
+        }
+
+        // Si es un objeto con tipo, fechaInicio, fechaFin
+        const params = { periodo: periodoConfig.tipo || 'mes_actual' };
+
+        if (periodoConfig.tipo === 'custom' && periodoConfig.fechaInicio && periodoConfig.fechaFin) {
+            params.fechaInicio = periodoConfig.fechaInicio;
+            params.fechaFin = periodoConfig.fechaFin;
+        }
+
+        return params;
+    },
+
+    /**
+     * Construir URL con query params
+     */
+    _construirURLConParams(baseURL, params) {
+        const searchParams = new URLSearchParams(params);
+        return `${baseURL}?${searchParams.toString()}`;
+    },
+
+    // ============================================
     // REPORTES POR CATEGORÍA
     // ============================================
 
     /**
      * Obtener datos para reporte por categoría (JSON)
      */
-    async obtenerDatosReporteCategoria(usuarioId, periodo = 'mes_actual') {
+    async obtenerDatosReporteCategoria(usuarioId, periodoConfig = 'mes_actual') {
+        const params = this._construirParamsPeriodo(periodoConfig);
         const response = await apiClient.get(`/marketing/reportes/categoria/${usuarioId}/datos`, {
-            params: { periodo }
+            params
         });
         return response.data;
     },
@@ -476,14 +509,17 @@ const marketingService = {
     /**
      * Descargar reporte por categoría en PDF
      */
-    async descargarReporteCategoriaPDF(usuarioId, periodo = 'mes_actual') {
-        const response = await fetch(
-            `${apiClient.baseURL}/marketing/reportes/categoria/${usuarioId}/pdf?periodo=${periodo}`,
-            {
-                method: 'GET',
-                headers: apiClient.getHeaders()
-            }
+    async descargarReporteCategoriaPDF(usuarioId, periodoConfig = 'mes_actual') {
+        const params = this._construirParamsPeriodo(periodoConfig);
+        const url = this._construirURLConParams(
+            `${apiClient.baseURL}/marketing/reportes/categoria/${usuarioId}/pdf`,
+            params
         );
+
+        const response = await fetch(url, {
+            method: 'GET',
+            headers: apiClient.getHeaders()
+        });
 
         if (!response.ok) {
             const error = await response.json();

@@ -5,6 +5,7 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import marketingService from '../../../services/marketingService';
+import SelectorPeriodoAvanzado from './SelectorPeriodoAvanzado';
 
 const ReportesMarketing = ({ usuarioId, esJefe }) => {
     // Obtener usuario logueado
@@ -34,6 +35,10 @@ const ReportesMarketing = ({ usuarioId, esJefe }) => {
     const [error, setError] = useState(null);
     const [datosPreview, setDatosPreview] = useState(null);
     const [mostrarPreview, setMostrarPreview] = useState(false);
+
+    // Estado para el selector de período avanzado
+    const [modalPeriodoAbierto, setModalPeriodoAbierto] = useState(false);
+    const [accionPendiente, setAccionPendiente] = useState(null); // { tipo: 'pdf'|'excel', reporte: 'personal'|'categoria'|'equipo' }
 
     // Cargar equipo de marketing si puede ver otros
     useEffect(() => {
