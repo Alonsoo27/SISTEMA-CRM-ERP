@@ -195,14 +195,13 @@ class ReportesQueries {
                 categoria_principal,
                 subcategoria,
                 estado,
-                prioridad,
+                es_prioritaria,
                 fecha_inicio_planeada,
                 fecha_fin_planeada,
                 fecha_inicio_real,
                 fecha_fin_real,
                 duracion_planeada_minutos,
-                duracion_real_minutos,
-                es_prioritaria
+                duracion_real_minutos
             FROM actividades_marketing
             WHERE usuario_id = $1
             AND activo = true
