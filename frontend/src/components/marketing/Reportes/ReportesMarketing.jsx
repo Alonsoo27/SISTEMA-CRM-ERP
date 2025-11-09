@@ -127,6 +127,38 @@ const ReportesMarketing = ({ usuarioId, esJefe }) => {
         }
     };
 
+    // ============================================
+    // HANDLERS REPORTE DE EQUIPO
+    // ============================================
+
+    const handleGenerarEquipoPDF = async () => {
+        setLoading(prev => ({ ...prev, equipoPdf: true }));
+        setError(null);
+
+        try {
+            await marketingService.descargarReporteEquipoPDF(periodo);
+        } catch (err) {
+            console.error('Error generando PDF de equipo:', err);
+            setError(err.message || 'Error al generar reporte PDF de equipo');
+        } finally {
+            setLoading(prev => ({ ...prev, equipoPdf: false }));
+        }
+    };
+
+    const handleGenerarEquipoExcel = async () => {
+        setLoading(prev => ({ ...prev, equipoExcel: true }));
+        setError(null);
+
+        try {
+            await marketingService.descargarReporteEquipoExcel(periodo);
+        } catch (err) {
+            console.error('Error generando Excel de equipo:', err);
+            setError(err.message || 'Error al generar reporte Excel de equipo');
+        } finally {
+            setLoading(prev => ({ ...prev, equipoExcel: false }));
+        }
+    };
+
     return (
         <div className="space-y-6">
             {/* Header */}
@@ -293,52 +325,74 @@ const ReportesMarketing = ({ usuarioId, esJefe }) => {
                 </div>
             </div>
 
-            {/* Otros reportes (próximamente) */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-
-                {/* Reporte de Equipo */}
-                <div className="bg-white rounded-lg shadow-lg p-6 opacity-60">
+            {/* Reporte de Equipo - Solo para jefes/ejecutivos */}
+            {puedeVerOtros && (
+                <div className="bg-gradient-to-br from-orange-50 to-red-50 rounded-lg shadow-lg p-6 border border-orange-200">
                     <div className="flex items-center gap-3 mb-4">
-                        <div className="w-12 h-12 bg-orange-100 rounded-lg flex items-center justify-center">
-                            <span className="text-2xl">👥</span>
+                        <div className="w-16 h-16 bg-gradient-to-br from-orange-500 to-red-600 rounded-lg flex items-center justify-center shadow-md">
+                            <span className="text-3xl">👥</span>
                         </div>
                         <div>
-                            <h3 className="text-lg font-bold text-gray-900">Equipo</h3>
-                            <p className="text-sm text-gray-500">Consolidado general</p>
+                            <h3 className="text-xl font-bold text-gray-900">Reporte Consolidado de Equipo</h3>
+                            <p className="text-sm text-gray-600">Métricas Generales del Equipo</p>
                         </div>
                     </div>
-                    <p className="text-sm text-gray-600 mb-4">
-                        Reporte consolidado de todo el equipo de marketing.
-                    </p>
-                    <button
-                        disabled
-                        className="w-full px-4 py-2 bg-gray-300 text-gray-500 rounded-lg cursor-not-allowed"
-                    >
-                        Próximamente
-                    </button>
-                </div>
 
-                {/* Reporte Mensual */}
-                <div className="bg-white rounded-lg shadow-lg p-6 opacity-60">
-                    <div className="flex items-center gap-3 mb-4">
-                        <div className="w-12 h-12 bg-pink-100 rounded-lg flex items-center justify-center">
-                            <span className="text-2xl">📅</span>
-                        </div>
-                        <div>
-                            <h3 className="text-lg font-bold text-gray-900">Mensual</h3>
-                            <p className="text-sm text-gray-500">Resumen del mes</p>
-                        </div>
+                    <div className="bg-white rounded-lg p-4 mb-4">
+                        <p className="text-sm text-gray-700 mb-2">
+                            <strong>📋 Incluye:</strong>
+                        </p>
+                        <ul className="text-sm text-gray-600 space-y-1 ml-4">
+                            <li>• Resumen general del equipo de marketing</li>
+                            <li>• Ranking de miembros por tasa de completitud</li>
+                            <li>• Estadísticas consolidadas de actividades</li>
+                            <li>• Tiempo total invertido por el equipo</li>
+                            <li>• Detalle completo por cada miembro</li>
+                            <li>• Promedios y métricas del equipo</li>
+                        </ul>
                     </div>
-                    <p className="text-sm text-gray-600 mb-4">
-                        Reporte ejecutivo con el resumen del mes completo.
-                    </p>
-                    <button
-                        disabled
-                        className="w-full px-4 py-2 bg-gray-300 text-gray-500 rounded-lg cursor-not-allowed"
-                    >
-                        Próximamente
-                    </button>
+
+                    {/* Botones de acción */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <button
+                            onClick={handleGenerarEquipoPDF}
+                            disabled={loading.equipoPdf}
+                            className="px-4 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors font-medium shadow-sm"
+                        >
+                            {loading.equipoPdf ? '⏳ Generando...' : '📄 Descargar PDF'}
+                        </button>
+
+                        <button
+                            onClick={handleGenerarEquipoExcel}
+                            disabled={loading.equipoExcel}
+                            className="px-4 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors font-medium shadow-sm"
+                        >
+                            {loading.equipoExcel ? '⏳ Generando...' : '📗 Descargar Excel'}
+                        </button>
+                    </div>
                 </div>
+            )}
+
+            {/* Reporte Mensual (próximamente) */}
+            <div className="bg-white rounded-lg shadow-lg p-6 opacity-60">
+                <div className="flex items-center gap-3 mb-4">
+                    <div className="w-12 h-12 bg-pink-100 rounded-lg flex items-center justify-center">
+                        <span className="text-2xl">📅</span>
+                    </div>
+                    <div>
+                        <h3 className="text-lg font-bold text-gray-900">Mensual</h3>
+                        <p className="text-sm text-gray-500">Resumen del mes</p>
+                    </div>
+                </div>
+                <p className="text-sm text-gray-600 mb-4">
+                    Reporte ejecutivo con el resumen del mes completo.
+                </p>
+                <button
+                    disabled
+                    className="w-full px-4 py-2 bg-gray-300 text-gray-500 rounded-lg cursor-not-allowed"
+                >
+                    Próximamente
+                </button>
             </div>
 
             {/* Modal de Preview */}

@@ -527,6 +527,76 @@ const marketingService = {
         a.click();
         a.remove();
         window.URL.revokeObjectURL(url);
+    },
+
+    // ============================================
+    // REPORTES DE EQUIPO
+    // ============================================
+
+    /**
+     * Obtener datos para reporte de equipo (JSON)
+     */
+    async obtenerDatosReporteEquipo(periodo = 'mes_actual') {
+        const response = await apiClient.get(`/marketing/reportes/equipo/datos`, {
+            params: { periodo }
+        });
+        return response.data;
+    },
+
+    /**
+     * Descargar reporte de equipo en PDF
+     */
+    async descargarReporteEquipoPDF(periodo = 'mes_actual') {
+        const response = await fetch(
+            `${apiClient.baseURL}/marketing/reportes/equipo/pdf?periodo=${periodo}`,
+            {
+                method: 'GET',
+                headers: apiClient.getHeaders()
+            }
+        );
+
+        if (!response.ok) {
+            const error = await response.json();
+            throw error;
+        }
+
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `Reporte_Equipo_${periodo}.pdf`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        window.URL.revokeObjectURL(url);
+    },
+
+    /**
+     * Descargar reporte de equipo en Excel
+     */
+    async descargarReporteEquipoExcel(periodo = 'mes_actual') {
+        const response = await fetch(
+            `${apiClient.baseURL}/marketing/reportes/equipo/excel?periodo=${periodo}`,
+            {
+                method: 'GET',
+                headers: apiClient.getHeaders()
+            }
+        );
+
+        if (!response.ok) {
+            const error = await response.json();
+            throw error;
+        }
+
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `Reporte_Equipo_${periodo}.xlsx`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        window.URL.revokeObjectURL(url);
     }
 };
 
