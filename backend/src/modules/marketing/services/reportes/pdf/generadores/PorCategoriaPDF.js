@@ -130,8 +130,20 @@ class PorCategoriaPDF {
     // ============================================
 
     static _construirResumenEjecutivo(datos) {
+        if (!datos.categorias || datos.categorias.length === 0) {
+            return [
+                ['Métrica', 'Valor'],
+                ['Total de Categorías Principales', 0],
+                ['Total de Subcategorías', 0],
+                ['Actividades Totales', datos.metricas?.totales?.total || 0],
+                ['Actividades Completadas', datos.metricas?.totales?.completadas || 0],
+                ['Tiempo Total Invertido', '0h 0m'],
+                ['Promedio por Categoría', '0h 0m']
+            ];
+        }
+
         const tiempoTotal = datos.categorias.reduce((sum, cat) =>
-            sum + parseInt(cat.tiempo_total_minutos), 0
+            sum + parseInt(cat.tiempo_total_minutos || 0), 0
         );
         const categoriasPrincipales = [...new Set(datos.categorias.map(c => c.categoria_principal))].length;
 
@@ -147,6 +159,13 @@ class PorCategoriaPDF {
     }
 
     static _construirDistribucionPrincipal(datos) {
+        if (!datos.categorias || datos.categorias.length === 0) {
+            return [
+                ['Categoría Principal', 'Actividades', 'Completadas', 'Tiempo Total', '% Tiempo'],
+                ['Sin datos', 0, 0, '0h 0m', '0%']
+            ];
+        }
+
         // Agrupar por categoría principal
         const principales = {};
         datos.categorias.forEach(cat => {
@@ -158,9 +177,9 @@ class PorCategoriaPDF {
                     tiempo: 0
                 };
             }
-            principales[principal].cantidad += parseInt(cat.cantidad);
-            principales[principal].completadas += parseInt(cat.completadas);
-            principales[principal].tiempo += parseInt(cat.tiempo_total_minutos);
+            principales[principal].cantidad += parseInt(cat.cantidad || 0);
+            principales[principal].completadas += parseInt(cat.completadas || 0);
+            principales[principal].tiempo += parseInt(cat.tiempo_total_minutos || 0);
         });
 
         const tiempoTotal = Object.values(principales).reduce((sum, p) => sum + p.tiempo, 0);
@@ -187,15 +206,22 @@ class PorCategoriaPDF {
     }
 
     static _construirDetalleCompleto(datos) {
+        if (!datos.categorias || datos.categorias.length === 0) {
+            return [
+                ['Categoría / Subcategoría', 'Cant.', 'Compl.', 'Tiempo', '%'],
+                ['Sin datos', 0, 0, '0h 0m', '0%']
+            ];
+        }
+
         const tiempoTotal = datos.categorias.reduce((sum, cat) =>
-            sum + parseInt(cat.tiempo_total_minutos), 0
+            sum + parseInt(cat.tiempo_total_minutos || 0), 0
         );
 
         const tabla = [['Categoría / Subcategoría', 'Cant.', 'Compl.', 'Tiempo', '%']];
 
         datos.categorias.forEach(cat => {
             const porcentaje = tiempoTotal > 0
-                ? ((parseInt(cat.tiempo_total_minutos) / tiempoTotal) * 100).toFixed(1)
+                ? ((parseInt(cat.tiempo_total_minutos || 0) / tiempoTotal) * 100).toFixed(1)
                 : 0;
 
             const nombre = cat.subcategoria
@@ -204,9 +230,9 @@ class PorCategoriaPDF {
 
             tabla.push([
                 nombre,
-                cat.cantidad,
-                cat.completadas,
-                PDFBase.minutosAHoras(cat.tiempo_total_minutos),
+                cat.cantidad || 0,
+                cat.completadas || 0,
+                PDFBase.minutosAHoras(cat.tiempo_total_minutos || 0),
                 `${porcentaje}%`
             ]);
         });
@@ -217,15 +243,20 @@ class PorCategoriaPDF {
     static _construirTop5(datos) {
         const tabla = [['#', 'Categoría', 'Actividades', 'Tiempo Total', '% del Total']];
 
+        if (!datos.categorias || datos.categorias.length === 0) {
+            tabla.push(['N/A', 'Sin datos', 0, '0h 0m', '0%']);
+            return tabla;
+        }
+
         const tiempoTotal = datos.categorias.reduce((sum, cat) =>
-            sum + parseInt(cat.tiempo_total_minutos), 0
+            sum + parseInt(cat.tiempo_total_minutos || 0), 0
         );
 
         datos.categorias
             .slice(0, 5)
             .forEach((cat, idx) => {
                 const porcentaje = tiempoTotal > 0
-                    ? ((parseInt(cat.tiempo_total_minutos) / tiempoTotal) * 100).toFixed(1)
+                    ? ((parseInt(cat.tiempo_total_minutos || 0) / tiempoTotal) * 100).toFixed(1)
                     : 0;
 
                 const nombre = cat.subcategoria
@@ -237,8 +268,8 @@ class PorCategoriaPDF {
                 tabla.push([
                     medalla,
                     nombre,
-                    cat.cantidad,
-                    PDFBase.minutosAHoras(cat.tiempo_total_minutos),
+                    cat.cantidad || 0,
+                    PDFBase.minutosAHoras(cat.tiempo_total_minutos || 0),
                     `${porcentaje}%`
                 ]);
             });
