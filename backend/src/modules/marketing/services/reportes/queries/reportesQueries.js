@@ -605,9 +605,7 @@ class ReportesQueries {
      * Obtener datos consolidados del equipo de marketing
      * Incluye métricas por miembro y totales generales
      */
-    static async obtenerDatosEquipo(periodo) {
-        const { fechaInicio, fechaFin } = calcularPeriodo(periodo);
-
+    static async obtenerDatosEquipo(fechaInicio, fechaFin) {
         // Obtener todos los usuarios de marketing
         const usuariosResult = await query(`
             SELECT id, nombre, apellido, email, rol
@@ -668,12 +666,6 @@ class ReportesQueries {
         const ranking = [...miembros].sort((a, b) => b.tasa_completitud - a.tasa_completitud);
 
         return {
-            periodo: {
-                tipo: periodo,
-                fechaInicio,
-                fechaFin,
-                descripcion: obtenerDescripcionPeriodo(periodo)
-            },
             totales: totalesEquipo,
             tasas: {
                 completitud: parseFloat(tasaCompletitudEquipo)

@@ -298,11 +298,23 @@ class ReportesController {
         try {
             const { periodo = 'mes_actual' } = req.query;
 
-            const datos = await ReportesQueries.obtenerDatosEquipo(periodo);
+            // Calcular fechas según período
+            const { fechaInicio, fechaFin } = calcularPeriodo(periodo);
+
+            // Obtener datos del equipo
+            const datos = await ReportesQueries.obtenerDatosEquipo(fechaInicio, fechaFin);
 
             return res.json({
                 success: true,
-                data: datos
+                data: {
+                    ...datos,
+                    periodo: {
+                        tipo: periodo,
+                        fechaInicio,
+                        fechaFin,
+                        descripcion: obtenerDescripcionPeriodo(periodo)
+                    }
+                }
             });
 
         } catch (error) {
@@ -322,11 +334,25 @@ class ReportesController {
         try {
             const { periodo = 'mes_actual' } = req.query;
 
-            // Obtener datos
-            const datos = await ReportesQueries.obtenerDatosEquipo(periodo);
+            // Calcular fechas según período
+            const { fechaInicio, fechaFin } = calcularPeriodo(periodo);
+
+            // Obtener datos del equipo
+            const datos = await ReportesQueries.obtenerDatosEquipo(fechaInicio, fechaFin);
+
+            // Agregar información del período
+            const datosConPeriodo = {
+                ...datos,
+                periodo: {
+                    tipo: periodo,
+                    fechaInicio,
+                    fechaFin,
+                    descripcion: obtenerDescripcionPeriodo(periodo)
+                }
+            };
 
             // Generar PDF
-            const pdfBuffer = await ReportePDFService.generarEquipo(datos);
+            const pdfBuffer = await ReportePDFService.generarEquipo(datosConPeriodo);
 
             // Enviar PDF
             res.setHeader('Content-Type', 'application/pdf');
@@ -350,11 +376,25 @@ class ReportesController {
         try {
             const { periodo = 'mes_actual' } = req.query;
 
-            // Obtener datos
-            const datos = await ReportesQueries.obtenerDatosEquipo(periodo);
+            // Calcular fechas según período
+            const { fechaInicio, fechaFin } = calcularPeriodo(periodo);
+
+            // Obtener datos del equipo
+            const datos = await ReportesQueries.obtenerDatosEquipo(fechaInicio, fechaFin);
+
+            // Agregar información del período
+            const datosConPeriodo = {
+                ...datos,
+                periodo: {
+                    tipo: periodo,
+                    fechaInicio,
+                    fechaFin,
+                    descripcion: obtenerDescripcionPeriodo(periodo)
+                }
+            };
 
             // Generar Excel
-            const excelBuffer = await ReporteExcelService.generarEquipo(datos);
+            const excelBuffer = await ReporteExcelService.generarEquipo(datosConPeriodo);
 
             // Enviar Excel
             res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
