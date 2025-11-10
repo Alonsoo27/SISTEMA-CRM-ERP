@@ -428,7 +428,7 @@ const marketingService = {
         const urlBlob = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = urlBlob;
-        a.download = `Reporte_Productividad_${params.periodo}.pdf`;
+        a.download = this._generarNombreArchivo('Productividad-Personal', periodoConfig, 'pdf', usuarioId);
         document.body.appendChild(a);
         a.click();
         a.remove();
@@ -459,7 +459,7 @@ const marketingService = {
         const urlBlob = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = urlBlob;
-        a.download = `Reporte_Productividad_${params.periodo}.xlsx`;
+        a.download = this._generarNombreArchivo('Productividad-Personal', periodoConfig, 'xlsx', usuarioId);
         document.body.appendChild(a);
         a.click();
         a.remove();
@@ -563,7 +563,7 @@ const marketingService = {
         const urlBlob = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = urlBlob;
-        a.download = `Reporte_Categoria_${params.periodo}.pdf`;
+        a.download = this._generarNombreArchivo('Por-Categoria', periodoConfig, 'pdf', usuarioId);
         document.body.appendChild(a);
         a.click();
         a.remove();
@@ -594,7 +594,7 @@ const marketingService = {
         const urlBlob = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = urlBlob;
-        a.download = `Reporte_Categoria_${params.periodo}.xlsx`;
+        a.download = this._generarNombreArchivo('Por-Categoria', periodoConfig, 'xlsx', usuarioId);
         document.body.appendChild(a);
         a.click();
         a.remove();
@@ -640,7 +640,7 @@ const marketingService = {
         const urlBlob = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = urlBlob;
-        a.download = `Reporte_Equipo_${params.periodo}.pdf`;
+        a.download = this._generarNombreArchivo('Consolidado-Equipo', periodoConfig, 'pdf');
         document.body.appendChild(a);
         a.click();
         a.remove();
@@ -671,7 +671,7 @@ const marketingService = {
         const urlBlob = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = urlBlob;
-        a.download = `Reporte_Equipo_${params.periodo}.xlsx`;
+        a.download = this._generarNombreArchivo('Consolidado-Equipo', periodoConfig, 'xlsx');
         document.body.appendChild(a);
         a.click();
         a.remove();
