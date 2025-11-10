@@ -438,6 +438,12 @@ const ModalCrearActividad = ({ onClose, onSuccess, usuarioId }) => {
 // COMPONENTE: MODAL DE COLISIÓN
 // ============================================
 const ModalColision = ({ colision, onConfirmar, onCancelar, onSeleccionarSlot, formData }) => {
+    console.log('🎭 ModalColision RENDERIZADO:', {
+        tipo_colision: colision?.tipo_colision,
+        mensaje: colision?.mensaje,
+        colision_completa: colision
+    });
+
     const formatearFecha = (fecha) => {
         return new Date(fecha).toLocaleString('es-PE', {
             day: '2-digit',
@@ -598,6 +604,92 @@ const ModalColision = ({ colision, onConfirmar, onCancelar, onSeleccionarSlot, f
                             className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition"
                         >
                             Sí, continuar
+                        </button>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
+    // TIPO 3: Colisión con PROGRAMADA (horario fijo)
+    if (colision.tipo_colision === 'programada') {
+        return (
+            <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-[60] p-4">
+                <div className="bg-white rounded-lg shadow-2xl max-w-lg w-full">
+                    <div className="bg-blue-50 p-6 border-b border-blue-200">
+                        <div className="flex items-center gap-3">
+                            <span className="text-3xl">📅</span>
+                            <h3 className="text-xl font-bold text-gray-900">
+                                Conflicto con actividad programada
+                            </h3>
+                        </div>
+                    </div>
+
+                    <div className="p-6 space-y-4">
+                        <p className="text-gray-700">{colision.mensaje}</p>
+
+                        <div className="bg-gray-50 p-4 rounded-lg">
+                            <p className="text-sm font-semibold text-gray-700 mb-2">📋 Actividad existente:</p>
+                            <p className="text-gray-900">{colision.actividad_conflicto?.descripcion}</p>
+                            <p className="text-sm text-gray-600 mt-1">
+                                🕐 {formatearFecha(colision.actividad_conflicto?.fecha_inicio)} - {formatearFecha(colision.actividad_conflicto?.fecha_fin)}
+                            </p>
+                            <p className="text-xs text-blue-700 mt-2">
+                                🔒 Actividad con horario fijo (no se puede mover automáticamente)
+                            </p>
+                        </div>
+
+                        {colision.advertencia && (
+                            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                                <p className="text-sm text-yellow-800">
+                                    <span className="font-semibold">⚠️ IMPORTANTE:</span> {colision.advertencia}
+                                </p>
+                            </div>
+                        )}
+
+                        {colision.sugerencias && (colision.sugerencias.previo || colision.sugerencias.posterior) && (
+                            <div className="bg-green-50 p-4 rounded-lg">
+                                <p className="text-sm font-semibold text-gray-700 mb-2">💡 Horarios alternativos disponibles:</p>
+
+                                {colision.sugerencias.previo && (
+                                    <button
+                                        onClick={() => onSeleccionarSlot(colision.sugerencias.previo.fecha_inicio)}
+                                        className="w-full text-left p-3 bg-white rounded border border-green-200 hover:bg-green-50 transition mb-2"
+                                    >
+                                        <p className="text-sm font-medium text-gray-900">⬅️ Antes del conflicto</p>
+                                        <p className="text-xs text-gray-600 mt-1">
+                                            {formatearFecha(colision.sugerencias.previo.fecha_inicio)}
+                                        </p>
+                                    </button>
+                                )}
+
+                                {colision.sugerencias.posterior && (
+                                    <button
+                                        onClick={() => onSeleccionarSlot(colision.sugerencias.posterior.fecha_inicio)}
+                                        className="w-full text-left p-3 bg-white rounded border border-green-200 hover:bg-green-50 transition"
+                                    >
+                                        <p className="text-sm font-medium text-gray-900">➡️ Después del conflicto</p>
+                                        <p className="text-xs text-gray-600 mt-1">
+                                            {formatearFecha(colision.sugerencias.posterior.fecha_inicio)}
+                                        </p>
+                                    </button>
+                                )}
+                            </div>
+                        )}
+                    </div>
+
+                    <div className="bg-gray-50 p-6 flex justify-end gap-3 border-t border-gray-200">
+                        <button
+                            onClick={onCancelar}
+                            className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-white transition"
+                        >
+                            Cancelar
+                        </button>
+                        <button
+                            onClick={onConfirmar}
+                            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
+                        >
+                            Forzar creación
                         </button>
                     </div>
                 </div>
