@@ -49,12 +49,16 @@ class EquipoExcel {
 
         // Información del período
         sheet.getCell(`A${currentRow}`).value = 'Equipo:';
-        Object.assign(sheet.getCell(`A${currentRow}`), ExcelStyles.TEXTO.NEGRITA);
+        sheet.getCell(`A${currentRow}`).font = { bold: true };
         sheet.getCell(`B${currentRow}`).value = 'Marketing';
 
         sheet.getCell(`C${currentRow}`).value = 'Periodo:';
-        Object.assign(sheet.getCell(`C${currentRow}`), ExcelStyles.TEXTO.NEGRITA);
+        sheet.getCell(`C${currentRow}`).font = { bold: true };
         sheet.getCell(`D${currentRow}`).value = datos.periodo.descripcion;
+
+        sheet.getCell(`F${currentRow}`).value = 'Generado:';
+        sheet.getCell(`F${currentRow}`).font = { bold: true };
+        sheet.getCell(`G${currentRow}`).value = new Date().toLocaleDateString('es-ES');
 
         currentRow += 2;
 

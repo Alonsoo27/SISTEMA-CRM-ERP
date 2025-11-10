@@ -498,6 +498,32 @@ const marketingService = {
         return `${baseURL}?${searchParams.toString()}`;
     },
 
+    /**
+     * Generar nombre de archivo dinámico
+     */
+    _generarNombreArchivo(tipoReporte, periodoConfig, extension, usuarioId = null) {
+        const fecha = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+
+        // Descripción del período
+        let descripcionPeriodo = '';
+        if (typeof periodoConfig === 'string') {
+            descripcionPeriodo = periodoConfig.replace(/_/g, '-');
+        } else if (periodoConfig.descripcion) {
+            descripcionPeriodo = periodoConfig.descripcion.replace(/\s+/g, '_').replace(/[()]/g, '');
+        } else if (periodoConfig.tipo) {
+            descripcionPeriodo = periodoConfig.tipo.replace(/_/g, '-');
+        }
+
+        // Construir nombre
+        const partes = ['Reporte', tipoReporte];
+        if (usuarioId) {
+            partes.push(`User${usuarioId}`);
+        }
+        partes.push(descripcionPeriodo, fecha);
+
+        return `${partes.join('_')}.${extension}`;
+    },
+
     // ============================================
     // REPORTES POR CATEGORÍA
     // ============================================
