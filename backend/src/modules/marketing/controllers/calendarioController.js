@@ -17,21 +17,23 @@ class CalendarioController {
             const esJefe = ['JEFE_MARKETING', 'SUPER_ADMIN', 'GERENTE', 'ADMIN'].includes(rol);
             const usuarioObjetivo = (usuario_id && esJefe) ? usuario_id : user_id;
 
-            // Calcular rango de semana (Lunes a Viernes)
-            // Siempre calcular desde el LUNES de la semana, independiente de la hora enviada
-            const fechaReferencia = fecha_inicio ? new Date(fecha_inicio) : new Date();
+            // Calcular rango de semana (Lunes a Sábado)
+            // IMPORTANTE: Trabajar con fechas en timezone de Perú (UTC-5)
+            const fechaReferencia = fecha_inicio ? new Date(fecha_inicio + 'T12:00:00-05:00') : new Date();
             const inicio = getStartOfWeek(fechaReferencia);
-            inicio.setHours(0, 0, 0, 0); // Inicio del día lunes
+            // Ajustar al inicio del día en Perú (00:00 Perú = 05:00 UTC)
+            inicio.setUTCHours(5, 0, 0, 0);
 
             const fin = new Date(inicio);
             fin.setDate(fin.getDate() + 5); // +5 días (Lunes a Sábado)
-            fin.setHours(23, 59, 59, 999); // Fin del día sábado
+            // Ajustar al final del día sábado en Perú (23:59 Perú = 04:59 UTC del día siguiente)
+            fin.setUTCHours(28, 59, 59, 999); // 28 horas = 4 AM del día siguiente
 
             console.log('📅 Vista semanal - Rango:', {
                 usuarioObjetivo,
                 fechaReferencia,
-                inicio,
-                fin
+                inicio: inicio.toISOString(),
+                fin: fin.toISOString()
             });
 
             const result = await query(`
@@ -44,12 +46,17 @@ class CalendarioController {
                 INNER JOIN usuarios c ON a.creado_por = c.id
                 WHERE a.usuario_id = $1
                   AND a.activo = true
-                  AND a.fecha_inicio_planeada >= $2
-                  AND a.fecha_inicio_planeada <= $3
+                  AND (
+                    (a.fecha_inicio_planeada >= $2 AND a.fecha_inicio_planeada <= $3)
+                    OR
+                    (a.fecha_fin_planeada >= $2 AND a.fecha_fin_planeada <= $3)
+                    OR
+                    (a.fecha_inicio_planeada < $2 AND a.fecha_fin_planeada > $3)
+                  )
                 ORDER BY a.fecha_inicio_planeada ASC
             `, [usuarioObjetivo, inicio, fin]);
 
-            console.log(`📊 Vista semanal encontró ${result.rowCount} actividades`);
+            console.log(`📊 Vista semanal encontró ${result.rowCount} actividades para usuario ${usuarioObjetivo}`);
 
             res.json({
                 success: true,
@@ -98,8 +105,13 @@ class CalendarioController {
                 INNER JOIN usuarios c ON a.creado_por = c.id
                 WHERE a.usuario_id = $1
                   AND a.activo = true
-                  AND a.fecha_inicio_planeada >= $2
-                  AND a.fecha_inicio_planeada <= $3
+                  AND (
+                    (a.fecha_inicio_planeada >= $2 AND a.fecha_inicio_planeada <= $3)
+                    OR
+                    (a.fecha_fin_planeada >= $2 AND a.fecha_fin_planeada <= $3)
+                    OR
+                    (a.fecha_inicio_planeada < $2 AND a.fecha_fin_planeada > $3)
+                  )
                 ORDER BY a.fecha_inicio_planeada ASC
             `, [usuarioObjetivo, inicio, fin]);
 
@@ -155,8 +167,13 @@ class CalendarioController {
                 INNER JOIN usuarios c ON a.creado_por = c.id
                 WHERE a.usuario_id = $1
                   AND a.activo = true
-                  AND a.fecha_inicio_planeada >= $2
-                  AND a.fecha_inicio_planeada <= $3
+                  AND (
+                    (a.fecha_inicio_planeada >= $2 AND a.fecha_inicio_planeada <= $3)
+                    OR
+                    (a.fecha_fin_planeada >= $2 AND a.fecha_fin_planeada <= $3)
+                    OR
+                    (a.fecha_inicio_planeada < $2 AND a.fecha_fin_planeada > $3)
+                  )
                 ORDER BY a.fecha_inicio_planeada ASC
             `, [usuarioObjetivo, inicio, fin]);
 
@@ -218,8 +235,13 @@ class CalendarioController {
                 INNER JOIN usuarios c ON a.creado_por = c.id
                 WHERE a.usuario_id = $1
                   AND a.activo = true
-                  AND a.fecha_inicio_planeada >= $2
-                  AND a.fecha_inicio_planeada <= $3
+                  AND (
+                    (a.fecha_inicio_planeada >= $2 AND a.fecha_inicio_planeada <= $3)
+                    OR
+                    (a.fecha_fin_planeada >= $2 AND a.fecha_fin_planeada <= $3)
+                    OR
+                    (a.fecha_inicio_planeada < $2 AND a.fecha_fin_planeada > $3)
+                  )
                 ORDER BY a.fecha_inicio_planeada ASC
             `, [usuarioObjetivo, inicio, fin]);
 

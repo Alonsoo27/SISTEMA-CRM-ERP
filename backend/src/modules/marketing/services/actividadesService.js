@@ -250,6 +250,23 @@ class ActividadesService {
                 if (minutosHueco >= MINUTOS_MINIMOS_HUECO) {
                     console.log(`⚠️ Hueco encontrado entre ${actividadActual.codigo} y ${actividadSiguiente.codigo}: ${minutosHueco} min`);
 
+                    // ✅ VERIFICAR SI HAY ALGUNA ACTIVIDAD (manual, grupal o sistema) que solape con este hueco
+                    const actividadSolapada = await query(`
+                        SELECT id, codigo, tipo FROM actividades_marketing
+                        WHERE usuario_id = $1
+                          AND activo = true
+                          AND (
+                            -- Hay alguna actividad que solape con el hueco
+                            (fecha_inicio_planeada < $3 AND fecha_fin_planeada > $2)
+                          )
+                        LIMIT 1
+                    `, [usuarioId, finActual, inicioSiguiente]);
+
+                    if (actividadSolapada.rows.length > 0) {
+                        console.log(`ℹ️ Ya existe actividad en este hueco (ID: ${actividadSolapada.rows[0].id}, tipo: ${actividadSolapada.rows[0].tipo}), saltando...`);
+                        continue; // Saltar al siguiente hueco
+                    }
+
                     // Categorizar el hueco
                     const categoriaHueco = this.categorizarHueco(
                         new Date(finActual),
@@ -304,39 +321,56 @@ class ActividadesService {
             if (minutosHuecoFinal >= MINUTOS_MINIMOS_HUECO) {
                 console.log(`⚠️ Hueco final detectado desde ${ultimaActividad.codigo} hasta ahora: ${minutosHuecoFinal} min`);
 
-                const categoriaHueco = this.categorizarHueco(
-                    new Date(finUltima),
-                    new Date(),
-                    minutosHuecoFinal
-                );
+                // ✅ VERIFICAR SI HAY ALGUNA ACTIVIDAD que solape con el hueco final
+                const ahora = new Date();
+                const actividadSolapadaFinal = await query(`
+                    SELECT id, codigo, tipo FROM actividades_marketing
+                    WHERE usuario_id = $1
+                      AND activo = true
+                      AND (
+                        -- Hay alguna actividad que solape con el hueco final
+                        (fecha_inicio_planeada < $3 AND fecha_fin_planeada > $2)
+                      )
+                    LIMIT 1
+                `, [usuarioId, finUltima, ahora]);
 
-                const codigoHueco = await this.generarCodigoActividad();
-                await query(`
-                    INSERT INTO actividades_marketing (
-                        codigo, categoria_principal, subcategoria, descripcion,
-                        usuario_id, creado_por, tipo,
-                        fecha_inicio_planeada, fecha_fin_planeada,
-                        duracion_planeada_minutos, duracion_real_minutos,
-                        color_hex, estado, activo
-                    ) VALUES (
-                        $1, 'SISTEMA', $2, $3,
-                        $4, $4, 'sistema',
-                        $5, NOW(),
-                        $6, $6,
-                        $7, 'completada', true
-                    )
-                `, [
-                    codigoHueco,
-                    categoriaHueco.subcategoria,
-                    categoriaHueco.descripcion,
-                    usuarioId,
-                    finUltima,
-                    minutosHuecoFinal,
-                    categoriaHueco.color
+                if (actividadSolapadaFinal.rows.length > 0) {
+                    console.log(`ℹ️ Ya existe actividad en el hueco final (ID: ${actividadSolapadaFinal.rows[0].id}, tipo: ${actividadSolapadaFinal.rows[0].tipo}), saltando...`);
+                } else {
+                    const categoriaHueco = this.categorizarHueco(
+                        new Date(finUltima),
+                        new Date(),
+                        minutosHuecoFinal
+                    );
+
+                    const codigoHueco = await this.generarCodigoActividad();
+                    await query(`
+                        INSERT INTO actividades_marketing (
+                            codigo, categoria_principal, subcategoria, descripcion,
+                            usuario_id, creado_por, tipo,
+                            fecha_inicio_planeada, fecha_fin_planeada,
+                            duracion_planeada_minutos, duracion_real_minutos,
+                            color_hex, estado, activo
+                        ) VALUES (
+                            $1, 'SISTEMA', $2, $3,
+                            $4, $4, 'sistema',
+                            $5, NOW(),
+                            $6, $6,
+                            $7, 'completada', true
+                        )
+                    `, [
+                        codigoHueco,
+                        categoriaHueco.subcategoria,
+                        categoriaHueco.descripcion,
+                        usuarioId,
+                        finUltima,
+                        minutosHuecoFinal,
+                        categoriaHueco.color
                 ]);
 
-                console.log(`✅ Hueco final registrado: ${codigoHueco} - ${categoriaHueco.subcategoria} (${minutosHuecoFinal} min)`);
-                huecosCreados++;
+                    console.log(`✅ Hueco final registrado: ${codigoHueco} - ${categoriaHueco.subcategoria} (${minutosHuecoFinal} min)`);
+                    huecosCreados++;
+                }
             }
 
             console.log(`🎯 Total de huecos creados: ${huecosCreados}`);

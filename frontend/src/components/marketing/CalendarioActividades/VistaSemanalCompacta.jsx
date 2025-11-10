@@ -45,24 +45,34 @@ const VistaSemanalCompacta = ({ actividades, fechaInicio, onActividadClick, onRe
 
     // Filtrar actividades por día
     const obtenerActividadesDia = (fecha) => {
-        return actividades.filter(actividad => {
+        // Usar toDateString() para comparar solo la fecha (sin hora) en la zona horaria local
+        const fechaStr = fecha.toDateString();
+
+        const actividadesFiltradas = actividades.filter(actividad => {
             const fechaInicio = new Date(actividad.fecha_inicio_planeada);
             const fechaFin = new Date(actividad.fecha_fin_planeada);
 
-            const empiezaHoy = (
-                fechaInicio.getDate() === fecha.getDate() &&
-                fechaInicio.getMonth() === fecha.getMonth() &&
-                fechaInicio.getFullYear() === fecha.getFullYear()
-            );
-
-            const terminaHoy = (
-                fechaFin.getDate() === fecha.getDate() &&
-                fechaFin.getMonth() === fecha.getMonth() &&
-                fechaFin.getFullYear() === fecha.getFullYear()
-            );
+            const empiezaHoy = fechaInicio.toDateString() === fechaStr;
+            const terminaHoy = fechaFin.toDateString() === fechaStr;
 
             return empiezaHoy || terminaHoy;
         });
+
+        // Debug temporal
+        if (fecha.getDate() === 10) {
+            console.log('🔍 Filtro día 10:', {
+                fechaBuscada: fechaStr,
+                totalActividades: actividades.length,
+                actividadesEncontradas: actividadesFiltradas.length,
+                ejemploActividad: actividades[0] ? {
+                    descripcion: actividades[0].descripcion,
+                    inicio: actividades[0].fecha_inicio_planeada,
+                    inicioStr: new Date(actividades[0].fecha_inicio_planeada).toDateString()
+                } : null
+            });
+        }
+
+        return actividadesFiltradas;
     };
 
     // Calcular estadísticas completas del día
