@@ -221,8 +221,8 @@ class PDFBase {
             // Valor (derecha, destacado)
             doc.fontSize(PDFStyles.FUENTES.VALOR_KPI)
                 .fillColor(PDFStyles.COLORES.BLANCO)
-                .text(String(kpi.valor), x + KPI_ANCHO - 80, y + KPI_PADDING + 5, {
-                    width: 70,
+                .text(String(kpi.valor), x + KPI_ANCHO - 90, y + KPI_PADDING + 5, {
+                    width: 85,
                     align: 'right'
                 });
         });

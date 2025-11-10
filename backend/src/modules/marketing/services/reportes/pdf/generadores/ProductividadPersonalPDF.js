@@ -144,6 +144,7 @@ class ProductividadPersonalPDF {
 
         // Estado de actividades - TABLA
         doc.moveDown(0.8);
+        PDFBase.verificarEspacio(doc, 180);
         doc.fontSize(14).fillColor(PDFStyles.COLORES.AZUL_OSCURO)
             .text('ESTADO DE ACTIVIDADES', { align: 'center', underline: true });
         doc.moveDown(0.3);
@@ -152,6 +153,7 @@ class ProductividadPersonalPDF {
 
         // Análisis de tiempo - TABLA
         doc.moveDown(1);
+        PDFBase.verificarEspacio(doc, 220);
         doc.fontSize(14).fillColor(PDFStyles.COLORES.AZUL_OSCURO)
             .text('ANÁLISIS DE TIEMPO', { align: 'left', underline: true });
         doc.moveDown(0.5);
@@ -160,6 +162,7 @@ class ProductividadPersonalPDF {
 
         // Actividades prioritarias
         doc.moveDown(1);
+        PDFBase.verificarEspacio(doc, 180);
         doc.fontSize(14).fillColor(PDFStyles.COLORES.AZUL_OSCURO)
             .text('ACTIVIDADES PRIORITARIAS', { align: 'left', underline: true });
         doc.moveDown(0.5);
