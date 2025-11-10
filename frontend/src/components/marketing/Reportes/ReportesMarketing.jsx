@@ -56,33 +56,64 @@ const ReportesMarketing = ({ usuarioId, esJefe }) => {
         }
     };
 
-    const handleGenerarPDF = async () => {
-        setLoading(prev => ({ ...prev, pdf: true }));
+    // ============================================
+    // HANDLERS CON SELECTOR DE PERÍODO AVANZADO
+    // ============================================
+
+    const abrirModalParaReporte = (tipo, reporte) => {
+        setAccionPendiente({ tipo, reporte });
+        setModalPeriodoAbierto(true);
+    };
+
+    const handleConfirmarPeriodo = async (periodoSeleccionado) => {
+        if (!accionPendiente) return;
+
+        const { tipo, reporte } = accionPendiente;
+        const loadingKey = reporte === 'personal'
+            ? tipo
+            : reporte === 'categoria'
+                ? `categoria${tipo.charAt(0).toUpperCase() + tipo.slice(1)}`
+                : `equipo${tipo.charAt(0).toUpperCase() + tipo.slice(1)}`;
+
+        setLoading(prev => ({ ...prev, [loadingKey]: true }));
         setError(null);
 
         try {
-            await marketingService.descargarReporteProductividadPDF(usuarioSeleccionado, periodo);
+            if (reporte === 'personal') {
+                if (tipo === 'pdf') {
+                    await marketingService.descargarReporteProductividadPDF(usuarioSeleccionado, periodoSeleccionado);
+                } else if (tipo === 'excel') {
+                    await marketingService.descargarReporteProductividadExcel(usuarioSeleccionado, periodoSeleccionado);
+                }
+            } else if (reporte === 'categoria') {
+                if (tipo === 'pdf') {
+                    await marketingService.descargarReporteCategoriaPDF(usuarioSeleccionado, periodoSeleccionado);
+                } else if (tipo === 'excel') {
+                    await marketingService.descargarReporteCategoriaExcel(usuarioSeleccionado, periodoSeleccionado);
+                }
+            } else if (reporte === 'equipo') {
+                if (tipo === 'pdf') {
+                    await marketingService.descargarReporteEquipoPDF(periodoSeleccionado);
+                } else if (tipo === 'excel') {
+                    await marketingService.descargarReporteEquipoExcel(periodoSeleccionado);
+                }
+            }
         } catch (err) {
-            console.error('Error generando PDF:', err);
-            setError(err.message || 'Error al generar reporte PDF');
+            console.error(`Error generando ${tipo.toUpperCase()} de ${reporte}:`, err);
+            setError(err.message || `Error al generar reporte ${tipo.toUpperCase()} de ${reporte}`);
         } finally {
-            setLoading(prev => ({ ...prev, pdf: false }));
+            setLoading(prev => ({ ...prev, [loadingKey]: false }));
+            setAccionPendiente(null);
         }
     };
 
-    const handleGenerarExcel = async () => {
-        setLoading(prev => ({ ...prev, excel: true }));
-        setError(null);
-
-        try {
-            await marketingService.descargarReporteProductividadExcel(usuarioSeleccionado, periodo);
-        } catch (err) {
-            console.error('Error generando Excel:', err);
-            setError(err.message || 'Error al generar reporte Excel');
-        } finally {
-            setLoading(prev => ({ ...prev, excel: false }));
-        }
-    };
+    // Handlers específicos que abren el modal
+    const handleGenerarPDF = () => abrirModalParaReporte('pdf', 'personal');
+    const handleGenerarExcel = () => abrirModalParaReporte('excel', 'personal');
+    const handleGenerarCategoriaPDF = () => abrirModalParaReporte('pdf', 'categoria');
+    const handleGenerarCategoriaExcel = () => abrirModalParaReporte('excel', 'categoria');
+    const handleGenerarEquipoPDF = () => abrirModalParaReporte('pdf', 'equipo');
+    const handleGenerarEquipoExcel = () => abrirModalParaReporte('excel', 'equipo');
 
     const handleVerPreview = async () => {
         setLoading(prev => ({ ...prev, preview: true }));
@@ -97,70 +128,6 @@ const ReportesMarketing = ({ usuarioId, esJefe }) => {
             setError(err.message || 'Error al obtener preview');
         } finally {
             setLoading(prev => ({ ...prev, preview: false }));
-        }
-    };
-
-    // ============================================
-    // HANDLERS REPORTE POR CATEGORÍA
-    // ============================================
-
-    const handleGenerarCategoriaPDF = async () => {
-        setLoading(prev => ({ ...prev, categoriaPdf: true }));
-        setError(null);
-
-        try {
-            await marketingService.descargarReporteCategoriaPDF(usuarioSeleccionado, periodo);
-        } catch (err) {
-            console.error('Error generando PDF por categoría:', err);
-            setError(err.message || 'Error al generar reporte PDF por categoría');
-        } finally {
-            setLoading(prev => ({ ...prev, categoriaPdf: false }));
-        }
-    };
-
-    const handleGenerarCategoriaExcel = async () => {
-        setLoading(prev => ({ ...prev, categoriaExcel: true }));
-        setError(null);
-
-        try {
-            await marketingService.descargarReporteCategoriaExcel(usuarioSeleccionado, periodo);
-        } catch (err) {
-            console.error('Error generando Excel por categoría:', err);
-            setError(err.message || 'Error al generar reporte Excel por categoría');
-        } finally {
-            setLoading(prev => ({ ...prev, categoriaExcel: false }));
-        }
-    };
-
-    // ============================================
-    // HANDLERS REPORTE DE EQUIPO
-    // ============================================
-
-    const handleGenerarEquipoPDF = async () => {
-        setLoading(prev => ({ ...prev, equipoPdf: true }));
-        setError(null);
-
-        try {
-            await marketingService.descargarReporteEquipoPDF(periodo);
-        } catch (err) {
-            console.error('Error generando PDF de equipo:', err);
-            setError(err.message || 'Error al generar reporte PDF de equipo');
-        } finally {
-            setLoading(prev => ({ ...prev, equipoPdf: false }));
-        }
-    };
-
-    const handleGenerarEquipoExcel = async () => {
-        setLoading(prev => ({ ...prev, equipoExcel: true }));
-        setError(null);
-
-        try {
-            await marketingService.descargarReporteEquipoExcel(periodo);
-        } catch (err) {
-            console.error('Error generando Excel de equipo:', err);
-            setError(err.message || 'Error al generar reporte Excel de equipo');
-        } finally {
-            setLoading(prev => ({ ...prev, equipoExcel: false }));
         }
     };
 
@@ -495,6 +462,23 @@ const ReportesMarketing = ({ usuarioId, esJefe }) => {
                     </div>
                 </div>
             )}
+
+            {/* Modal de Selector de Período Avanzado */}
+            <SelectorPeriodoAvanzado
+                isOpen={modalPeriodoAbierto}
+                onClose={() => {
+                    setModalPeriodoAbierto(false);
+                    setAccionPendiente(null);
+                }}
+                onConfirm={handleConfirmarPeriodo}
+                tipoReporte={
+                    accionPendiente?.reporte === 'personal'
+                        ? 'Reporte de Productividad Personal'
+                        : accionPendiente?.reporte === 'categoria'
+                            ? 'Reporte por Categoría'
+                            : 'Reporte Consolidado de Equipo'
+                }
+            />
         </div>
     );
 };
