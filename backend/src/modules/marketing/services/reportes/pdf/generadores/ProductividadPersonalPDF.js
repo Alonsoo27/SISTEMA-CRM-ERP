@@ -1,17 +1,16 @@
 // ============================================
 // GENERADOR PDF: PRODUCTIVIDAD PERSONAL
 // Reporte completo de productividad individual
-// VERSIÓN 4.0 - CON GRÁFICOS PROFESIONALES
+// VERSIÓN 5.0 - FORMATO DE TABLAS
 // ============================================
 
 const PDFBase = require('../utils/PDFBase');
 const PDFStyles = require('../utils/PDFStyles');
-const PDFCharts = require('../utils/PDFCharts');
 
 class ProductividadPersonalPDF {
     /**
      * Generar reporte completo de productividad personal
-     * VERSIÓN CON GRÁFICOS: Usa Chart.js para gráficos profesionales
+     * VERSIÓN CON TABLAS: Usa formato de tablas profesionales
      */
     static async generar(datos) {
         try {
@@ -106,7 +105,7 @@ class ProductividadPersonalPDF {
     // ============================================
 
     /**
-     * Dashboard ejecutivo con GRÁFICOS PROFESIONALES
+     * Dashboard ejecutivo con TABLAS PROFESIONALES
      */
     static async _generarDashboardEjecutivo(doc, datos, tieneActividades) {
         PDFBase.dibujarEncabezado(doc, 'REPORTE DE PRODUCTIVIDAD PERSONAL');
@@ -143,23 +142,23 @@ class ProductividadPersonalPDF {
         const kpis = this._construirKPIs(datos);
         PDFBase.dibujarGridKPIs(doc, kpis);
 
-        // Estado de actividades - GRÁFICO DONUT
+        // Estado de actividades - TABLA
         doc.moveDown(0.8);
         doc.fontSize(14).fillColor(PDFStyles.COLORES.AZUL_OSCURO)
             .text('ESTADO DE ACTIVIDADES', { align: 'center', underline: true });
         doc.moveDown(0.3);
 
-        await this._generarEstadoActividadesConGrafico(doc, datos);
+        this._generarEstadoActividadesConTabla(doc, datos);
 
-        // Análisis de tiempo - GAUGE CHART
+        // Análisis de tiempo - TABLA
         doc.moveDown(1);
         doc.fontSize(14).fillColor(PDFStyles.COLORES.AZUL_OSCURO)
             .text('ANÁLISIS DE TIEMPO', { align: 'left', underline: true });
         doc.moveDown(0.5);
 
-        await this._generarAnalisisTiempoConGauge(doc, datos);
+        this._generarAnalisisTiempoConTabla(doc, datos);
 
-        // Actividades prioritarias - BARRA SIMPLE
+        // Actividades prioritarias
         doc.moveDown(1);
         doc.fontSize(14).fillColor(PDFStyles.COLORES.AZUL_OSCURO)
             .text('ACTIVIDADES PRIORITARIAS', { align: 'left', underline: true });
@@ -169,59 +168,14 @@ class ProductividadPersonalPDF {
     }
 
     /**
-     * NUEVO: Generar estado de actividades con gráfico donut real
+     * Generar estado de actividades con tabla
      */
-    static async _generarEstadoActividadesConGrafico(doc, datos) {
-        const datosDonut = [];
+    static _generarEstadoActividadesConTabla(doc, datos) {
+        const tabla = this._construirTablaEstadosDinamica(datos);
 
-        if (datos.metricas.totales.completadas > 0) {
-            datosDonut.push({
-                label: 'Completadas',
-                valor: datos.metricas.totales.completadas,
-                color: PDFStyles.COLORES.VERDE
-            });
-        }
-        if (datos.metricas.totales.en_progreso > 0) {
-            datosDonut.push({
-                label: 'En Progreso',
-                valor: datos.metricas.totales.en_progreso,
-                color: PDFStyles.COLORES.AZUL_MEDIO
-            });
-        }
-        if (datos.metricas.totales.pendientes > 0) {
-            datosDonut.push({
-                label: 'Pendientes',
-                valor: datos.metricas.totales.pendientes,
-                color: PDFStyles.COLORES.AMARILLO
-            });
-        }
-        if (datos.metricas.totales.canceladas > 0) {
-            datosDonut.push({
-                label: 'Canceladas',
-                valor: datos.metricas.totales.canceladas,
-                color: PDFStyles.COLORES.GRIS
-            });
-        }
-
-        if (datosDonut.length > 0) {
-            const donutBuffer = await PDFCharts.generarDonut(datosDonut, {
-                width: 450,
-                height: 250,
-                showLegend: true
-            });
-
-            // CRITICAL: Asegurar X está en margen izquierdo ANTES de insertar imagen
-            doc.x = PDFStyles.DIMENSIONES.MARGEN_IZQUIERDO;
-
-            // FIXED: NO usar coordenadas absolutas - usar solo flujo automático
-            doc.image(donutBuffer, {
-                fit: [480, 250],
-                align: 'center'
-            });
-
-            // CRITICAL: Resetear X a margen izquierdo después de imagen
-            doc.x = PDFStyles.DIMENSIONES.MARGEN_IZQUIERDO;
-            doc.moveDown(1);
+        if (tabla.length > 1) {
+            PDFBase.dibujarTabla(doc, tabla, [200, 120, 120]);
+            doc.moveDown(0.5);
         } else {
             doc.fontSize(10).fillColor(PDFStyles.COLORES.GRIS)
                 .text('Sin datos para mostrar', { indent: 20 });
@@ -230,42 +184,13 @@ class ProductividadPersonalPDF {
     }
 
     /**
-     * NUEVO: Generar análisis de tiempo con gauge real
+     * Generar análisis de tiempo con tabla
      */
-    static async _generarAnalisisTiempoConGauge(doc, datos) {
+    static _generarAnalisisTiempoConTabla(doc, datos) {
         if (datos.metricas.tiempos.total_real_minutos > 0) {
-            const gaugeBuffer = await PDFCharts.generarGauge(
-                datos.metricas.tasas.eficiencia,
-                {
-                    max: 150,
-                    label: 'Eficiencia de Tiempo',
-                    width: 400,
-                    height: 250,
-                    unidad: '%'
-                }
-            );
-
-            // FIXED: NO usar coordenadas absolutas - usar solo flujo automático
-            doc.image(gaugeBuffer, {
-                fit: [440, 250],
-                align: 'center'
-            });
-
-            // CRITICAL: Resetear X a margen izquierdo después de imagen
-            doc.x = PDFStyles.DIMENSIONES.MARGEN_IZQUIERDO;
+            const tabla = this._construirTablaTiempos(datos);
+            PDFBase.dibujarTabla(doc, tabla, [280, 200]);
             doc.moveDown(0.5);
-
-            // Interpretación textual
-            const interpretacion = PDFStyles.getInterpretacionEficiencia(datos.metricas.tasas.eficiencia);
-            doc.fontSize(10).fillColor(interpretacion.color)
-                .text(`${interpretacion.nivel}: ${interpretacion.texto}`, { indent: 20 });
-
-            // Métricas adicionales
-            doc.moveDown(0.5);
-            doc.fontSize(9).fillColor(PDFStyles.COLORES.GRIS_TEXTO);
-            doc.text(`Tiempo Planeado: ${PDFBase.minutosAHoras(datos.metricas.tiempos.total_planeado_minutos)}`, { indent: 20 });
-            doc.text(`Tiempo Real: ${PDFBase.minutosAHoras(datos.metricas.tiempos.total_real_minutos)}`, { indent: 20 });
-            doc.text(`Extensiones: ${datos.metricas.tiempos.con_extension}`, { indent: 20 });
         } else {
             doc.fontSize(10).fillColor(PDFStyles.COLORES.GRIS)
                 .text('Sin datos suficientes para análisis de tiempo', { indent: 20 });
@@ -353,7 +278,7 @@ class ProductividadPersonalPDF {
         doc.moveDown(1);
     }
 
-    static async _generarSeccionProductividadDiaria(doc, datos) {
+    static _generarSeccionProductividadDiaria(doc, datos) {
         doc.fontSize(14).fillColor(PDFStyles.COLORES.AZUL_OSCURO)
             .text('PRODUCTIVIDAD POR DÍA DE LA SEMANA', { align: 'left', underline: true });
         doc.moveDown(1);
@@ -361,28 +286,9 @@ class ProductividadPersonalPDF {
         const productividad = datos.analisis_avanzado?.productividad_por_dia || [];
 
         if (productividad.length > 0) {
-            const datosBarra = productividad.map(dia => ({
-                label: dia.nombre_dia,
-                valor: dia.completadas,
-                color: PDFStyles.COLORES.AZUL_MEDIO
-            }));
-
-            // Usar gráfico profesional de Chart.js
-            const barrasBuffer = await PDFCharts.generarBarrasHorizontal(datosBarra, {
-                width: 550,
-                height: 300,
-                title: ''
-            });
-
-            // FIXED: NO usar coordenadas absolutas - usar solo flujo automático
-            doc.image(barrasBuffer, {
-                fit: [520, 300],
-                align: 'center'
-            });
-
-            // CRITICAL: Resetear X a margen izquierdo después de imagen
-            doc.x = PDFStyles.DIMENSIONES.MARGEN_IZQUIERDO;
-            doc.moveDown(1);
+            const tabla = this._construirTablaProductividadDiaria(productividad, datos);
+            PDFBase.dibujarTabla(doc, tabla, [100, 80, 80, 80, 80]);
+            doc.moveDown(0.5);
         } else {
             doc.fontSize(10).fillColor(PDFStyles.COLORES.GRIS)
                 .text('Sin datos suficientes para análisis por día.', { indent: 20 });
@@ -603,6 +509,27 @@ class ProductividadPersonalPDF {
                 cat.cantidad,
                 PDFBase.minutosAHoras(cat.tiempo_total_minutos),
                 PDFBase.formatearPorcentaje(porcentaje)
+            ]);
+        });
+
+        return tabla;
+    }
+
+    static _construirTablaProductividadDiaria(productividad, datos) {
+        const tabla = [['Día', 'Total', 'Compl.', 'Pend.', 'Tasa']];
+
+        productividad.forEach(dia => {
+            const total = dia.total || 0;
+            const completadas = dia.completadas || 0;
+            const pendientes = dia.pendientes || 0;
+            const tasa = total > 0 ? ((completadas / total) * 100).toFixed(1) : 0;
+
+            tabla.push([
+                dia.nombre_dia,
+                total,
+                completadas,
+                pendientes,
+                `${tasa}%`
             ]);
         });
 
