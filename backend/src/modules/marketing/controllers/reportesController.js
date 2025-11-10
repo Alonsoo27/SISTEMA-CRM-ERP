@@ -456,7 +456,7 @@ function calcularPeriodo(periodo) {
             fechaInicio.setDate(ahora.getDate() + diffInicio);
             fechaInicio.setHours(0, 0, 0, 0);
             fechaFin = new Date(fechaInicio);
-            fechaFin.setDate(fechaInicio.getDate() + 6);
+            fechaFin.setDate(fechaInicio.getDate() + 5); // Lunes a Sábado (6 días)
             fechaFin.setHours(23, 59, 59, 999);
             break;
 
@@ -485,10 +485,10 @@ function calcularPeriodo(periodo) {
             // Soportar períodos dinámicos del selector avanzado
             if (periodo.startsWith('semana_')) {
                 const semanaNum = parseInt(periodo.split('_')[1]);
-                const primerDia = (semanaNum - 1) * 7 + 1;
+                const primerDia = (semanaNum - 1) * 6 + 1; // 6 días por semana (Lun-Sáb)
                 const ultimoDiaMes = new Date(ahora.getFullYear(), ahora.getMonth() + 1, 0).getDate();
                 fechaInicio = new Date(ahora.getFullYear(), ahora.getMonth(), primerDia, 0, 0, 0);
-                fechaFin = new Date(ahora.getFullYear(), ahora.getMonth(), Math.min(primerDia + 6, ultimoDiaMes), 23, 59, 59);
+                fechaFin = new Date(ahora.getFullYear(), ahora.getMonth(), Math.min(primerDia + 5, ultimoDiaMes), 23, 59, 59); // +5 = 6 días
             } else if (periodo.startsWith('mes_')) {
                 const [_, anio, mes] = periodo.split('_');
                 fechaInicio = new Date(parseInt(anio), parseInt(mes), 1, 0, 0, 0);

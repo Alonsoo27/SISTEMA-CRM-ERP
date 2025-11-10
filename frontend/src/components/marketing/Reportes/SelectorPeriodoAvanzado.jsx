@@ -46,7 +46,7 @@ const SelectorPeriodoAvanzado = ({ isOpen, onClose, onConfirm, tipoReporte = "Re
                 fechaInicio.setDate(ahora.getDate() + diffInicio);
                 fechaInicio.setHours(0, 0, 0, 0);
                 fechaFin = new Date(fechaInicio);
-                fechaFin.setDate(fechaInicio.getDate() + 6);
+                fechaFin.setDate(fechaInicio.getDate() + 5); // Lunes a Sábado (6 días)
                 fechaFin.setHours(23, 59, 59, 999);
                 break;
 
@@ -69,9 +69,9 @@ const SelectorPeriodoAvanzado = ({ isOpen, onClose, onConfirm, tipoReporte = "Re
             default:
                 if (tipo.startsWith('semana_')) {
                     const semanaNum = parseInt(tipo.split('_')[1]);
-                    const primerDia = (semanaNum - 1) * 7 + 1;
+                    const primerDia = (semanaNum - 1) * 6 + 1; // 6 días por semana (Lun-Sáb)
                     fechaInicio = new Date(ahora.getFullYear(), ahora.getMonth(), primerDia);
-                    fechaFin = new Date(ahora.getFullYear(), ahora.getMonth(), Math.min(primerDia + 6, new Date(ahora.getFullYear(), ahora.getMonth() + 1, 0).getDate()), 23, 59, 59);
+                    fechaFin = new Date(ahora.getFullYear(), ahora.getMonth(), Math.min(primerDia + 5, new Date(ahora.getFullYear(), ahora.getMonth() + 1, 0).getDate()), 23, 59, 59);
                 } else if (tipo.startsWith('mes_')) {
                     const [_, anio, mes] = tipo.split('_');
                     fechaInicio = new Date(parseInt(anio), parseInt(mes), 1);
@@ -109,12 +109,12 @@ const SelectorPeriodoAvanzado = ({ isOpen, onClose, onConfirm, tipoReporte = "Re
     const generarSemanasDelMes = () => {
         const ahora = new Date();
         const ultimoDia = new Date(ahora.getFullYear(), ahora.getMonth() + 1, 0).getDate();
-        const numSemanas = Math.ceil(ultimoDia / 7);
+        const numSemanas = Math.ceil(ultimoDia / 6); // 6 días por semana (Lun-Sáb)
 
         const semanas = [];
         for (let i = 1; i <= numSemanas; i++) {
-            const primerDia = (i - 1) * 7 + 1;
-            const ultimoDiaSemana = Math.min(primerDia + 6, ultimoDia);
+            const primerDia = (i - 1) * 6 + 1; // 6 días por semana
+            const ultimoDiaSemana = Math.min(primerDia + 5, ultimoDia); // +5 = 6 días totales
             semanas.push({
                 tipo: `semana_${i}`,
                 descripcion: `Semana ${i} (${primerDia}-${ultimoDiaSemana})`,
