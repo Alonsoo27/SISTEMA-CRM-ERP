@@ -958,8 +958,10 @@ class ActividadesController {
                 console.log(`✅ Actividad individual editada correctamente`);
             }
 
-            // Reajustar actividades posteriores para CADA participante (SOLO actividades normales)
-            if (duracion_minutos || fecha_inicio) {
+            // Reajustar actividades posteriores SOLO si es prioritaria o grupal
+            // Las actividades normales/programadas NO deben interrumpir otras actividades al editarse
+            if ((duracion_minutos || fecha_inicio) && (actividad.es_prioritaria || actividad.es_grupal)) {
+                console.log(`🔄 Reajustando actividades porque es ${actividad.es_prioritaria ? 'PRIORITARIA' : 'GRUPAL'}`);
                 for (const actividadActualizada of result.rows) {
                     await reajusteService.reajustarActividades(
                         actividadActualizada.usuario_id,
@@ -969,6 +971,8 @@ class ActividadesController {
                         true  // soloDesplazarNormales = true (NO mover programadas, grupales, prioritarias)
                     );
                 }
+            } else if (duracion_minutos || fecha_inicio) {
+                console.log(`ℹ️ Actividad normal/programada editada - NO se reajustan otras actividades (validaciones de colisión ya se ejecutaron arriba)`);
             }
 
             // OPTIMIZACIÓN AUTOMÁTICA: Si se redujo duración, adelantar actividades posteriores
@@ -1183,15 +1187,21 @@ class ActividadesController {
                 console.log(`✅ Actividad individual extendida correctamente`);
             }
 
-            // Reajustar actividades posteriores para CADA participante (SOLO actividades normales)
-            for (const actividadActualizada of result.rows) {
-                await reajusteService.reajustarActividades(
-                    actividadActualizada.usuario_id,
-                    actividadActualizada.fecha_inicio_planeada,
-                    actividadActualizada.duracion_planeada_minutos + minutos_adicionales,
-                    actividadActualizada.id,
-                    true  // soloDesplazarNormales = true (NO mover programadas, grupales, prioritarias)
-                );
+            // Reajustar actividades posteriores SOLO si es prioritaria o grupal
+            // Las actividades normales/programadas NO deben interrumpir otras actividades al extenderse
+            if (actividad.es_prioritaria || actividad.es_grupal) {
+                console.log(`🔄 Reajustando actividades porque es ${actividad.es_prioritaria ? 'PRIORITARIA' : 'GRUPAL'}`);
+                for (const actividadActualizada of result.rows) {
+                    await reajusteService.reajustarActividades(
+                        actividadActualizada.usuario_id,
+                        actividadActualizada.fecha_inicio_planeada,
+                        actividadActualizada.duracion_planeada_minutos + minutos_adicionales,
+                        actividadActualizada.id,
+                        true  // soloDesplazarNormales = true (NO mover programadas, grupales, prioritarias)
+                    );
+                }
+            } else {
+                console.log(`ℹ️ Actividad normal/programada extendida - NO se reajustan otras actividades (validaciones de colisión ya se ejecutaron arriba)`);
             }
 
             // Agregar 'Z' a los timestamps para indicar que son UTC
