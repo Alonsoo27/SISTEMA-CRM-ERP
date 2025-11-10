@@ -534,14 +534,14 @@ const marketingService = {
         }
 
         const blob = await response.blob();
-        const url = window.URL.createObjectURL(blob);
+        const urlBlob = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
-        a.href = url;
-        a.download = `Reporte_Categoria_${periodo}.pdf`;
+        a.href = urlBlob;
+        a.download = `Reporte_Categoria_${params.periodo}.pdf`;
         document.body.appendChild(a);
         a.click();
         a.remove();
-        window.URL.revokeObjectURL(url);
+        window.URL.revokeObjectURL(urlBlob);
     },
 
     /**
