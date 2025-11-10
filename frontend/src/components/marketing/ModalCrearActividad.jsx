@@ -166,9 +166,14 @@ const ModalCrearActividad = ({ onClose, onSuccess, usuarioId }) => {
             // MANEJO DE COLISIONES (HTTP 409)
             if (error.status === 409 || error.response?.status === 409) {
                 const colisionData = error.response?.data || error.data;
-                console.log('⚠️ Colisión detectada - Mostrando modal');
+                console.log('⚠️ Colisión detectada - Datos:', {
+                    error_status: error.status,
+                    error_response_status: error.response?.status,
+                    colisionData: colisionData
+                });
                 setColision(colisionData);
                 setMostrarModalColision(true);
+                console.log('✅ Estado actualizado - mostrarModalColision:', true);
             } else {
                 console.error('Error creando actividad:', error);
                 setNotificacion({

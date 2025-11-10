@@ -103,13 +103,43 @@ const ModalEditarActividad = ({ actividad, onClose, onSuccess }) => {
 
             await onSuccess(datos);
         } catch (error) {
-            console.error('Error editando actividad:', error);
-            setNotificacion({
-                isOpen: true,
-                tipo: 'danger',
-                titulo: 'Error al editar',
-                mensaje: error.response?.data?.message || error.message || 'No se pudo editar la actividad'
-            });
+            // MANEJO DE COLISIONES (HTTP 409)
+            if (error.status === 409 || error.response?.status === 409) {
+                const colisionData = error.response?.data || error.data;
+                console.log('⚠️ Colisión detectada al editar:', colisionData);
+
+                // Mostrar mensaje detallado sobre la colisión
+                let mensajeColision = colisionData?.mensaje || 'Hay conflictos de horario al editar esta actividad';
+
+                if (colisionData?.bloqueante) {
+                    mensajeColision += '\n\n' + (colisionData?.advertencia || 'Las actividades programadas, grupales y prioritarias no pueden ser desplazadas.');
+
+                    if (colisionData?.conflictos && colisionData.conflictos.length > 0) {
+                        mensajeColision += '\n\nActividades en conflicto:';
+                        colisionData.conflictos.forEach(c => {
+                            const actividad = c.actividad || {};
+                            mensajeColision += `\n- ${actividad.descripcion || 'Actividad'} (${c.razon || c.tipo})`;
+                        });
+                    }
+                } else {
+                    mensajeColision += '\n\n' + (colisionData?.advertencia || 'Las siguientes actividades se moverán automáticamente.');
+                }
+
+                setNotificacion({
+                    isOpen: true,
+                    tipo: 'warning',
+                    titulo: 'Conflicto de horario',
+                    mensaje: mensajeColision
+                });
+            } else {
+                console.error('Error editando actividad:', error);
+                setNotificacion({
+                    isOpen: true,
+                    tipo: 'danger',
+                    titulo: 'Error al editar',
+                    mensaje: error.response?.data?.message || error.message || 'No se pudo editar la actividad'
+                });
+            }
         } finally {
             setLoading(false);
         }
