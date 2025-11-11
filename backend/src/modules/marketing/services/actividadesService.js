@@ -313,75 +313,82 @@ class ActividadesService {
                 }
             }
 
-            // Último hueco: desde la última actividad hasta AHORA
+            // Último hueco: desde la última actividad hasta FIN DE JORNADA DE ESE DÍA
             const ultimaActividad = actividades[actividades.length - 1];
             // Usar fecha_fin_efectiva (real si existe, planeada si no)
             const finUltima = ultimaActividad.fecha_fin_efectiva;
+            const fechaFinUltima = new Date(finUltima);
 
-            // Calcular minutos laborales hasta NOW
-            const resultMinutosFinales = await query(`
-                SELECT calcular_minutos_laborales($1, NOW()) as minutos_laborales
-            `, [finUltima]);
+            // ✅ OBTENER FIN DE JORNADA PARA ESE DÍA ESPECÍFICO (12:00 sábado, 18:00 lunes-viernes)
+            const finJornadaDia = this.obtenerFinJornadaDia(fechaFinUltima);
 
-            const minutosHuecoFinal = resultMinutosFinales.rows[0].minutos_laborales;
+            if (!finJornadaDia) {
+                console.log(`ℹ️ No hay jornada laboral el día ${fechaFinUltima.toISOString()} (domingo), saltando hueco final...`);
+            } else {
+                // Calcular minutos laborales hasta FIN DE JORNADA
+                const resultMinutosFinales = await query(`
+                    SELECT calcular_minutos_laborales($1, $2) as minutos_laborales
+                `, [finUltima, finJornadaDia]);
 
-            if (minutosHuecoFinal >= MINUTOS_MINIMOS_HUECO) {
-                console.log(`⚠️ Hueco final detectado desde ${ultimaActividad.codigo} hasta ahora: ${minutosHuecoFinal} min`);
+                const minutosHuecoFinal = resultMinutosFinales.rows[0].minutos_laborales;
 
-                // ✅ VALIDAR SI EL HUECO FINAL EMPIEZA FUERA DE JORNADA LABORAL
-                const fechaFinUltima = new Date(finUltima);
-                if (!this.estaEnJornadaLaboral(fechaFinUltima)) {
-                    console.log(`ℹ️ Hueco final empieza fuera de jornada laboral (${fechaFinUltima.toISOString()}), saltando...`);
-                } else {
-                    // ✅ VERIFICAR SI HAY ALGUNA ACTIVIDAD que solape con el hueco final
-                    const ahora = new Date();
-                    const actividadSolapadaFinal = await query(`
-                        SELECT id, codigo, tipo FROM actividades_marketing
-                        WHERE usuario_id = $1
-                          AND activo = true
-                          AND (
-                            -- Hay alguna actividad que solape con el hueco final
-                            (fecha_inicio_planeada < $3 AND fecha_fin_planeada > $2)
-                          )
-                        LIMIT 1
-                    `, [usuarioId, finUltima, ahora]);
+                if (minutosHuecoFinal >= MINUTOS_MINIMOS_HUECO) {
+                    console.log(`⚠️ Hueco final detectado desde ${ultimaActividad.codigo} hasta fin de jornada (${finJornadaDia.toISOString()}): ${minutosHuecoFinal} min`);
+
+                    // ✅ VALIDAR SI EL HUECO FINAL EMPIEZA FUERA DE JORNADA LABORAL
+                    if (!this.estaEnJornadaLaboral(fechaFinUltima)) {
+                        console.log(`ℹ️ Hueco final empieza fuera de jornada laboral (${fechaFinUltima.toISOString()}), saltando...`);
+                    } else {
+                        // ✅ VERIFICAR SI HAY ALGUNA ACTIVIDAD que solape con el hueco final
+                        const actividadSolapadaFinal = await query(`
+                            SELECT id, codigo, tipo FROM actividades_marketing
+                            WHERE usuario_id = $1
+                              AND activo = true
+                              AND (
+                                -- Hay alguna actividad que solape con el hueco final
+                                (fecha_inicio_planeada < $3 AND fecha_fin_planeada > $2)
+                              )
+                            LIMIT 1
+                        `, [usuarioId, finUltima, finJornadaDia]);
 
                     if (actividadSolapadaFinal.rows.length > 0) {
                         console.log(`ℹ️ Ya existe actividad en el hueco final (ID: ${actividadSolapadaFinal.rows[0].id}, tipo: ${actividadSolapadaFinal.rows[0].tipo}), saltando...`);
                     } else {
-                    const categoriaHueco = this.categorizarHueco(
-                        new Date(finUltima),
-                        new Date(),
-                        minutosHuecoFinal
-                    );
+                        const categoriaHueco = this.categorizarHueco(
+                            new Date(finUltima),
+                            finJornadaDia,
+                            minutosHuecoFinal
+                        );
 
-                    const codigoHueco = await this.generarCodigoActividad();
-                    await query(`
-                        INSERT INTO actividades_marketing (
-                            codigo, categoria_principal, subcategoria, descripcion,
-                            usuario_id, creado_por, tipo,
-                            fecha_inicio_planeada, fecha_fin_planeada,
-                            duracion_planeada_minutos, duracion_real_minutos,
-                            color_hex, estado, activo
-                        ) VALUES (
-                            $1, 'SISTEMA', $2, $3,
-                            $4, $4, 'sistema',
-                            $5, NOW(),
-                            $6, $6,
-                            $7, 'completada', true
-                        )
-                    `, [
-                        codigoHueco,
-                        categoriaHueco.subcategoria,
-                        categoriaHueco.descripcion,
-                        usuarioId,
-                        finUltima,
-                        minutosHuecoFinal,
-                        categoriaHueco.color
-                ]);
+                        const codigoHueco = await this.generarCodigoActividad();
+                        await query(`
+                            INSERT INTO actividades_marketing (
+                                codigo, categoria_principal, subcategoria, descripcion,
+                                usuario_id, creado_por, tipo,
+                                fecha_inicio_planeada, fecha_fin_planeada,
+                                duracion_planeada_minutos, duracion_real_minutos,
+                                color_hex, estado, activo
+                            ) VALUES (
+                                $1, 'SISTEMA', $2, $3,
+                                $4, $4, 'sistema',
+                                $5, $8,
+                                $6, $6,
+                                $7, 'completada', true
+                            )
+                        `, [
+                            codigoHueco,
+                            categoriaHueco.subcategoria,
+                            categoriaHueco.descripcion,
+                            usuarioId,
+                            finUltima,
+                            minutosHuecoFinal,
+                            categoriaHueco.color,
+                            finJornadaDia
+                        ]);
 
-                    console.log(`✅ Hueco final registrado: ${codigoHueco} - ${categoriaHueco.subcategoria} (${minutosHuecoFinal} min)`);
-                    huecosCreados++;
+                        console.log(`✅ Hueco final registrado: ${codigoHueco} - ${categoriaHueco.subcategoria} (${minutosHuecoFinal} min) - Fin jornada: ${finJornadaDia.toISOString()}`);
+                        huecosCreados++;
+                    }
                     }
                 }
             }
@@ -420,6 +427,31 @@ class ActividadesService {
 
         // Lunes-Viernes: 8 AM - 6 PM
         return horaDecimal >= 8 && horaDecimal < 18;
+    }
+
+    /**
+     * Obtener el fin de jornada laboral para un día específico
+     * @param {Date} fecha - Fecha para la cual obtener el fin de jornada
+     * @returns {Date|null} - Fecha con hora de fin de jornada, o null si es domingo
+     */
+    static obtenerFinJornadaDia(fecha) {
+        const diaSemana = fecha.getDay(); // 0=Domingo, 6=Sábado
+        const finJornada = new Date(fecha);
+
+        // Domingo: NO hay jornada laboral
+        if (diaSemana === 0) {
+            return null;
+        }
+
+        // Sábado: fin a las 12:00 PM
+        if (diaSemana === 6) {
+            finJornada.setHours(12, 0, 0, 0);
+            return finJornada;
+        }
+
+        // Lunes-Viernes: fin a las 18:00 (6 PM)
+        finJornada.setHours(18, 0, 0, 0);
+        return finJornada;
     }
 
     /**

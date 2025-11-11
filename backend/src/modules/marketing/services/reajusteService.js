@@ -131,7 +131,7 @@ class ReajusteService {
                     INSERT INTO actividades_marketing (
                         codigo, categoria_principal, subcategoria, descripcion,
                         usuario_id, creado_por, tipo, es_grupal, participantes_ids,
-                        fecha_inicio_planeada, fecha_inicio_real, fecha_fin_planeada,
+                        fecha_inicio_planeada, fecha_inicio_real, fecha_fin_planeada, fecha_fin_real,
                         duracion_planeada_minutos, duracion_real_minutos,
                         color_hex, estado, actividad_padre_id, es_continuacion,
                         tiempo_trabajado_antes_corte, cortada_por_actividad_id, hora_corte,
@@ -139,9 +139,9 @@ class ReajusteService {
                     ) VALUES (
                         $1, $2, $3, $4 || ' (INTERRUMPIDA)',
                         $5, $6, $7, $8, $9,
-                        $10, $11, $12,
+                        $10, $11, $12, $12,
                         $13, $13,
-                        $14, 'interrumpida', $15, false,
+                        $14, 'completada', $15, false,
                         $16, $17, $18,
                         'Actividad interrumpida por inserción prioritaria'
                     )
