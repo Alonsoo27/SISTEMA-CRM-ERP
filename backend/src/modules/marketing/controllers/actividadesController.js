@@ -375,11 +375,29 @@ class ActividadesController {
 
             // Si es prioritaria, reajustar actividades existentes
             if (es_prioritaria) {
+                // NUEVO: Si confirmó colisión, detectar si era con programada para incluirlas en el reajuste
+                let incluirProgramadas = false;
+                if (confirmar_colision) {
+                    // Volver a detectar colisión para saber el tipo
+                    const colisionConfirmada = await colisionesService.detectarColisionesPrioritaria(
+                        usuarioDestino,
+                        fechaInicioPlaneada,
+                        duracion_minutos
+                    );
+
+                    if (colisionConfirmada.hayColision && colisionConfirmada.tipo === 'programada') {
+                        incluirProgramadas = true;
+                        console.log('✅ Usuario confirmó colisión con PROGRAMADA - Se desplazará la actividad programada');
+                    }
+                }
+
                 await reajusteService.reajustarActividades(
                     usuarioDestino,
                     fechaInicioPlaneada,
                     duracion_minutos,
-                    actividad.id
+                    actividad.id,
+                    false, // soloDesplazarNormales = false
+                    incluirProgramadas // Incluir programadas si usuario confirmó colisión con programada
                 );
             }
 

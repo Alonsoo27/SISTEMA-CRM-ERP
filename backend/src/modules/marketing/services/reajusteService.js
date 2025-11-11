@@ -15,7 +15,7 @@ class ReajusteService {
      * @param {number} actividadIdDisparadora - ID de la actividad que dispara el reajuste
      * @param {boolean} soloDesplazarNormales - SIEMPRE solo desplaza actividades normales (excluye programadas, grupales y prioritarias)
      */
-    static async reajustarActividades(usuarioId, fechaInsercion, duracionMinutos, actividadIdDisparadora = null, soloDesplazarNormales = false) {
+    static async reajustarActividades(usuarioId, fechaInsercion, duracionMinutos, actividadIdDisparadora = null, soloDesplazarNormales = false, incluirProgramadas = false) {
         try {
             // Validaciones de entrada
             if (!usuarioId || !fechaInsercion || !duracionMinutos) {
@@ -41,7 +41,8 @@ class ReajusteService {
 
             // 1. Obtener todas las actividades pendientes y en progreso del usuario
             // Si soloDesplazarNormales=true, solo obtiene actividades normales (excluye programadas, grupales, prioritarias)
-            const actividadesExistentes = await this.obtenerActividadesPendientes(usuarioId, fechaInsercion, actividadIdDisparadora, soloDesplazarNormales);
+            // Si incluirProgramadas=true, incluye programadas en el reajuste (para prioridad confirmada vs programada)
+            const actividadesExistentes = await this.obtenerActividadesPendientes(usuarioId, fechaInsercion, actividadIdDisparadora, soloDesplazarNormales, incluirProgramadas);
 
             if (actividadesExistentes.length === 0) {
                 console.log('✅ No hay actividades para reajustar');
@@ -477,7 +478,7 @@ class ReajusteService {
      * - Busca actividades que TERMINAN después del punto de inserción
      * - Esto incluye tanto actividades futuras como actividades ya en progreso
      */
-    static async obtenerActividadesPendientes(usuarioId, fechaDesde, excluirActividadId = null, soloNormales = false) {
+    static async obtenerActividadesPendientes(usuarioId, fechaDesde, excluirActividadId = null, soloNormales = false, incluirProgramadas = false) {
         let sql = `
             SELECT *
             FROM actividades_marketing
@@ -494,16 +495,26 @@ class ReajusteService {
             params.push(excluirActividadId);
         }
 
-        // NUEVO: Si soloNormales = true, excluir programadas, grupales y prioritarias
+        // LÓGICA DE FILTRADO:
+        // - soloNormales=true: Solo normales (excluir programadas, grupales, prioritarias)
+        // - incluirProgramadas=true: Incluir programadas pero excluir grupales y prioritarias
+        // - Por defecto: Solo normales (excluir programadas, grupales, prioritarias)
         if (soloNormales) {
             sql += `
               AND es_programada = false
               AND es_grupal = false
               AND es_prioritaria = false
             `;
+        } else if (incluirProgramadas) {
+            // NUEVO: Incluir programadas pero NO grupales ni prioritarias
+            // Esto permite que prioritarias confirmadas desplacen programadas
+            sql += `
+              AND es_grupal = false
+              AND es_prioritaria = false
+            `;
+            console.log('🔓 Incluyendo actividades PROGRAMADAS en reajuste (usuario confirmó colisión)');
         } else {
-            // Inserción prioritaria: también excluir programadas, grupales y prioritarias
-            // Las actividades prioritarias NO deben mover otras prioritarias, programadas o grupales
+            // Por defecto: solo mover normales
             sql += `
               AND es_programada = false
               AND es_grupal = false
