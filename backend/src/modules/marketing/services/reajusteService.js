@@ -15,7 +15,7 @@ class ReajusteService {
      * @param {number} actividadIdDisparadora - ID de la actividad que dispara el reajuste
      * @param {boolean} soloDesplazarNormales - SIEMPRE solo desplaza actividades normales (excluye programadas, grupales y prioritarias)
      */
-    static async reajustarActividades(usuarioId, fechaInsercion, duracionMinutos, actividadIdDisparadora = null, soloDesplazarNormales = false, incluirProgramadas = false) {
+    static async reajustarActividades(usuarioId, fechaInsercion, duracionMinutos, actividadIdDisparadora = null, soloDesplazarNormales = false, programadaConfirmadaId = null) {
         try {
             // Validaciones de entrada
             if (!usuarioId || !fechaInsercion || !duracionMinutos) {
@@ -41,8 +41,8 @@ class ReajusteService {
 
             // 1. Obtener todas las actividades pendientes y en progreso del usuario
             // Si soloDesplazarNormales=true, solo obtiene actividades normales (excluye programadas, grupales, prioritarias)
-            // Si incluirProgramadas=true, incluye programadas en el reajuste (para prioridad confirmada vs programada)
-            const actividadesExistentes = await this.obtenerActividadesPendientes(usuarioId, fechaInsercion, actividadIdDisparadora, soloDesplazarNormales, incluirProgramadas);
+            // Si programadaConfirmadaId!=null, incluye ESA programada específica en el reajuste
+            const actividadesExistentes = await this.obtenerActividadesPendientes(usuarioId, fechaInsercion, actividadIdDisparadora, soloDesplazarNormales, programadaConfirmadaId);
 
             if (actividadesExistentes.length === 0) {
                 console.log('✅ No hay actividades para reajustar');
@@ -242,8 +242,37 @@ class ReajusteService {
 
             // Reajustar todas las actividades posteriores
             for (const actividad of actividadesAReajustar) {
-                const nuevaFechaInicio = cursorTiempo;
-                const nuevaFechaFin = this.agregarMinutosEfectivos(cursorTiempo, actividad.duracion_planeada_minutos);
+                let nuevaFechaInicio = cursorTiempo;
+                let nuevaFechaFin = this.agregarMinutosEfectivos(cursorTiempo, actividad.duracion_planeada_minutos);
+
+                // NUEVO: Si hay programada confirmada, verificar si esta actividad cruza con OTRAS programadas no confirmadas
+                if (programadaConfirmadaId) {
+                    // Buscar programadas no confirmadas que crucen con este rango
+                    const programadasCruzadas = await query(`
+                        SELECT id, descripcion, fecha_inicio_planeada, fecha_fin_planeada
+                        FROM actividades_marketing
+                        WHERE usuario_id = $1
+                          AND activo = true
+                          AND estado IN ('pendiente', 'en_progreso')
+                          AND es_programada = true
+                          AND id != $2
+                          AND id != $3
+                          AND (fecha_inicio_planeada, fecha_fin_planeada) OVERLAPS ($4, $5)
+                        ORDER BY fecha_inicio_planeada ASC
+                        LIMIT 1
+                    `, [usuarioId, programadaConfirmadaId, actividadIdDisparadora, nuevaFechaInicio, nuevaFechaFin]);
+
+                    // Si cruza con programada no confirmada, saltar después de ella
+                    if (programadasCruzadas.rows.length > 0) {
+                        const programadaObstaculo = programadasCruzadas.rows[0];
+                        console.log(`⏭️ Actividad ${actividad.id} cruza con programada no confirmada ${programadaObstaculo.id} - Saltando...`);
+
+                        // Mover cursor después de la programada obstáculo
+                        cursorTiempo = new Date(programadaObstaculo.fecha_fin_planeada);
+                        nuevaFechaInicio = cursorTiempo;
+                        nuevaFechaFin = this.agregarMinutosEfectivos(cursorTiempo, actividad.duracion_planeada_minutos);
+                    }
+                }
 
                 await query(`
                     UPDATE actividades_marketing SET
@@ -478,7 +507,7 @@ class ReajusteService {
      * - Busca actividades que TERMINAN después del punto de inserción
      * - Esto incluye tanto actividades futuras como actividades ya en progreso
      */
-    static async obtenerActividadesPendientes(usuarioId, fechaDesde, excluirActividadId = null, soloNormales = false, incluirProgramadas = false) {
+    static async obtenerActividadesPendientes(usuarioId, fechaDesde, excluirActividadId = null, soloNormales = false, programadaConfirmadaId = null) {
         let sql = `
             SELECT *
             FROM actividades_marketing
@@ -497,7 +526,7 @@ class ReajusteService {
 
         // LÓGICA DE FILTRADO:
         // - soloNormales=true: Solo normales (excluir programadas, grupales, prioritarias)
-        // - incluirProgramadas=true: Incluir programadas pero excluir grupales y prioritarias
+        // - programadaConfirmadaId!=null: Incluir SOLO esa programada específica (excluir otras programadas, grupales, prioritarias)
         // - Por defecto: Solo normales (excluir programadas, grupales, prioritarias)
         if (soloNormales) {
             sql += `
@@ -505,14 +534,17 @@ class ReajusteService {
               AND es_grupal = false
               AND es_prioritaria = false
             `;
-        } else if (incluirProgramadas) {
-            // NUEVO: Incluir programadas pero NO grupales ni prioritarias
-            // Esto permite que prioritarias confirmadas desplacen programadas
+        } else if (programadaConfirmadaId) {
+            // NUEVO: Incluir SOLO la programada confirmada específica
+            // Esto permite que prioritarias confirmadas desplacen UNA programada específica
+            const paramIndex = params.length + 1;
             sql += `
               AND es_grupal = false
               AND es_prioritaria = false
+              AND (es_programada = false OR id = $${paramIndex})
             `;
-            console.log('🔓 Incluyendo actividades PROGRAMADAS en reajuste (usuario confirmó colisión)');
+            params.push(programadaConfirmadaId);
+            console.log(`🔓 Incluyendo SOLO actividad programada ID ${programadaConfirmadaId} en reajuste (usuario confirmó)`);
         } else {
             // Por defecto: solo mover normales
             sql += `
