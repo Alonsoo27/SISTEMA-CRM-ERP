@@ -174,8 +174,9 @@ class ActividadesController {
                     });
                 }
 
-                // VALIDACIÓN #1.5: Verificar horario laboral
-                const validacionHorario = validarHorarioLaboral(fechaManual);
+                // VALIDACIÓN #1.5: Verificar horario laboral (convertir a hora Perú)
+                const fechaPeru = new Date(fechaManual.toLocaleString('en-US', { timeZone: 'America/Lima' }));
+                const validacionHorario = validarHorarioLaboral(fechaPeru);
                 if (!validacionHorario.valido) {
                     return res.status(400).json({
                         success: false,
