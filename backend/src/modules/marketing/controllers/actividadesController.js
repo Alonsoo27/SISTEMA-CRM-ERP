@@ -882,7 +882,12 @@ class ActividadesController {
                     participante,
                     nuevaFechaInicio,
                     nuevaFechaFin,
-                    actividadParticipante.id
+                    actividadParticipante.id,
+                    {
+                        es_prioritaria: actividad.es_prioritaria,
+                        es_programada: actividad.es_programada,
+                        es_grupal: actividad.es_grupal
+                    }
                 );
 
                 if (colision.hayColision) {
@@ -1127,7 +1132,12 @@ class ActividadesController {
                     participante,
                     actividadParticipante.fecha_inicio_planeada,
                     nuevaFechaFin,
-                    actividadParticipante.id
+                    actividadParticipante.id,
+                    {
+                        es_prioritaria: actividad.es_prioritaria,
+                        es_programada: actividad.es_programada,
+                        es_grupal: actividad.es_grupal
+                    }
                 );
 
                 if (colision.hayColision) {

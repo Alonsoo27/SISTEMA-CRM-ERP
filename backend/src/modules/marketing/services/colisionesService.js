@@ -611,7 +611,7 @@ class ColisionesService {
      * Detectar colisiones al EDITAR/EXTENDER una actividad
      * Valida que el nuevo horario no colisione con actividades inmovibles
      */
-    static async detectarColisionesEdicion(usuarioId, nuevaFechaInicio, nuevaFechaFin, actividadIdExcluir) {
+    static async detectarColisionesEdicion(usuarioId, nuevaFechaInicio, nuevaFechaFin, actividadIdExcluir, actividadEditando = {}) {
         try {
             const inicio = new Date(nuevaFechaInicio);
             const fin = new Date(nuevaFechaFin);
@@ -620,7 +620,12 @@ class ColisionesService {
                 usuarioId,
                 inicio,
                 fin,
-                excluir: actividadIdExcluir
+                excluir: actividadIdExcluir,
+                actividadEditando: {
+                    es_prioritaria: actividadEditando.es_prioritaria || false,
+                    es_programada: actividadEditando.es_programada || false,
+                    es_grupal: actividadEditando.es_grupal || false
+                }
             });
 
             // Buscar actividades que se solapen con el nuevo rango
@@ -641,7 +646,7 @@ class ColisionesService {
 
             console.log(`⚠️ ${result.rows.length} colisiones detectadas`);
 
-            // Analizar tipo de colisión (priorizar la más crítica)
+            // Analizar tipo de colisión aplicando JERARQUÍA correcta
             const conflictos = [];
 
             for (const actividad of result.rows) {
@@ -649,23 +654,32 @@ class ColisionesService {
                 let bloqueante = false;
                 let razon = '';
 
-                // TIPO 1: Actividad PROGRAMADA (horario fijo elegido por usuario)
-                if (actividad.es_programada) {
-                    tipoConflicto = 'programada';
-                    bloqueante = true;
-                    razon = 'Actividad con horario programado manualmente';
-                }
-                // TIPO 2: Actividad GRUPAL (afecta a múltiples usuarios)
-                else if (actividad.es_grupal) {
+                // JERARQUÍA: GRUPAL > PRIORITARIA+PROGRAMADA > PRIORITARIA > PROGRAMADA > NORMAL
+
+                // TIPO 1: Actividad GRUPAL (afecta a múltiples usuarios)
+                if (actividad.es_grupal) {
                     tipoConflicto = 'grupal';
                     bloqueante = true;
                     razon = 'Actividad grupal (afecta a ' + (actividad.participantes_ids?.length || 0) + ' participantes)';
                 }
-                // TIPO 3: Actividad PRIORITARIA (no se puede mover)
+                // TIPO 2: Actividad PRIORITARIA (no se puede mover)
                 else if (actividad.es_prioritaria) {
                     tipoConflicto = 'prioritaria';
                     bloqueante = true;
                     razon = 'Actividad prioritaria';
+                }
+                // TIPO 3: Actividad PROGRAMADA (horario fijo elegido por usuario)
+                else if (actividad.es_programada) {
+                    tipoConflicto = 'programada';
+
+                    // ✅ JERARQUÍA: Si la actividad que estoy editando es PRIORITARIA o PRIORITARIA+PROGRAMADA, puede desplazar PROGRAMADA
+                    if (actividadEditando.es_prioritaria) {
+                        bloqueante = false; // Puede desplazar con confirmación
+                        razon = 'Actividad programada (se puede desplazar porque la actividad editada es prioritaria)';
+                    } else {
+                        bloqueante = true;
+                        razon = 'Actividad con horario programado manualmente';
+                    }
                 }
                 // TIPO 4: Actividad NORMAL (se puede mover)
                 else {
