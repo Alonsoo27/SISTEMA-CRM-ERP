@@ -526,17 +526,18 @@ class ReajusteService {
 
         // LÓGICA DE FILTRADO:
         // - soloNormales=true: Solo normales (excluir programadas, grupales, prioritarias)
-        // - programadaConfirmadaId!=null: Incluir SOLO esa programada específica (excluir otras programadas, grupales, prioritarias)
-        // - Por defecto: Solo normales (excluir programadas, grupales, prioritarias)
+        // - soloNormales=false + programadaConfirmadaId: Incluir SOLO esa programada específica
+        // - soloNormales=false sin programadaConfirmadaId: Incluir TODAS las programadas (desplazar todo)
         if (soloNormales) {
+            // CASO 1: Solo desplazar normales
             sql += `
               AND es_programada = false
               AND es_grupal = false
               AND es_prioritaria = false
             `;
+            console.log(`🔒 Solo desplazando actividades NORMALES (soloNormales=true)`);
         } else if (programadaConfirmadaId) {
-            // NUEVO: Incluir SOLO la programada confirmada específica
-            // Esto permite que prioritarias confirmadas desplacen UNA programada específica
+            // CASO 2: Incluir SOLO la programada confirmada específica + normales
             const paramIndex = params.length + 1;
             sql += `
               AND es_grupal = false
@@ -546,12 +547,13 @@ class ReajusteService {
             params.push(programadaConfirmadaId);
             console.log(`🔓 Incluyendo SOLO actividad programada ID ${programadaConfirmadaId} en reajuste (usuario confirmó)`);
         } else {
-            // Por defecto: solo mover normales
+            // CASO 3: Incluir TODAS las programadas + normales (excluir solo grupales y prioritarias)
+            // Esto permite que actividades prioritarias desplacen TODAS las programadas al extender/editar
             sql += `
-              AND es_programada = false
               AND es_grupal = false
               AND es_prioritaria = false
             `;
+            console.log(`🔓 Incluyendo TODAS las actividades PROGRAMADAS y NORMALES para desplazar (soloNormales=false)`);
         }
 
         sql += ` ORDER BY fecha_inicio_planeada ASC`;
