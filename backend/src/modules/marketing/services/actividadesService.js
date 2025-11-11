@@ -250,6 +250,13 @@ class ActividadesService {
                 if (minutosHueco >= MINUTOS_MINIMOS_HUECO) {
                     console.log(`⚠️ Hueco encontrado entre ${actividadActual.codigo} y ${actividadSiguiente.codigo}: ${minutosHueco} min`);
 
+                    // ✅ VALIDAR SI EL HUECO EMPIEZA FUERA DE JORNADA LABORAL
+                    const fechaFinActual = new Date(finActual);
+                    if (!this.estaEnJornadaLaboral(fechaFinActual)) {
+                        console.log(`ℹ️ Hueco empieza fuera de jornada laboral (${fechaFinActual.toISOString()}), saltando...`);
+                        continue; // No crear huecos que empiezan fuera de horario laboral
+                    }
+
                     // ✅ VERIFICAR SI HAY ALGUNA ACTIVIDAD (manual, grupal o sistema) que solape con este hueco
                     const actividadSolapada = await query(`
                         SELECT id, codigo, tipo FROM actividades_marketing
@@ -321,22 +328,27 @@ class ActividadesService {
             if (minutosHuecoFinal >= MINUTOS_MINIMOS_HUECO) {
                 console.log(`⚠️ Hueco final detectado desde ${ultimaActividad.codigo} hasta ahora: ${minutosHuecoFinal} min`);
 
-                // ✅ VERIFICAR SI HAY ALGUNA ACTIVIDAD que solape con el hueco final
-                const ahora = new Date();
-                const actividadSolapadaFinal = await query(`
-                    SELECT id, codigo, tipo FROM actividades_marketing
-                    WHERE usuario_id = $1
-                      AND activo = true
-                      AND (
-                        -- Hay alguna actividad que solape con el hueco final
-                        (fecha_inicio_planeada < $3 AND fecha_fin_planeada > $2)
-                      )
-                    LIMIT 1
-                `, [usuarioId, finUltima, ahora]);
-
-                if (actividadSolapadaFinal.rows.length > 0) {
-                    console.log(`ℹ️ Ya existe actividad en el hueco final (ID: ${actividadSolapadaFinal.rows[0].id}, tipo: ${actividadSolapadaFinal.rows[0].tipo}), saltando...`);
+                // ✅ VALIDAR SI EL HUECO FINAL EMPIEZA FUERA DE JORNADA LABORAL
+                const fechaFinUltima = new Date(finUltima);
+                if (!this.estaEnJornadaLaboral(fechaFinUltima)) {
+                    console.log(`ℹ️ Hueco final empieza fuera de jornada laboral (${fechaFinUltima.toISOString()}), saltando...`);
                 } else {
+                    // ✅ VERIFICAR SI HAY ALGUNA ACTIVIDAD que solape con el hueco final
+                    const ahora = new Date();
+                    const actividadSolapadaFinal = await query(`
+                        SELECT id, codigo, tipo FROM actividades_marketing
+                        WHERE usuario_id = $1
+                          AND activo = true
+                          AND (
+                            -- Hay alguna actividad que solape con el hueco final
+                            (fecha_inicio_planeada < $3 AND fecha_fin_planeada > $2)
+                          )
+                        LIMIT 1
+                    `, [usuarioId, finUltima, ahora]);
+
+                    if (actividadSolapadaFinal.rows.length > 0) {
+                        console.log(`ℹ️ Ya existe actividad en el hueco final (ID: ${actividadSolapadaFinal.rows[0].id}, tipo: ${actividadSolapadaFinal.rows[0].tipo}), saltando...`);
+                    } else {
                     const categoriaHueco = this.categorizarHueco(
                         new Date(finUltima),
                         new Date(),
@@ -370,6 +382,7 @@ class ActividadesService {
 
                     console.log(`✅ Hueco final registrado: ${codigoHueco} - ${categoriaHueco.subcategoria} (${minutosHuecoFinal} min)`);
                     huecosCreados++;
+                    }
                 }
             }
 
@@ -381,6 +394,32 @@ class ActividadesService {
             // No lanzar error, solo loggearlo (no es crítico)
             return null;
         }
+    }
+
+    /**
+     * Verificar si una fecha está en horario laboral
+     * Lunes-Viernes: 8 AM - 6 PM
+     * Sábado: 9 AM - 12 PM
+     * Domingo: NO laboral
+     */
+    static estaEnJornadaLaboral(fecha) {
+        const diaSemana = fecha.getDay(); // 0=Domingo, 6=Sábado
+        const hora = fecha.getHours();
+        const minutos = fecha.getMinutes();
+        const horaDecimal = hora + (minutos / 60);
+
+        // Domingo: NO laboral
+        if (diaSemana === 0) {
+            return false;
+        }
+
+        // Sábado: 9 AM - 12 PM
+        if (diaSemana === 6) {
+            return horaDecimal >= 9 && horaDecimal < 12;
+        }
+
+        // Lunes-Viernes: 8 AM - 6 PM
+        return horaDecimal >= 8 && horaDecimal < 18;
     }
 
     /**
