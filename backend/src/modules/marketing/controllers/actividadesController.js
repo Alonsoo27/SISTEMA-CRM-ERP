@@ -986,13 +986,18 @@ class ActividadesController {
             // Las actividades normales/programadas NO deben interrumpir otras actividades al editarse
             if ((duracion_minutos || fecha_inicio) && (actividad.es_prioritaria || actividad.es_grupal)) {
                 console.log(`🔄 Reajustando actividades porque es ${actividad.es_prioritaria ? 'PRIORITARIA' : 'GRUPAL'}`);
+
+                // Si es PRIORITARIA: puede desplazar PROGRAMADAS (soloDesplazarNormales = false)
+                // Si es GRUPAL pero no prioritaria: solo desplaza normales (soloDesplazarNormales = true)
+                const soloDesplazarNormales = !actividad.es_prioritaria;
+
                 for (const actividadActualizada of result.rows) {
                     await reajusteService.reajustarActividades(
                         actividadActualizada.usuario_id,
                         fecha_inicio || actividadActualizada.fecha_inicio_planeada,
                         duracion_minutos || actividadActualizada.duracion_planeada_minutos,
                         actividadActualizada.id,
-                        true  // soloDesplazarNormales = true (NO mover programadas, grupales, prioritarias)
+                        soloDesplazarNormales
                     );
                 }
             } else if (duracion_minutos || fecha_inicio) {
@@ -1220,13 +1225,18 @@ class ActividadesController {
             // Las actividades normales/programadas NO deben interrumpir otras actividades al extenderse
             if (actividad.es_prioritaria || actividad.es_grupal) {
                 console.log(`🔄 Reajustando actividades porque es ${actividad.es_prioritaria ? 'PRIORITARIA' : 'GRUPAL'}`);
+
+                // Si es PRIORITARIA: puede desplazar PROGRAMADAS (soloDesplazarNormales = false)
+                // Si es GRUPAL pero no prioritaria: solo desplaza normales (soloDesplazarNormales = true)
+                const soloDesplazarNormales = !actividad.es_prioritaria;
+
                 for (const actividadActualizada of result.rows) {
                     await reajusteService.reajustarActividades(
                         actividadActualizada.usuario_id,
                         actividadActualizada.fecha_inicio_planeada,
                         actividadActualizada.duracion_planeada_minutos + minutos_adicionales,
                         actividadActualizada.id,
-                        true  // soloDesplazarNormales = true (NO mover programadas, grupales, prioritarias)
+                        soloDesplazarNormales
                     );
                 }
             } else {
