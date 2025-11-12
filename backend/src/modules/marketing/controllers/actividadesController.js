@@ -982,14 +982,14 @@ class ActividadesController {
                 console.log(`✅ Actividad individual editada correctamente`);
             }
 
-            // Reajustar actividades posteriores SOLO si es prioritaria o grupal
-            // Las actividades normales/programadas NO deben interrumpir otras actividades al editarse
-            if ((duracion_minutos || fecha_inicio) && (actividad.es_prioritaria || actividad.es_grupal)) {
-                console.log(`🔄 Reajustando actividades porque es ${actividad.es_prioritaria ? 'PRIORITARIA' : 'GRUPAL'}`);
+            // Reajustar actividades posteriores SOLO si es prioritaria, programada o grupal
+            // Las actividades NORMALES NO deben interrumpir otras actividades al editarse
+            if ((duracion_minutos || fecha_inicio) && (actividad.es_prioritaria || actividad.es_programada || actividad.es_grupal)) {
+                console.log(`🔄 Reajustando actividades porque es ${actividad.es_prioritaria ? 'PRIORITARIA' : actividad.es_programada ? 'PROGRAMADA' : 'GRUPAL'}`);
 
-                // Si es PRIORITARIA: puede desplazar PROGRAMADAS (soloDesplazarNormales = false)
-                // Si es GRUPAL pero no prioritaria: solo desplaza normales (soloDesplazarNormales = true)
-                const soloDesplazarNormales = !actividad.es_prioritaria;
+                // Si es PRIORITARIA o PROGRAMADA: puede desplazar PROGRAMADAS (soloDesplazarNormales = false)
+                // Si es GRUPAL pero no prioritaria/programada: solo desplaza normales (soloDesplazarNormales = true)
+                const soloDesplazarNormales = !(actividad.es_prioritaria || actividad.es_programada);
 
                 for (const actividadActualizada of result.rows) {
                     await reajusteService.reajustarActividades(
@@ -1221,14 +1221,14 @@ class ActividadesController {
                 console.log(`✅ Actividad individual extendida correctamente`);
             }
 
-            // Reajustar actividades posteriores SOLO si es prioritaria o grupal
-            // Las actividades normales/programadas NO deben interrumpir otras actividades al extenderse
-            if (actividad.es_prioritaria || actividad.es_grupal) {
-                console.log(`🔄 Reajustando actividades porque es ${actividad.es_prioritaria ? 'PRIORITARIA' : 'GRUPAL'}`);
+            // Reajustar actividades posteriores SOLO si es prioritaria, programada o grupal
+            // Las actividades NORMALES NO deben interrumpir otras actividades al extenderse
+            if (actividad.es_prioritaria || actividad.es_programada || actividad.es_grupal) {
+                console.log(`🔄 Reajustando actividades porque es ${actividad.es_prioritaria ? 'PRIORITARIA' : actividad.es_programada ? 'PROGRAMADA' : 'GRUPAL'}`);
 
-                // Si es PRIORITARIA: puede desplazar PROGRAMADAS (soloDesplazarNormales = false)
-                // Si es GRUPAL pero no prioritaria: solo desplaza normales (soloDesplazarNormales = true)
-                const soloDesplazarNormales = !actividad.es_prioritaria;
+                // Si es PRIORITARIA o PROGRAMADA: puede desplazar PROGRAMADAS (soloDesplazarNormales = false)
+                // Si es GRUPAL pero no prioritaria/programada: solo desplaza normales (soloDesplazarNormales = true)
+                const soloDesplazarNormales = !(actividad.es_prioritaria || actividad.es_programada);
 
                 for (const actividadActualizada of result.rows) {
                     await reajusteService.reajustarActividades(

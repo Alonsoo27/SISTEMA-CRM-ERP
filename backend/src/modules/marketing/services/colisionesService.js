@@ -672,13 +672,16 @@ class ColisionesService {
                 else if (actividad.es_programada) {
                     tipoConflicto = 'programada';
 
-                    // ✅ JERARQUÍA: Si la actividad que estoy editando es PRIORITARIA o PRIORITARIA+PROGRAMADA, puede desplazar PROGRAMADA
+                    // ✅ JERARQUÍA: PRIORITARIA y PROGRAMADA pueden desplazar PROGRAMADA con confirmación
                     if (actividadEditando.es_prioritaria) {
-                        bloqueante = false; // Puede desplazar con confirmación
+                        bloqueante = false; // PRIORITARIA puede desplazar PROGRAMADA
                         razon = 'Actividad programada (se puede desplazar porque la actividad editada es prioritaria)';
+                    } else if (actividadEditando.es_programada) {
+                        bloqueante = false; // PROGRAMADA puede desplazar PROGRAMADA con confirmación
+                        razon = 'Actividad programada (requiere confirmación para desplazar otra programada)';
                     } else {
-                        bloqueante = true;
-                        razon = 'Actividad con horario programado manualmente';
+                        bloqueante = true; // NORMAL no puede desplazar PROGRAMADA
+                        razon = 'Actividad con horario programado manualmente (actividades normales no pueden desplazarlas)';
                     }
                 }
                 // TIPO 4: Actividad NORMAL (se puede mover)
