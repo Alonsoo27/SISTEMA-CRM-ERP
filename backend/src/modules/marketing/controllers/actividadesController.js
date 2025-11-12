@@ -778,7 +778,7 @@ class ActividadesController {
         try {
             const { id } = req.params;
             const { user_id } = req.user;
-            const { motivo_edicion, duracion_minutos, fecha_inicio } = req.body;
+            const { motivo_edicion, duracion_minutos, fecha_inicio, confirmar_desplazamiento } = req.body;
 
             if (!motivo_edicion) {
                 return res.status(400).json({
@@ -918,15 +918,35 @@ class ActividadesController {
                 });
             }
 
-            // Si hay colisiones NO bloqueantes, informar
+            // Si hay colisiones NO bloqueantes, verificar si requieren confirmación
             if (todosConflictos.length > 0 && !hayBloqueo) {
                 const totalActividadesDesplazadas = todosConflictos.reduce((sum, c) => sum + c.conflictos.length, 0);
+
+                // Verificar si hay PROGRAMADAS en los conflictos
+                const hayProgramadas = todosConflictos.some(tc =>
+                    tc.conflictos.some(conf => conf.tipo === 'programada')
+                );
+
+                // Si hay PROGRAMADAS y la actividad es PROGRAMADA (no PRIORITARIA), pedir confirmación
+                if (hayProgramadas && actividad.es_programada && !actividad.es_prioritaria && !confirmar_desplazamiento) {
+                    console.log('⚠️ Edición requiere confirmación: PROGRAMADA desplazará otras PROGRAMADAS');
+                    return res.status(409).json({
+                        success: false,
+                        tipo_error: 'requiere_confirmacion',
+                        mensaje: 'Esta edición desplazará actividades programadas. ¿Deseas continuar?',
+                        conflictos_por_participante: todosConflictos,
+                        total_actividades_desplazar: totalActividadesDesplazadas,
+                        instruccion: 'Confirma para proceder con el desplazamiento',
+                        requiere_confirmacion: true
+                    });
+                }
+
                 infoDesplazamiento = {
                     actividades_desplazadas: totalActividadesDesplazadas,
                     participantes_afectados: todosConflictos.length,
                     mensaje: actividad.es_grupal
-                        ? `Se desplazarán ${totalActividadesDesplazadas} actividad(es) normal(es) de ${todosConflictos.length} participante(s)`
-                        : `Se desplazarán ${totalActividadesDesplazadas} actividad(es) normal(es)`
+                        ? `Se desplazarán ${totalActividadesDesplazadas} actividad(es) de ${todosConflictos.length} participante(s)`
+                        : `Se desplazarán ${totalActividadesDesplazadas} actividad(es)`
                 };
                 console.log(`ℹ️ ${infoDesplazamiento.mensaje}`);
             }
@@ -1057,7 +1077,7 @@ class ActividadesController {
         try {
             const { id } = req.params;
             const { user_id } = req.user;
-            const { minutos_adicionales, motivo } = req.body;
+            const { minutos_adicionales, motivo, confirmar_desplazamiento } = req.body;
 
             if (!minutos_adicionales || minutos_adicionales <= 0) {
                 return res.status(400).json({
@@ -1173,15 +1193,35 @@ class ActividadesController {
                 });
             }
 
-            // Si hay colisiones NO bloqueantes, informar
+            // Si hay colisiones NO bloqueantes, verificar si requieren confirmación
             if (todosConflictos.length > 0 && !hayBloqueo) {
                 const totalActividadesDesplazadas = todosConflictos.reduce((sum, c) => sum + c.conflictos.length, 0);
+
+                // Verificar si hay PROGRAMADAS en los conflictos
+                const hayProgramadas = todosConflictos.some(tc =>
+                    tc.conflictos.some(conf => conf.tipo === 'programada')
+                );
+
+                // Si hay PROGRAMADAS y la actividad es PROGRAMADA (no PRIORITARIA), pedir confirmación
+                if (hayProgramadas && actividad.es_programada && !actividad.es_prioritaria && !confirmar_desplazamiento) {
+                    console.log('⚠️ Extensión requiere confirmación: PROGRAMADA desplazará otras PROGRAMADAS');
+                    return res.status(409).json({
+                        success: false,
+                        tipo_error: 'requiere_confirmacion',
+                        mensaje: 'Esta extensión desplazará actividades programadas. ¿Deseas continuar?',
+                        conflictos_por_participante: todosConflictos,
+                        total_actividades_desplazar: totalActividadesDesplazadas,
+                        instruccion: 'Confirma para proceder con el desplazamiento',
+                        requiere_confirmacion: true
+                    });
+                }
+
                 infoDesplazamiento = {
                     actividades_desplazadas: totalActividadesDesplazadas,
                     participantes_afectados: todosConflictos.length,
                     mensaje: actividad.es_grupal
-                        ? `Se desplazarán ${totalActividadesDesplazadas} actividad(es) normal(es) de ${todosConflictos.length} participante(s)`
-                        : `Se desplazarán ${totalActividadesDesplazadas} actividad(es) normal(es)`
+                        ? `Se desplazarán ${totalActividadesDesplazadas} actividad(es) de ${todosConflictos.length} participante(s)`
+                        : `Se desplazarán ${totalActividadesDesplazadas} actividad(es)`
                 };
                 console.log(`ℹ️ ${infoDesplazamiento.mensaje}`);
             }
