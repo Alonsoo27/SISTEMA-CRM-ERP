@@ -51,9 +51,12 @@ class ReajusteService {
 
             console.log(`📋 Actividades encontradas para analizar: ${actividadesExistentes.length}`);
 
-            // 3. Dividir actividades afectadas
+            // 3. Calcular fin de la actividad insertada
+            const finInsercion = this.agregarMinutosEfectivos(puntoInsercion, duracionMinutos);
+
+            // 4. Dividir actividades afectadas
             const actividadesAReajustar = [];
-            const actividadesCortadas = []; // CAMBIO: Array en lugar de variable singular
+            const actividadesCortadas = [];
 
             for (const actividad of actividadesExistentes) {
                 // Usar fecha_inicio_real si ya está en progreso, sino usar fecha_inicio_planeada
@@ -63,7 +66,39 @@ class ReajusteService {
 
                 const finActividad = new Date(actividad.fecha_fin_planeada);
 
-                // Si la nueva actividad se inserta en medio de una actividad existente
+                // ✅ NUEVA LÓGICA: Verificar si hay SOLAPAMIENTO REAL con la actividad insertada
+                const haySolapamiento = (puntoInsercion < finActividad && finInsercion > inicioActividad);
+
+                if (!haySolapamiento) {
+                    // ✅ NO hay solapamiento
+
+                    // Si es PROGRAMADA y NO se solapa, NO moverla (actividades programadas tienen horario fijo)
+                    if (actividad.es_programada) {
+                        console.log(`🔒 Actividad PROGRAMADA sin solapamiento, NO se mueve:`, {
+                            id: actividad.id,
+                            codigo: actividad.codigo,
+                            inicio: inicioActividad,
+                            fin: finActividad
+                        });
+                        continue; // Saltar esta actividad
+                    }
+
+                    // Si es NORMAL (no programada) y empieza DESPUÉS del fin de la inserción,
+                    // intentaremos buscarle un hueco (podría adelantarse si hay espacio)
+                    if (inicioActividad >= finInsercion) {
+                        actividadesAReajustar.push(actividad);
+                    }
+                    continue;
+                }
+
+                // ⚠️ SÍ hay solapamiento - necesita reajustarse
+                console.log(`⚠️ Solapamiento detectado con actividad:`, {
+                    id: actividad.id,
+                    codigo: actividad.codigo,
+                    es_programada: actividad.es_programada
+                });
+
+                // Si la nueva actividad se inserta en medio de una actividad existente (corte)
                 if (puntoInsercion > inicioActividad && puntoInsercion < finActividad) {
                     const tiempoAntes = (puntoInsercion - inicioActividad) / 60000; // minutos antes del corte
                     const tiempoDespues = (finActividad - puntoInsercion) / 60000;  // minutos después del corte
@@ -77,15 +112,13 @@ class ReajusteService {
                             minutos_antes: Math.round(tiempoAntes),
                             minutos_despues: Math.round(tiempoDespues)
                         });
-                        // Tratar como si empezara después del punto de inserción
                         actividadesAReajustar.push(actividad);
                     } else {
-                        // CAMBIO: Agregar al array en lugar de sobrescribir
                         actividadesCortadas.push({
                             ...actividad,
-                            tiempoAntes: Math.max(0, tiempoAntes),      // Asegurar que no sea negativo
-                            tiempoDespues: Math.max(0, tiempoDespues),  // Asegurar que no sea negativo
-                            inicioReal: inicioActividad                 // Guardar qué tiempo usamos
+                            tiempoAntes: Math.max(0, tiempoAntes),
+                            tiempoDespues: Math.max(0, tiempoDespues),
+                            inicioReal: inicioActividad
                         });
 
                         console.log('🔍 Actividad detectada para corte:', {
@@ -98,7 +131,8 @@ class ReajusteService {
                             minutos_despues: Math.round(tiempoDespues)
                         });
                     }
-                } else if (inicioActividad >= puntoInsercion) {
+                } else {
+                    // La actividad empieza dentro del rango de inserción o después
                     actividadesAReajustar.push(actividad);
                 }
             }
@@ -240,38 +274,60 @@ class ReajusteService {
                 cursorTiempo = finContinuacion;
             }
 
+            // ✅ NUEVA LÓGICA: Obtener actividades FIJAS (obstáculos) que no se pueden mover
+            const actividadesFijas = await query(`
+                SELECT id, codigo, fecha_inicio_planeada, fecha_fin_planeada, duracion_planeada_minutos,
+                       es_programada, es_grupal, es_prioritaria
+                FROM actividades_marketing
+                WHERE usuario_id = $1
+                  AND activo = true
+                  AND estado IN ('pendiente', 'en_progreso')
+                  AND (es_programada = true OR es_grupal = true OR es_prioritaria = true)
+                  AND id != $2
+                  AND fecha_inicio_planeada >= $3
+                ORDER BY fecha_inicio_planeada ASC
+            `, [usuarioId, actividadIdDisparadora, cursorTiempo]);
+
+            console.log(`🚧 Actividades FIJAS detectadas como obstáculos: ${actividadesFijas.rows.length}`);
+
             // Reajustar todas las actividades posteriores
             for (const actividad of actividadesAReajustar) {
                 let nuevaFechaInicio = cursorTiempo;
                 let nuevaFechaFin = this.agregarMinutosEfectivos(cursorTiempo, actividad.duracion_planeada_minutos);
 
-                // NUEVO: Si hay programada confirmada, verificar si esta actividad cruza con OTRAS programadas no confirmadas
-                if (programadaConfirmadaId) {
-                    // Buscar programadas no confirmadas que crucen con este rango
-                    const programadasCruzadas = await query(`
-                        SELECT id, descripcion, fecha_inicio_planeada, fecha_fin_planeada
-                        FROM actividades_marketing
-                        WHERE usuario_id = $1
-                          AND activo = true
-                          AND estado IN ('pendiente', 'en_progreso')
-                          AND es_programada = true
-                          AND id != $2
-                          AND id != $3
-                          AND (fecha_inicio_planeada, fecha_fin_planeada) OVERLAPS ($4, $5)
-                        ORDER BY fecha_inicio_planeada ASC
-                        LIMIT 1
-                    `, [usuarioId, programadaConfirmadaId, actividadIdDisparadora, nuevaFechaInicio, nuevaFechaFin]);
+                // ✅ VALIDAR: Buscar el primer hueco válido que pueda contener esta actividad COMPLETA
+                let huecoEncontrado = false;
 
-                    // Si cruza con programada no confirmada, saltar después de ella
-                    if (programadasCruzadas.rows.length > 0) {
-                        const programadaObstaculo = programadasCruzadas.rows[0];
-                        console.log(`⏭️ Actividad ${actividad.id} cruza con programada no confirmada ${programadaObstaculo.id} - Saltando...`);
+                for (let i = 0; i < actividadesFijas.rows.length; i++) {
+                    const obstaculoActual = actividadesFijas.rows[i];
+                    const inicioObstaculo = new Date(obstaculoActual.fecha_inicio_planeada);
+                    const finObstaculo = new Date(obstaculoActual.fecha_fin_planeada);
 
-                        // Mover cursor después de la programada obstáculo
-                        cursorTiempo = new Date(programadaObstaculo.fecha_fin_planeada);
-                        nuevaFechaInicio = cursorTiempo;
-                        nuevaFechaFin = this.agregarMinutosEfectivos(cursorTiempo, actividad.duracion_planeada_minutos);
+                    // Verificar si la actividad cabe ANTES del obstáculo
+                    if (nuevaFechaFin <= inicioObstaculo) {
+                        // ✅ Cabe completa antes del obstáculo
+                        console.log(`✅ Actividad ${actividad.id} cabe en hueco antes de obstáculo ${obstaculoActual.codigo}:`, {
+                            inicio: nuevaFechaInicio,
+                            fin: nuevaFechaFin,
+                            obstaculo_inicio: inicioObstaculo
+                        });
+                        huecoEncontrado = true;
+                        break;
                     }
+
+                    // ❌ No cabe antes del obstáculo, intentar después
+                    console.log(`⏭️ Actividad ${actividad.id} NO cabe antes de ${obstaculoActual.codigo}, saltando después...`);
+                    cursorTiempo = finObstaculo;
+                    nuevaFechaInicio = cursorTiempo;
+                    nuevaFechaFin = this.agregarMinutosEfectivos(cursorTiempo, actividad.duracion_planeada_minutos);
+                }
+
+                // Si no hay más obstáculos o ya pasamos todos, usar la posición actual
+                if (!huecoEncontrado && actividadesFijas.rows.length > 0) {
+                    console.log(`✅ Actividad ${actividad.id} posicionada después de todos los obstáculos:`, {
+                        inicio: nuevaFechaInicio,
+                        fin: nuevaFechaFin
+                    });
                 }
 
                 await query(`
