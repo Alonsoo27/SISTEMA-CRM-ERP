@@ -81,10 +81,11 @@ const marketingService = {
     /**
      * Extender tiempo de actividad
      */
-    async extenderActividad(id, minutos_adicionales, motivo) {
+    async extenderActividad(id, minutos_adicionales, motivo, confirmar_desplazamiento = false) {
         const response = await apiClient.post(`/marketing/actividades/${id}/extender`, {
             minutos_adicionales,
-            motivo
+            motivo,
+            confirmar_desplazamiento
         });
         return response.data;
     },

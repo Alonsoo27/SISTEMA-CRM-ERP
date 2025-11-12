@@ -21,6 +21,7 @@ const ModalDetallesActividad = ({ actividad, onClose, onActividadActualizada }) 
     const [showModalExtender, setShowModalExtender] = useState(false);
     const [showModalCompletar, setShowModalCompletar] = useState(false);
     const [notificacion, setNotificacion] = useState({ isOpen: false, tipo: 'info', titulo: '', mensaje: '' });
+    const [confirmacionDesplazamiento, setConfirmacionDesplazamiento] = useState(null);
 
     // Obtener usuario del localStorage
     const user = useMemo(() => {
@@ -125,9 +126,9 @@ const ModalDetallesActividad = ({ actividad, onClose, onActividadActualizada }) 
         setShowModalExtender(true);
     };
 
-    const handleExtenderSuccess = async ({ minutos, motivo }) => {
+    const handleExtenderSuccess = async ({ minutos, motivo }, confirmarDesplazamiento = false) => {
         try {
-            await marketingService.extenderActividad(actividad.id, minutos, motivo);
+            await marketingService.extenderActividad(actividad.id, minutos, motivo, confirmarDesplazamiento);
             setNotificacion({
                 isOpen: true,
                 tipo: 'success',
@@ -135,6 +136,7 @@ const ModalDetallesActividad = ({ actividad, onClose, onActividadActualizada }) 
                 mensaje: 'La actividad ha sido extendida exitosamente.'
             });
             setShowModalExtender(false);
+            setConfirmacionDesplazamiento(null);
 
             // Recargar el calendario inmediatamente para reflejar los cambios
             if (onActividadActualizada) {
@@ -147,11 +149,27 @@ const ModalDetallesActividad = ({ actividad, onClose, onActividadActualizada }) 
             }, 1500);
         } catch (error) {
             console.error('Error extendiendo actividad:', error);
+
+            // Verificar si es error 409 que requiere confirmación
+            if (error.status === 409 && error.data?.tipo_error === 'requiere_confirmacion') {
+                // Guardar datos para mostrar modal de confirmación
+                setConfirmacionDesplazamiento({
+                    tipo: 'extender',
+                    minutos,
+                    motivo,
+                    conflictos: error.data.conflictos_por_participante,
+                    mensaje: error.data.mensaje,
+                    total: error.data.total_actividades_desplazar
+                });
+                setShowModalExtender(false);
+                return;
+            }
+
             setNotificacion({
                 isOpen: true,
                 tipo: 'danger',
                 titulo: 'Error al extender',
-                mensaje: 'No se pudo extender la actividad. Intenta de nuevo.'
+                mensaje: error.data?.mensaje || 'No se pudo extender la actividad. Intenta de nuevo.'
             });
         }
     };
@@ -539,6 +557,83 @@ const ModalDetallesActividad = ({ actividad, onClose, onActividadActualizada }) 
                     onClose={() => setShowModalCompletar(false)}
                     onSuccess={handleCompletarSuccess}
                 />
+            )}
+
+            {/* Modal de Confirmación de Desplazamiento */}
+            {confirmacionDesplazamiento && createPortal(
+                <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-[10002] p-4">
+                    <div className="bg-white rounded-lg shadow-2xl max-w-2xl w-full">
+                        <div className="bg-orange-50 p-6 border-b border-orange-200">
+                            <div className="flex items-center gap-3">
+                                <span className="text-3xl">⚠️</span>
+                                <h3 className="text-xl font-bold text-gray-900">
+                                    Confirmar desplazamiento de actividades
+                                </h3>
+                            </div>
+                        </div>
+
+                        <div className="p-6 space-y-4">
+                            <p className="text-gray-700">
+                                {confirmacionDesplazamiento.mensaje}
+                            </p>
+
+                            <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+                                <div className="font-semibold text-blue-900 mb-2">
+                                    Actividades que serán desplazadas:
+                                </div>
+                                <ul className="space-y-2">
+                                    {confirmacionDesplazamiento.conflictos?.map((conflicto, idx) => (
+                                        conflicto.conflictos.map((conf, confIdx) => (
+                                            <li key={`${idx}-${confIdx}`} className="flex items-start gap-2 text-sm">
+                                                <span className="text-blue-600 mt-0.5">→</span>
+                                                <div>
+                                                    <div className="font-medium text-gray-900">
+                                                        {conf.actividad.descripcion}
+                                                    </div>
+                                                    <div className="text-xs text-gray-600">
+                                                        {conf.actividad.codigo} • {conf.razon}
+                                                    </div>
+                                                </div>
+                                            </li>
+                                        ))
+                                    ))}
+                                </ul>
+                            </div>
+
+                            <div className="bg-yellow-50 p-4 rounded-lg border border-yellow-200">
+                                <p className="text-sm text-yellow-800">
+                                    <span className="font-semibold">Advertencia:</span> Al confirmar, estas actividades se moverán automáticamente para evitar conflictos. Esta acción no se puede deshacer.
+                                </p>
+                            </div>
+                        </div>
+
+                        <div className="p-6 border-t border-gray-200 bg-gray-50 flex justify-end gap-3">
+                            <button
+                                onClick={() => setConfirmacionDesplazamiento(null)}
+                                className="px-6 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition"
+                            >
+                                Cancelar
+                            </button>
+                            <button
+                                onClick={() => {
+                                    if (confirmacionDesplazamiento.tipo === 'extender') {
+                                        handleExtenderSuccess(
+                                            {
+                                                minutos: confirmacionDesplazamiento.minutos,
+                                                motivo: confirmacionDesplazamiento.motivo
+                                            },
+                                            true
+                                        );
+                                    }
+                                }}
+                                className="px-6 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition"
+                            >
+                                Confirmar y Desplazar
+                            </button>
+                        </div>
+                    </div>
+                </div>,
+                document.body
             )}
 
             {/* Modal de Notificación */}
