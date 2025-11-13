@@ -59,7 +59,8 @@ const KanbanFilters = ({ filtros, onFiltrosChange, onExportar }) => {
       canal_contacto: '',
       busqueda: '',
       fecha_desde: '',
-      fecha_hasta: ''
+      fecha_hasta: '',
+      tipo_fecha: 'contacto'
     });
   };
 
@@ -217,6 +218,21 @@ const KanbanFilters = ({ filtros, onFiltrosChange, onExportar }) => {
                     {canales.map(canal => (
                       <option key={canal} value={canal}>{canal}</option>
                     ))}
+                  </select>
+                </div>
+
+                {/* Tipo de fecha para filtrar */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Filtrar por
+                  </label>
+                  <select
+                    value={filtros.tipo_fecha || 'contacto'}
+                    onChange={(e) => handleFiltroChange('tipo_fecha', e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="contacto">Fecha de contacto</option>
+                    <option value="seguimiento">Último seguimiento</option>
                   </select>
                 </div>
 

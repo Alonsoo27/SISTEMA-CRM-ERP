@@ -767,7 +767,17 @@ class SeguimientosController {
 
                     // ✅ FIX: Validación explícita para evitar bugs con contadores inconsistentes
                     if (nuevasReasignaciones <= 2) {
-                        // REASIGNACIÓN NORMAL (1er o 2do rebote)
+                        // ✅ CRÍTICO: PRIMERO completar el seguimiento viejo ANTES de reasignar
+                        // Esto previene violación del constraint idx_seguimiento_activo_unico
+                        await query(`
+                            UPDATE seguimientos
+                            SET visible_para_asesor = $1, completado = $2,
+                                fecha_completado = $3, resultado = $4
+                            WHERE id = $5
+                        `, [false, true, new Date(), 'Traspasado por vencimiento después de 2 días laborales', seguimiento.id]);
+
+                        // ✅ DESPUÉS: REASIGNACIÓN NORMAL (1er o 2do rebote)
+                        // Ahora sí puede crear un nuevo seguimiento sin violar el constraint
                         const resultadoReasignacion = await SeguimientosController.reasignarProspecto(seguimiento.prospecto_id, 'seguimiento_vencido');
 
                         if (resultadoReasignacion && resultadoReasignacion.action === 'modo_libre') {
@@ -775,14 +785,6 @@ class SeguimientosController {
                         } else {
                             resultado.reasignados++;
                         }
-
-                        // ✅ AL TRASPASAR: Ahora SÍ ocultar y completar el seguimiento vencido del asesor anterior
-                        await query(`
-                            UPDATE seguimientos
-                            SET visible_para_asesor = $1, completado = $2,
-                                fecha_completado = $3, resultado = $4
-                            WHERE id = $5
-                        `, [false, true, new Date(), 'Traspasado por vencimiento después de 2 días laborales', seguimiento.id]);
 
                         // Actualizar estado del prospecto
                         await query(`
@@ -793,17 +795,17 @@ class SeguimientosController {
                         `, ['traspasado', true, new Date(), seguimiento.asesor_id, 'seguimiento_vencido', seguimiento.prospecto_id]);
 
                     } else if (nuevasReasignaciones === 3) {
-                        // ACTIVAR MODO LIBRE (3er rebote exacto - numero_reasignaciones = 2 → 3)
-                        await SeguimientosController.activarModoLibre(seguimiento.prospecto_id);
-                        resultado.modo_libre_activado++;
-
-                        // ✅ AL ACTIVAR MODO LIBRE: Ocultar seguimiento vencido del asesor anterior
+                        // ✅ CRÍTICO: PRIMERO completar el seguimiento viejo ANTES de activar modo libre
                         await query(`
                             UPDATE seguimientos
                             SET visible_para_asesor = $1, completado = $2,
                                 fecha_completado = $3, resultado = $4
                             WHERE id = $5
                         `, [false, true, new Date(), 'Modo libre activado después de 3 reasignaciones', seguimiento.id]);
+
+                        // ✅ DESPUÉS: ACTIVAR MODO LIBRE (3er rebote exacto - numero_reasignaciones = 2 → 3)
+                        await SeguimientosController.activarModoLibre(seguimiento.prospecto_id);
+                        resultado.modo_libre_activado++;
 
                         // Actualizar estado del prospecto a modo libre
                         await query(`
@@ -1007,6 +1009,25 @@ class SeguimientosController {
                 throw new Error('No se pudo calcular fecha límite válida');
             }
 
+            // ✅ DEFENSA EN PROFUNDIDAD: Completar CUALQUIER seguimiento activo previo
+            // Esto previene violaciones del constraint idx_seguimiento_activo_unico
+            const seguimientosCompletados = await client.query(`
+                UPDATE seguimientos
+                SET completado = true,
+                    visible_para_asesor = false,
+                    fecha_completado = NOW(),
+                    resultado = 'Completado automáticamente al reasignar prospecto'
+                WHERE prospecto_id = $1
+                  AND completado = false
+                  AND visible_para_asesor = true
+                RETURNING id
+            `, [prospecto_id]);
+
+            if (seguimientosCompletados.rows.length > 0) {
+                logger.info(`🔄 Completados ${seguimientosCompletados.rows.length} seguimiento(s) activo(s) previo(s) del prospecto ${prospecto_id}`);
+            }
+
+            // ✅ AHORA SÍ: Crear nuevo seguimiento para el nuevo asesor
             await client.query(`
                 INSERT INTO seguimientos (
                     prospecto_id, asesor_id, fecha_programada, fecha_limite,

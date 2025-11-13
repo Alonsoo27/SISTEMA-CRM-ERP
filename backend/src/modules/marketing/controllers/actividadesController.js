@@ -358,7 +358,7 @@ class ActividadesController {
             const codigo = await actividadesService.generarCodigoActividad();
 
             // Insertar actividad
-            const esProgramada = !!fecha_inicio; // true si se especificó fecha_inicio, false si fue automática
+            // esProgramada ya fue declarado en línea 248
 
             const insertQuery = `
                 INSERT INTO actividades_marketing (

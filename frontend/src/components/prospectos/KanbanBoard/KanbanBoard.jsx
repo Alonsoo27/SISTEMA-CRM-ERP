@@ -136,7 +136,8 @@ const KanbanBoard = ({
 
       // 🔥 FIX: Usar obtenerKanban() que no tiene límite de 50 registros
       // obtenerTodos() tiene LIMIT 50 que causaba que solo aparecieran 6 Cerrados de 49
-      const response = await prospectosService.obtenerKanban(asesorId);
+      // Pasar filtros al servicio para filtrado por fecha y otros criterios
+      const response = await prospectosService.obtenerKanban(asesorId, filtrosLimpios);
       console.log('KanbanBoard: Respuesta del servicio:', response);
 
       if (!response || !response.data) {

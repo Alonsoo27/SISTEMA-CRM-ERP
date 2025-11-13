@@ -392,7 +392,15 @@ class ProspectosController {
     static async obtenerKanban(req, res) {
         try {
             const { asesorId } = req.params;
-            const { incluir_modo_libre = false } = req.query;
+            const {
+                incluir_modo_libre = false,
+                fecha_desde,
+                fecha_hasta,
+                tipo_fecha = 'contacto',
+                estado,
+                canal_contacto,
+                busqueda
+            } = req.query;
 
             // 🔒 OBTENER ROL Y ID DEL USUARIO ACTUAL
             const usuarioActual = req.user || {};
@@ -418,13 +426,23 @@ class ProspectosController {
                 console.log(`👔 ${rolUsuario} - Kanban del asesor ${asesorId}`);
             }
 
+            // Preparar filtros adicionales
+            const filtros = {
+                fecha_desde,
+                fecha_hasta,
+                tipo_fecha,
+                estado,
+                canal_contacto,
+                busqueda
+            };
+
             // Intentar obtener del cache primero
-            const cacheParams = { incluir_modo_libre, rol: rolUsuario };
+            const cacheParams = { incluir_modo_libre, rol: rolUsuario, ...filtros };
             const resultado = await cacheService.conCache(
                 'kanban_data',
                 asesorIdFinal || 'todos',
                 async () => {
-                    return await ProspectosController.obtenerDatosKanbanFresh(asesorIdFinal, incluir_modo_libre);
+                    return await ProspectosController.obtenerDatosKanbanFresh(asesorIdFinal, incluir_modo_libre, filtros);
                 },
                 cacheParams
             );
@@ -444,8 +462,9 @@ class ProspectosController {
      * Función auxiliar para obtener datos Kanban sin cache
      * @param {number|null} asesorId - ID del asesor a filtrar, o null para vista global
      * @param {boolean} incluir_modo_libre - Incluir prospectos en modo libre
+     * @param {Object} filtros - Filtros adicionales (fecha_desde, fecha_hasta, tipo_fecha, estado, canal_contacto, busqueda)
      */
-    static async obtenerDatosKanbanFresh(asesorId, incluir_modo_libre) {
+    static async obtenerDatosKanbanFresh(asesorId, incluir_modo_libre, filtros = {}) {
         let sqlQuery = `
             SELECT
                 p.id, p.codigo, p.nombre_cliente, p.apellido_cliente, p.empresa, p.telefono, p.email,
@@ -497,6 +516,49 @@ class ProspectosController {
                 params.push(asesorId, false);
                 paramIndex += 2;
             }
+        }
+
+        // 📅 FILTROS DE FECHA - Según tipo seleccionado
+        const tipoFecha = filtros.tipo_fecha || 'contacto';
+        const campoFecha = tipoFecha === 'seguimiento' ? 'p.fecha_seguimiento' : 'p.fecha_contacto';
+
+        if (filtros.fecha_desde) {
+            sqlQuery += ` AND ${campoFecha} >= $${paramIndex}`;
+            params.push(filtros.fecha_desde);
+            paramIndex++;
+        }
+
+        if (filtros.fecha_hasta) {
+            sqlQuery += ` AND ${campoFecha} <= $${paramIndex}`;
+            params.push(filtros.fecha_hasta);
+            paramIndex++;
+        }
+
+        // 🔍 FILTRO DE ESTADO
+        if (filtros.estado) {
+            sqlQuery += ` AND p.estado = $${paramIndex}`;
+            params.push(filtros.estado);
+            paramIndex++;
+        }
+
+        // 📱 FILTRO DE CANAL DE CONTACTO
+        if (filtros.canal_contacto) {
+            sqlQuery += ` AND p.canal_contacto = $${paramIndex}`;
+            params.push(filtros.canal_contacto);
+            paramIndex++;
+        }
+
+        // 🔎 FILTRO DE BÚSQUEDA (nombre, teléfono, empresa)
+        if (filtros.busqueda) {
+            sqlQuery += ` AND (
+                p.nombre_cliente ILIKE $${paramIndex} OR
+                p.apellido_cliente ILIKE $${paramIndex} OR
+                p.telefono ILIKE $${paramIndex} OR
+                p.empresa ILIKE $${paramIndex} OR
+                p.email ILIKE $${paramIndex}
+            )`;
+            params.push(`%${filtros.busqueda}%`);
+            paramIndex++;
         }
 
         const result = await query(sqlQuery, params);

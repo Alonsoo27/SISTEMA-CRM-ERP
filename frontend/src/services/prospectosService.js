@@ -106,12 +106,29 @@ class ProspectosService {
   }
 
   // ===== KANBAN BOARD =====
-  
-  async obtenerKanban(asesorId = null) {
-    const url = asesorId 
+
+  async obtenerKanban(asesorId = null, filtros = {}) {
+    let url = asesorId
       ? `${API_BASE_URL}/kanban/${asesorId}`
       : `${API_BASE_URL}/kanban`;
-    
+
+    // Agregar filtros como query params
+    const queryParams = new URLSearchParams();
+
+    // Filtros de fecha
+    if (filtros.fecha_desde) queryParams.append('fecha_desde', filtros.fecha_desde);
+    if (filtros.fecha_hasta) queryParams.append('fecha_hasta', filtros.fecha_hasta);
+    if (filtros.tipo_fecha) queryParams.append('tipo_fecha', filtros.tipo_fecha);
+
+    // Otros filtros
+    if (filtros.estado) queryParams.append('estado', filtros.estado);
+    if (filtros.canal_contacto) queryParams.append('canal_contacto', filtros.canal_contacto);
+    if (filtros.busqueda) queryParams.append('busqueda', filtros.busqueda);
+
+    if (queryParams.toString()) {
+      url += `?${queryParams.toString()}`;
+    }
+
     const response = await fetch(url, {
       headers: this.getAuthHeaders()
     });
