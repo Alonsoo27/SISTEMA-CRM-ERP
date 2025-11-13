@@ -166,14 +166,20 @@ class SeguimientosController {
                 });
             }
 
-            // Actualizar seguimiento actual como completado
+            // Actualizar seguimiento actual como completado y oculto
             const updateResult = await query(`
                 UPDATE seguimientos
-                SET completado = $1, fecha_completado = $2, resultado = $3, notas = $4,
-                    calificacion = $5, completado_por = $6, resultado_seguimiento = $7
-                WHERE id = $8
+                SET completado = $1,
+                    visible_para_asesor = $2,
+                    fecha_completado = $3,
+                    resultado = $4,
+                    notas = $5,
+                    calificacion = $6,
+                    completado_por = $7,
+                    resultado_seguimiento = $8
+                WHERE id = $9
                 RETURNING prospecto_id, asesor_id
-            `, [true, new Date().toISOString(), resultado, notas, calificacion, req.user?.id, resultado, id]);
+            `, [true, false, new Date().toISOString(), resultado, notas, calificacion, req.user?.id, resultado, id]);
 
             if (!updateResult.rows || updateResult.rows.length === 0) {
                 return res.status(404).json({
