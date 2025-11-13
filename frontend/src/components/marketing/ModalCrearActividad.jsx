@@ -79,7 +79,7 @@ const ModalCrearActividad = ({ onClose, onSuccess, usuarioId }) => {
         }
     };
 
-    const handleSubmit = async (e, confirmarColision = false) => {
+    const handleSubmit = async (e, confirmarColision = false, confirmarDesplazamiento = false) => {
         e.preventDefault();
 
         // Validaciones
@@ -122,7 +122,8 @@ const ModalCrearActividad = ({ onClose, onSuccess, usuarioId }) => {
                 descripcion: formData.descripcion,
                 duracion_minutos: parseInt(formData.duracion_minutos),
                 es_prioritaria: formData.es_prioritaria,
-                confirmar_colision: confirmarColision // NUEVO
+                confirmar_colision: confirmarColision,
+                confirmar_desplazamiento: confirmarDesplazamiento // NUEVO
             };
 
             if (formData.fecha_inicio && formData.fecha_inicio.trim() !== '') {
@@ -169,8 +170,15 @@ const ModalCrearActividad = ({ onClose, onSuccess, usuarioId }) => {
                 console.log('⚠️ Colisión detectada - Datos:', {
                     error_status: error.status,
                     error_response_status: error.response?.status,
-                    colisionData: colisionData
+                    colisionData: colisionData,
+                    tipo_error: colisionData?.tipo_error
                 });
+
+                // ✅ Marcar si requiere confirmación de desplazamiento (PROGRAMADA vs PROGRAMADA)
+                if (colisionData?.tipo_error === 'requiere_confirmacion') {
+                    colisionData.requiereDesplazamiento = true;
+                }
+
                 setColision(colisionData);
                 setMostrarModalColision(true);
                 console.log('✅ Estado actualizado - mostrarModalColision:', true);
@@ -193,7 +201,15 @@ const ModalCrearActividad = ({ onClose, onSuccess, usuarioId }) => {
         setMostrarModalColision(false);
         // Crear evento falso para reutilizar handleSubmit
         const fakeEvent = { preventDefault: () => {} };
-        await handleSubmit(fakeEvent, true);
+
+        // ✅ Verificar si requiere confirmación de desplazamiento o confirmación normal
+        const requiereDesplazamiento = colision?.requiereDesplazamiento || false;
+
+        if (requiereDesplazamiento) {
+            await handleSubmit(fakeEvent, false, true); // confirmarDesplazamiento = true
+        } else {
+            await handleSubmit(fakeEvent, true, false); // confirmarColision = true
+        }
     };
 
     // Manejar selección de slot alternativo
@@ -453,6 +469,57 @@ const ModalColision = ({ colision, onConfirmar, onCancelar, onSeleccionarSlot, f
             minute: '2-digit'
         });
     };
+
+    // TIPO 0: Requiere confirmación de desplazamiento (PROGRAMADA vs PROGRAMADA)
+    if (colision.requiereDesplazamiento) {
+        return (
+            <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-[60] p-4">
+                <div className="bg-white rounded-lg shadow-2xl max-w-lg w-full">
+                    <div className="bg-orange-50 p-6 border-b border-orange-200">
+                        <div className="flex items-center gap-3">
+                            <span className="text-3xl">⚠️</span>
+                            <h3 className="text-xl font-bold text-gray-900">
+                                Confirmar desplazamiento
+                            </h3>
+                        </div>
+                    </div>
+
+                    <div className="p-6 space-y-4">
+                        <p className="text-gray-700">{colision.mensaje}</p>
+
+                        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                            <p className="text-sm text-yellow-800">
+                                <span className="font-semibold">📅 Actividad programada:</span> Ambas actividades tienen horarios fijos definidos manualmente.
+                            </p>
+                        </div>
+
+                        <div className="bg-gray-50 p-4 rounded-lg">
+                            <p className="text-sm font-semibold text-gray-700 mb-2">🆕 Tu actividad:</p>
+                            <p className="text-gray-900">{formData.descripcion}</p>
+                            <p className="text-sm text-gray-600 mt-1">
+                                ⏱️ Duración: {formData.duracion_minutos} minutos
+                            </p>
+                        </div>
+                    </div>
+
+                    <div className="bg-gray-50 p-6 flex justify-end gap-3 border-t border-gray-200">
+                        <button
+                            onClick={onCancelar}
+                            className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-white transition"
+                        >
+                            Cancelar
+                        </button>
+                        <button
+                            onClick={onConfirmar}
+                            className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition"
+                        >
+                            Confirmar y desplazar
+                        </button>
+                    </div>
+                </div>
+            </div>
+        );
+    }
 
     // TIPO 1: Colisión con PRIORITARIA
     if (colision.tipo_colision === 'prioritaria') {

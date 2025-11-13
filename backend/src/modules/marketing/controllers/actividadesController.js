@@ -244,8 +244,10 @@ class ActividadesController {
                 duracion_minutos
             );
 
-            // VALIDACIÓN #2: Detectar colisiones (solo para PRIORITARIAS)
-            if (es_prioritaria && !confirmar_colision) {
+            // VALIDACIÓN #2: Detectar colisiones (para PRIORITARIAS y PROGRAMADAS)
+            const esProgramada = !!fecha_inicio; // Si tiene fecha manual, es programada
+
+            if ((es_prioritaria || esProgramada) && !confirmar_colision && !confirmar_desplazamiento) {
                 const colision = await colisionesService.detectarColisionesPrioritaria(
                     usuarioDestino,
                     fechaInicioPlaneada,
@@ -253,13 +255,25 @@ class ActividadesController {
                 );
 
                 if (colision.hayColision) {
-                    // Si colisiona con NORMAL → continuar (se cortará automáticamente después)
-                    if (colision.tipo === 'normal') {
+                    // Si es PRIORITARIA y colisiona con NORMAL → continuar (se cortará automáticamente)
+                    if (es_prioritaria && colision.tipo === 'normal') {
                         console.log('✅ Actividad prioritaria vs normal - Se ejecutará reajuste automático');
                         // No hacer nada, continuar con la creación
-                    } else {
-                        // Si colisiona con PRIORITARIA, GRUPAL o PROGRAMADA → devolver 409 (requiere confirmación)
-                        console.log(`⚠️ Actividad prioritaria vs ${colision.tipo} - Requiere confirmación`);
+                    }
+                    // Si es PROGRAMADA y colisiona con otra PROGRAMADA → pedir confirmación
+                    else if (esProgramada && !es_prioritaria && colision.tipo === 'programada') {
+                        console.log('⚠️ PROGRAMADA vs PROGRAMADA - Requiere confirmación');
+                        return res.status(409).json({
+                            success: false,
+                            tipo_error: 'requiere_confirmacion',
+                            mensaje: 'Esta actividad se solapa con otra actividad programada. ¿Deseas continuar y desplazarla?',
+                            colision: colision,
+                            requiere_confirmacion: true
+                        });
+                    }
+                    else {
+                        // Si colisiona con PRIORITARIA, GRUPAL → devolver 409 (requiere confirmación)
+                        console.log(`⚠️ Actividad vs ${colision.tipo} - Requiere confirmación`);
                         return res.status(409).json({
                             success: false,
                             tipo_colision: colision.tipo,
@@ -2146,6 +2160,38 @@ class ActividadesController {
                 success: false,
                 message: error.message || 'Error al resolver colisión',
                 error: process.env.NODE_ENV === 'development' ? error.message : undefined
+            });
+        }
+    }
+
+    // ============================================
+    // 🔧 ENDPOINT TEMPORAL DE DEBUG - REGISTRAR HUECOS MANUALMENTE
+    // ============================================
+    static async debugRegistrarHuecos(req, res) {
+        try {
+            const { usuario_id } = req.params;
+
+            console.log(`🔧 [DEBUG] Ejecutando registrarHuecosPasados() manualmente para usuario ${usuario_id}`);
+
+            const resultado = await actividadesService.registrarHuecosPasados(
+                parseInt(usuario_id),
+                new Date() // fecha de nueva actividad (no se usa en la función)
+            );
+
+            res.json({
+                success: true,
+                huecos_creados: resultado,
+                mensaje: resultado
+                    ? `Se crearon ${resultado} huecos correctamente`
+                    : 'No se crearon huecos (puede ser normal si no hay huecos pendientes)'
+            });
+
+        } catch (error) {
+            console.error('❌ [DEBUG] Error ejecutando registrarHuecosPasados:', error);
+            res.status(500).json({
+                success: false,
+                message: error.message,
+                stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
             });
         }
     }
