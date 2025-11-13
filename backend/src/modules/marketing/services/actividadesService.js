@@ -263,8 +263,9 @@ class ActividadesService {
                         WHERE usuario_id = $1
                           AND activo = true
                           AND (
-                            -- Hay alguna actividad que solape con el hueco
-                            (fecha_inicio_planeada < $3 AND fecha_fin_planeada > $2)
+                            -- Hay alguna actividad que solape con el hueco (usar fechas efectivas)
+                            (COALESCE(fecha_inicio_real, fecha_inicio_planeada) < $3
+                             AND COALESCE(fecha_fin_real, fecha_fin_planeada) > $2)
                           )
                         LIMIT 1
                     `, [usuarioId, finActual, inicioSiguiente]);
@@ -345,8 +346,9 @@ class ActividadesService {
                             WHERE usuario_id = $1
                               AND activo = true
                               AND (
-                                -- Hay alguna actividad que solape con el hueco final
-                                (fecha_inicio_planeada < $3 AND fecha_fin_planeada > $2)
+                                -- Hay alguna actividad que solape con el hueco final (usar fechas efectivas)
+                                (COALESCE(fecha_inicio_real, fecha_inicio_planeada) < $3
+                                 AND COALESCE(fecha_fin_real, fecha_fin_planeada) > $2)
                               )
                             LIMIT 1
                         `, [usuarioId, finUltima, finJornadaDia]);
