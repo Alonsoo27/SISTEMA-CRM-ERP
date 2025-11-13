@@ -361,6 +361,16 @@ router.post('/procesar-huecos/:usuarioId',
     ActividadesController.procesarHuecosPendientes
 );
 
+/**
+ * 🔧 DEBUG: Ejecutar manualmente registrarHuecosPasados()
+ * TEMPORAL - Para diagnosticar por qué no se recrean huecos eliminados
+ */
+router.post('/debug/registrar-huecos/:usuario_id',
+    authenticateToken,
+    requireRole(GRUPOS_ROLES.MARKETING_COMPLETO),
+    ActividadesController.debugRegistrarHuecos
+);
+
 // ============================================
 // PROCESO NOCTURNO
 // ============================================
