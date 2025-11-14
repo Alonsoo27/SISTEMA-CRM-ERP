@@ -88,7 +88,8 @@ class ActividadesController {
                 fecha_inicio,
                 es_prioritaria = false,
                 usuario_id, // ID del usuario para quien se crea (opcional)
-                confirmar_colision = false // Flag para confirmar que usuario acepta la colisión
+                confirmar_colision = false, // Flag para confirmar que usuario acepta la colisión
+                confirmar_desplazamiento = false // Flag para confirmar desplazamiento de PROGRAMADA vs PROGRAMADA
             } = req.body;
 
             // Determinar para quién es la actividad
