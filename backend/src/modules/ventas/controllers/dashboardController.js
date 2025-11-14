@@ -5,6 +5,14 @@
 
 const { query } = require('../../../config/database');
 
+// ✅ Utilidad para formatear fecha en formato YYYY-MM-DD sin problemas de timezone
+const formatearFechaLocal = (fecha) => {
+  const año = fecha.getFullYear();
+  const mes = String(fecha.getMonth() + 1).padStart(2, '0');
+  const dia = String(fecha.getDate()).padStart(2, '0');
+  return `${año}-${mes}-${dia}`;
+};
+
 // Utilidad para obtener fechas por período
 const obtenerFechasPorPeriodo = (periodo) => {
   const hoy = new Date();
@@ -13,29 +21,33 @@ const obtenerFechasPorPeriodo = (periodo) => {
   // Manejar formatos simples
   switch (periodo) {
     case 'hoy':
-      desde = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate());
-      hasta = hoy;
+      desde = formatearFechaLocal(hoy);
+      hasta = formatearFechaLocal(hoy);
       break;
     case 'semana_actual':
       const inicioSemana = new Date(hoy);
       inicioSemana.setDate(hoy.getDate() - hoy.getDay());
-      desde = inicioSemana;
-      hasta = hoy;
+      desde = formatearFechaLocal(inicioSemana);
+      hasta = formatearFechaLocal(hoy);
       break;
     case 'mes_actual':
-      desde = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
-      hasta = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 0); // Último día del mes
+      const primerDia = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
+      const ultimoDia = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 0);
+      desde = formatearFechaLocal(primerDia);
+      hasta = formatearFechaLocal(ultimoDia);
       break;
     case 'trimestre_actual':
       const mesActual = hoy.getMonth();
       const inicioTrimestre = new Date(hoy.getFullYear(), Math.floor(mesActual / 3) * 3, 1);
       const finTrimestre = new Date(hoy.getFullYear(), Math.floor(mesActual / 3) * 3 + 3, 0);
-      desde = inicioTrimestre;
-      hasta = finTrimestre;
+      desde = formatearFechaLocal(inicioTrimestre);
+      hasta = formatearFechaLocal(finTrimestre);
       break;
     case 'año_actual':
-      desde = new Date(hoy.getFullYear(), 0, 1);
-      hasta = new Date(hoy.getFullYear(), 11, 31);
+      const inicioAño = new Date(hoy.getFullYear(), 0, 1);
+      const finAño = new Date(hoy.getFullYear(), 11, 31);
+      desde = formatearFechaLocal(inicioAño);
+      hasta = formatearFechaLocal(finAño);
       break;
     default:
       // Manejar formatos avanzados del nuevo selector
@@ -43,25 +55,33 @@ const obtenerFechasPorPeriodo = (periodo) => {
         const mesInfo = periodo.split('_')[1];
         if (mesInfo.includes('-')) {
           const [año, mes] = mesInfo.split('-').map(Number);
-          desde = new Date(año, mes - 1, 1);
-          hasta = new Date(año, mes, 0); // Último día del mes
+          const primerDiaMes = new Date(año, mes - 1, 1);
+          const ultimoDiaMes = new Date(año, mes, 0);
+          desde = formatearFechaLocal(primerDiaMes);
+          hasta = formatearFechaLocal(ultimoDiaMes);
         }
       } else if (periodo.startsWith('trimestre_')) {
         const trimInfo = periodo.split('_')[1];
         if (trimInfo.includes('-')) {
           const [año, trimestre] = trimInfo.split('-').map(Number);
           const mesInicio = (trimestre - 1) * 3;
-          desde = new Date(año, mesInicio, 1);
-          hasta = new Date(año, mesInicio + 3, 0); // Último día del trimestre
+          const inicioTrim = new Date(año, mesInicio, 1);
+          const finTrim = new Date(año, mesInicio + 3, 0);
+          desde = formatearFechaLocal(inicioTrim);
+          hasta = formatearFechaLocal(finTrim);
         }
       } else if (periodo.startsWith('año_')) {
         const año = parseInt(periodo.split('_')[1]);
-        desde = new Date(año, 0, 1);
-        hasta = new Date(año, 11, 31);
+        const inicioA = new Date(año, 0, 1);
+        const finA = new Date(año, 11, 31);
+        desde = formatearFechaLocal(inicioA);
+        hasta = formatearFechaLocal(finA);
       } else {
         // Fallback - mes actual
-        desde = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
-        hasta = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 0);
+        const primerDiaFb = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
+        const ultimoDiaFb = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 0);
+        desde = formatearFechaLocal(primerDiaFb);
+        hasta = formatearFechaLocal(ultimoDiaFb);
       }
   }
 
@@ -173,7 +193,7 @@ const dashboardPersonal = async (req, res) => {
         COALESCE(AVG(tiempo_conversion_dias), 0) as promedio_tiempo_conversion
       FROM ventas
       WHERE asesor_id = $1
-        AND estado_detallado = 'vendido'
+        AND estado_detallado LIKE 'vendido%'
         AND fecha_venta >= $2
         AND fecha_venta <= $3
         AND activo = true
@@ -216,7 +236,7 @@ const dashboardPersonal = async (req, res) => {
           SELECT COUNT(*)
           FROM ventas
           WHERE asesor_id = $1
-          AND estado_detallado = 'vendido'
+          AND estado_detallado LIKE 'vendido%'
           AND prospecto_id IS NOT NULL
           AND fecha_venta >= $2
           AND fecha_venta <= $3
@@ -245,7 +265,7 @@ const dashboardPersonal = async (req, res) => {
           SELECT COALESCE(SUM(valor_final), 0)
           FROM ventas
           WHERE asesor_id = $1
-          AND estado_detallado = 'vendido'
+          AND estado_detallado LIKE 'vendido%'
           AND fecha_venta >= $2
           AND fecha_venta <= $3
           AND activo = true
@@ -279,7 +299,7 @@ const dashboardPersonal = async (req, res) => {
           SUM(valor_final) as valor_real
         FROM ventas
         WHERE asesor_id = $1
-          AND estado_detallado = 'vendido'
+          AND estado_detallado LIKE 'vendido%'
           AND EXTRACT(YEAR FROM fecha_venta) = $2
           AND EXTRACT(MONTH FROM fecha_venta) = $3
           AND activo = true
@@ -308,11 +328,16 @@ const dashboardPersonal = async (req, res) => {
     `;
 
     // Query para período anterior (comparación)
-    const diasDiferencia = Math.ceil((hasta - desde) / (1000 * 60 * 60 * 24));
-    const desdeAnterior = new Date(desde);
-    desdeAnterior.setDate(desde.getDate() - diasDiferencia);
-    const hastaAnterior = new Date(desde);
-    hastaAnterior.setDate(desde.getDate() - 1);
+    // Convertir strings de fecha a objetos Date para cálculo
+    const desdeDate = new Date(desde + 'T00:00:00');
+    const hastaDate = new Date(hasta + 'T23:59:59');
+    const diasDiferencia = Math.ceil((hastaDate - desdeDate) / (1000 * 60 * 60 * 24));
+    const desdeAnteriorDate = new Date(desdeDate);
+    desdeAnteriorDate.setDate(desdeDate.getDate() - diasDiferencia);
+    const hastaAnteriorDate = new Date(desdeDate);
+    hastaAnteriorDate.setDate(desdeDate.getDate() - 1);
+    const desdeAnterior = formatearFechaLocal(desdeAnteriorDate);
+    const hastaAnterior = formatearFechaLocal(hastaAnteriorDate);
 
     const queryAnterior = `
       SELECT 
@@ -321,7 +346,7 @@ const dashboardPersonal = async (req, res) => {
         COALESCE(AVG(valor_final), 0) as promedio_venta_anterior
       FROM ventas 
       WHERE asesor_id = $1 
-        AND estado_detallado = 'vendido'
+        AND estado_detallado LIKE 'vendido%'
         AND fecha_venta >= $2 
         AND fecha_venta <= $3
     `;
@@ -329,15 +354,15 @@ const dashboardPersonal = async (req, res) => {
     // ============================================
     // EJECUTAR QUERIES EN PARALELO
     // ============================================
-    const añoActual = desde.getFullYear();
-    const mesActual = desde.getMonth() + 1;
+    // Extraer año y mes del string de fecha (YYYY-MM-DD)
+    const [añoActual, mesActual] = desde.split('-').map(Number);
 
     const [resultadoActual, resultadoAnterior, resultadoPipeline, resultadoMetas, resultadoActividad] = await Promise.all([
-      query(queryActual, [asesor_id, desde.toISOString().split('T')[0], hasta.toISOString().split('T')[0]]),
-      query(queryAnterior, [asesor_id, desdeAnterior.toISOString().split('T')[0], hastaAnterior.toISOString().split('T')[0]]),
-      query(queryPipeline, [asesor_id, desde.toISOString().split('T')[0], hasta.toISOString().split('T')[0]]),
+      query(queryActual, [asesor_id, desde, hasta]),
+      query(queryAnterior, [asesor_id, desdeAnterior, hastaAnterior]),
+      query(queryPipeline, [asesor_id, desde, hasta]),
       query(queryMetas, [asesor_id, añoActual, mesActual]),
-      query(queryActividad, [asesor_id, desde.toISOString().split('T')[0], hasta.toISOString().split('T')[0]])
+      query(queryActividad, [asesor_id, desde, hasta])
     ]);
 
     const metricas = resultadoActual.rows[0];
@@ -384,8 +409,8 @@ const dashboardPersonal = async (req, res) => {
         },
         periodo: {
           tipo: periodo,
-          desde: desde.toISOString().split('T')[0],
-          hasta: hasta.toISOString().split('T')[0],
+          desde: desde,
+          hasta: hasta,
           dias_transcurridos: diasTranscurridos
         },
 
@@ -496,7 +521,7 @@ const geografiaPorAsesor = async (req, res) => {
         ROUND(COUNT(*) * 100.0 / SUM(COUNT(*)) OVER(), 2) as porcentaje_ventas
       FROM ventas 
       WHERE asesor_id = $1 
-        AND estado_detallado = 'vendido'
+        AND estado_detallado LIKE 'vendido%'
         AND fecha_venta >= $2 
         AND fecha_venta <= $3
       GROUP BY departamento, ciudad
@@ -556,7 +581,7 @@ const sectoresPorAsesor = async (req, res) => {
         ROUND(COUNT(*) * 100.0 / SUM(COUNT(*)) OVER(), 2) as porcentaje_ventas
       FROM ventas 
       WHERE asesor_id = $1 
-        AND estado_detallado = 'vendido'
+        AND estado_detallado LIKE 'vendido%'
         AND fecha_venta >= $2 
         AND fecha_venta <= $3
       GROUP BY sector
@@ -631,7 +656,7 @@ const evolucionPorAsesor = async (req, res) => {
         COALESCE(AVG(valor_final), 0) as ticket_promedio
       FROM ventas 
       WHERE asesor_id = $1 
-        AND estado_detallado = 'vendido'
+        AND estado_detallado LIKE 'vendido%'
         AND fecha_venta >= $2 
         AND fecha_venta <= $3
       GROUP BY periodo_label, periodo_fecha
@@ -691,7 +716,7 @@ const rankingAsesor = async (req, res) => {
           RANK() OVER (ORDER BY SUM(v.valor_final) DESC) as posicion_ingresos
         FROM ventas v
         LEFT JOIN usuarios u ON v.asesor_id = u.id
-        WHERE v.estado_detallado = 'vendido'
+        WHERE v.estado_detallado LIKE 'vendido%'
           AND v.fecha_venta >= $2 
           AND v.fecha_venta <= $3
         GROUP BY v.asesor_id, u.nombre
@@ -821,7 +846,7 @@ const listarAsesoresDisponibles = async (req, res) => {
 
       FROM usuarios u
       LEFT JOIN ventas v ON u.id = v.asesor_id
-        AND v.estado_detallado = 'vendido'
+        AND v.estado_detallado LIKE 'vendido%'
         AND v.fecha_venta >= date_trunc('month', CURRENT_DATE)
         AND v.activo = true
       LEFT JOIN metas_ventas mv ON u.id = mv.asesor_id
@@ -974,7 +999,7 @@ const obtenerPeriodosDisponibles = async (req, res) => {
       FROM ventas
       WHERE asesor_id = $1
         AND activo = true
-        AND estado_detallado = 'vendido'
+        AND estado_detallado LIKE 'vendido%'
         AND fecha_venta IS NOT NULL
       GROUP BY año, mes, trimestre, DATE_TRUNC('week', fecha_venta)
       ORDER BY año DESC, mes DESC, semana_inicio DESC

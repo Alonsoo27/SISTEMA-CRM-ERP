@@ -693,7 +693,7 @@ const cargarProductosProspecto = async (prospectoId) => {
           cliente_empresa: cliente.tipo_cliente === 'empresa' ? cliente.razon_social : (cliente.cliente_empresa || ''),
           cliente_email: cliente.email || '',
           cliente_telefono: cliente.telefono || '',
-          ciudad: cliente.ciudad || '',
+          ciudad: cliente.provincia || '', // ✅ CORREGIDO: provincia, NO ciudad
           departamento: cliente.departamento || '',
           distrito: cliente.distrito || ''
         }));
@@ -746,11 +746,11 @@ const cargarProductosProspecto = async (prospectoId) => {
     setFormData(prev => ({
       ...prev,
       nombre_cliente: cliente.nombre_cliente || '', // ✅ CORREGIDO
-      apellido_cliente: cliente.apellido_cliente || '', // ✅ AGREGADO  
+      apellido_cliente: cliente.apellido_cliente || '', // ✅ AGREGADO
       cliente_email: cliente.email || cliente.cliente_email || '',
       cliente_telefono: cliente.telefono || cliente.cliente_telefono || '',
       cliente_empresa: cliente.empresa || cliente.cliente_empresa || '',
-      ciudad: cliente.ciudad || '',
+      ciudad: cliente.provincia || cliente.ciudad || '', // ✅ CORREGIDO: provincia primero
       departamento: cliente.departamento || '',
       distrito: cliente.distrito || '',
       canal_contacto: cliente.canal_contacto || 'WhatsApp' // ✅ AGREGADO

@@ -150,7 +150,7 @@ exports.actualizarMetricasAsesor = async (asesorId, ventaId) => {
         const ventaResult = await query(`
             SELECT valor_final, fecha_creacion, prospecto_id
             FROM ventas 
-            WHERE id = $1 AND asesor_id = $2 AND estado_detallado = 'vendido'
+            WHERE id = $1 AND asesor_id = $2 AND estado_detallado LIKE 'vendido%'
         `, [ventaId, asesorId]);
 
         if (ventaResult.rows.length === 0) {
@@ -170,7 +170,7 @@ exports.actualizarMetricasAsesor = async (asesorId, ventaId) => {
                 AVG(valor_final) as promedio_mes
             FROM ventas 
             WHERE asesor_id = $1 
-            AND estado_detallado = 'vendido' 
+            AND estado_detallado LIKE 'vendido%' 
             AND created_at BETWEEN $2 AND $3
         `, [asesorId, inicioMes, finMes]);
 

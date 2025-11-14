@@ -162,7 +162,7 @@ const vistaUnificada = async (req, res) => {
         COUNT(DISTINCT ciudad) as ciudades_cubiertas,
         COUNT(DISTINCT canal_contacto) as canales_activos
       FROM ventas 
-      WHERE estado_detallado = 'vendido' 
+      WHERE estado_detallado LIKE 'vendido%' 
         AND activo = true
         AND fecha_venta BETWEEN $1 AND $2
     `;
@@ -177,7 +177,7 @@ const vistaUnificada = async (req, res) => {
         COALESCE(AVG(v.valor_final), 0) as ticket_promedio
       FROM ventas v
       INNER JOIN usuarios u ON v.asesor_id = u.id
-      WHERE v.estado_detallado = 'vendido'
+      WHERE v.estado_detallado LIKE 'vendido%'
         AND v.activo = true
         AND v.fecha_venta BETWEEN $1 AND $2
       GROUP BY v.asesor_id, u.nombre, u.apellido
@@ -195,7 +195,7 @@ const vistaUnificada = async (req, res) => {
         COALESCE(AVG(v.valor_final), 0) as ticket_promedio
       FROM ventas v
       INNER JOIN usuarios u ON v.asesor_id = u.id
-      WHERE v.estado_detallado = 'vendido'
+      WHERE v.estado_detallado LIKE 'vendido%'
         AND v.activo = true
         AND v.fecha_venta BETWEEN $1 AND $2
       GROUP BY v.asesor_id, u.nombre, u.apellido
@@ -211,7 +211,7 @@ const vistaUnificada = async (req, res) => {
         COALESCE(SUM(valor_final), 0) as ingresos,
         COALESCE(AVG(valor_final), 0) as ticket_promedio
       FROM ventas 
-      WHERE estado_detallado = 'vendido' 
+      WHERE estado_detallado LIKE 'vendido%' 
         AND activo = true
         AND fecha_venta BETWEEN $1 AND $2
       GROUP BY canal_contacto
@@ -226,7 +226,7 @@ const vistaUnificada = async (req, res) => {
         COALESCE(SUM(valor_final), 0) as ingresos_dia,
         COALESCE(AVG(valor_final), 0) as ticket_promedio_dia
       FROM ventas 
-      WHERE estado_detallado = 'vendido' 
+      WHERE estado_detallado LIKE 'vendido%' 
         AND activo = true
         AND fecha_venta >= CURRENT_DATE - INTERVAL '15 days'
       GROUP BY fecha_venta
@@ -242,7 +242,7 @@ const vistaUnificada = async (req, res) => {
         COALESCE(SUM(valor_final), 0) as ingresos,
         COALESCE(AVG(valor_final), 0) as ticket_promedio
       FROM ventas 
-      WHERE estado_detallado = 'vendido' 
+      WHERE estado_detallado LIKE 'vendido%' 
         AND activo = true
         AND fecha_venta BETWEEN $1 AND $2
       GROUP BY tipo_venta
@@ -263,7 +263,7 @@ const vistaUnificada = async (req, res) => {
         COALESCE(AVG(valor_final), 0) as ticket_promedio_anterior,
         COUNT(DISTINCT asesor_id) as asesores_activos_anterior
       FROM ventas
-      WHERE estado_detallado = 'vendido'
+      WHERE estado_detallado LIKE 'vendido%'
         AND activo = true
         AND fecha_venta BETWEEN $1 AND $2
     `;
@@ -282,7 +282,7 @@ const vistaUnificada = async (req, res) => {
           SELECT COUNT(*)
           FROM ventas v2
           WHERE v2.asesor_id = v.asesor_id
-            AND v2.estado_detallado = 'vendido'
+            AND v2.estado_detallado LIKE 'vendido%'
             AND v2.activo = true
             AND v2.fecha_venta BETWEEN $3 AND $4
         ), 0) as ventas_anterior,
@@ -291,14 +291,14 @@ const vistaUnificada = async (req, res) => {
           SELECT SUM(v2.valor_final)
           FROM ventas v2
           WHERE v2.asesor_id = v.asesor_id
-            AND v2.estado_detallado = 'vendido'
+            AND v2.estado_detallado LIKE 'vendido%'
             AND v2.activo = true
             AND v2.fecha_venta BETWEEN $3 AND $4
         ), 0) as ingresos_anterior
 
       FROM ventas v
       INNER JOIN usuarios u ON v.asesor_id = u.id
-      WHERE v.estado_detallado = 'vendido'
+      WHERE v.estado_detallado LIKE 'vendido%'
         AND v.activo = true
         AND v.fecha_venta BETWEEN $1 AND $2
         AND u.vende = true
@@ -325,7 +325,7 @@ const vistaUnificada = async (req, res) => {
         COUNT(CASE WHEN EXTRACT(DOW FROM fecha_venta) = 0 THEN 1 END) as domingo
 
       FROM ventas
-      WHERE estado_detallado = 'vendido'
+      WHERE estado_detallado LIKE 'vendido%'
         AND activo = true
         AND fecha_venta BETWEEN $1 AND $2
       GROUP BY canal_contacto
@@ -497,7 +497,7 @@ const metasAvanzado = async (req, res) => {
           COUNT(*) as ventas_reales,
           SUM(valor_final) as valor_real
         FROM ventas
-        WHERE estado_detallado = 'vendido'
+        WHERE estado_detallado LIKE 'vendido%'
           AND activo = true
           AND EXTRACT(YEAR FROM fecha_venta) = $1
           AND EXTRACT(MONTH FROM fecha_venta) = $2
@@ -872,7 +872,7 @@ const sectoresStrategy = async (req, res) => {
         MIN(fecha_venta) as primera_venta,
         MAX(fecha_venta) as ultima_venta
       FROM ventas 
-      WHERE estado_detallado = 'vendido' 
+      WHERE estado_detallado LIKE 'vendido%' 
         AND activo = true
         AND fecha_venta BETWEEN $1 AND $2
       GROUP BY sector
@@ -888,7 +888,7 @@ const sectoresStrategy = async (req, res) => {
         COALESCE(SUM(valor_final), 0) as ingresos,
         COALESCE(AVG(valor_final), 0) as ticket_promedio
       FROM ventas 
-      WHERE estado_detallado = 'vendido' 
+      WHERE estado_detallado LIKE 'vendido%' 
         AND activo = true
         AND fecha_venta BETWEEN $1 AND $2
       GROUP BY asesor_id, sector
@@ -978,7 +978,7 @@ const abcProductos = async (req, res) => {
       FROM venta_detalles vd
       INNER JOIN ventas v ON vd.venta_id = v.id
       INNER JOIN productos p ON vd.producto_id = p.id
-      WHERE v.estado_detallado = 'vendido'
+      WHERE v.estado_detallado LIKE 'vendido%'
         AND v.activo = true
         AND vd.activo = true
         AND p.activo = true
@@ -1002,7 +1002,7 @@ const abcProductos = async (req, res) => {
       FROM ventas v
       INNER JOIN venta_detalles vd ON v.id = vd.venta_id
       INNER JOIN usuarios u ON v.asesor_id = u.id
-      WHERE v.estado_detallado = 'vendido'
+      WHERE v.estado_detallado LIKE 'vendido%'
         AND v.activo = true
         AND vd.activo = true
         AND u.activo = true
@@ -1022,7 +1022,7 @@ const abcProductos = async (req, res) => {
         COUNT(DISTINCT v.id) as ventas_con_productos
       FROM venta_detalles vd
       INNER JOIN ventas v ON vd.venta_id = v.id
-      WHERE v.estado_detallado = 'vendido' 
+      WHERE v.estado_detallado LIKE 'vendido%' 
         AND v.activo = true
         AND vd.activo = true
         AND v.fecha_venta BETWEEN $1 AND $2
@@ -1102,7 +1102,7 @@ const generarMatrizAsesorCiudad = async (fechaInicio, fechaFin) => {
         COALESCE(AVG(v.valor_final), 0) as ticket_promedio
       FROM ventas v
       INNER JOIN usuarios u ON v.asesor_id = u.id
-      WHERE v.estado_detallado = 'vendido'
+      WHERE v.estado_detallado LIKE 'vendido%'
         AND v.activo = true
         AND v.fecha_venta BETWEEN $1 AND $2
       GROUP BY v.asesor_id, u.nombre, u.apellido, v.ciudad, v.departamento
@@ -1136,7 +1136,7 @@ const analisisGeografico = async (req, res) => {
         MIN(fecha_venta) as primera_venta,
         MAX(fecha_venta) as ultima_venta
       FROM ventas 
-      WHERE estado_detallado = 'vendido' 
+      WHERE estado_detallado LIKE 'vendido%' 
         AND activo = true
         AND fecha_venta BETWEEN $1 AND $2
       GROUP BY departamento
@@ -1153,7 +1153,7 @@ const analisisGeografico = async (req, res) => {
         COALESCE(AVG(valor_final), 0) as ticket_promedio,
         COUNT(DISTINCT asesor_id) as asesores_activos
       FROM ventas 
-      WHERE estado_detallado = 'vendido' 
+      WHERE estado_detallado LIKE 'vendido%' 
         AND activo = true
         AND fecha_venta BETWEEN $1 AND $2
       GROUP BY ciudad, departamento
@@ -1173,7 +1173,7 @@ const analisisGeografico = async (req, res) => {
         COALESCE(SUM(v.valor_final), 0) as ingresos_totales
       FROM ventas v
       INNER JOIN usuarios u ON v.asesor_id = u.id
-      WHERE v.estado_detallado = 'vendido'
+      WHERE v.estado_detallado LIKE 'vendido%'
         AND v.activo = true
         AND v.fecha_venta BETWEEN $1 AND $2
       GROUP BY v.asesor_id, u.nombre, u.apellido, u.email
@@ -2013,7 +2013,7 @@ const periodosDisponibles = async (req, res) => {
         COUNT(*) as total_ventas,
         COUNT(DISTINCT asesor_id) as asesores_activos
       FROM ventas
-      WHERE estado_detallado = 'vendido'
+      WHERE estado_detallado LIKE 'vendido%'
         AND activo = true
         AND fecha_venta IS NOT NULL
       GROUP BY EXTRACT(YEAR FROM fecha_venta), EXTRACT(MONTH FROM fecha_venta)

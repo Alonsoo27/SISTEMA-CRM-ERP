@@ -159,7 +159,7 @@ class ComisionesController {
                 FROM ventas v
                 INNER JOIN metas_ventas mv ON v.asesor_id = mv.asesor_id
                 WHERE v.asesor_id = $1 
-                AND v.estado_detallado = 'vendido'
+                AND v.estado_detallado LIKE 'vendido%'
                 AND EXTRACT(YEAR FROM v.fecha_creacion) = $2
                 AND EXTRACT(MONTH FROM v.fecha_creacion) = $3
                 AND mv.año = $2 AND mv.mes = $3
@@ -338,7 +338,7 @@ class ComisionesController {
                     COUNT(*) as cantidad_ventas
                 FROM ventas
                 WHERE asesor_id = $1
-                    AND estado_detallado = 'vendido'
+                    AND estado_detallado LIKE 'vendido%'
                     AND EXTRACT(YEAR FROM fecha_venta) = $2
                     AND EXTRACT(MONTH FROM fecha_venta) = $3
                     AND activo = true

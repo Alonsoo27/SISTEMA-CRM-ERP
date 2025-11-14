@@ -1548,7 +1548,7 @@ const dashboardProductos = async (req, res) => {
                 LEFT JOIN ventas v ON vd.venta_id = v.id
                 WHERE p.activo = true
                     AND (v.fecha_venta IS NULL OR v.fecha_venta >= $1)
-                    AND (v.estado_detallado IS NULL OR v.estado_detallado = 'vendido')
+                    AND (v.estado_detallado IS NULL OR v.estado_detallado LIKE 'vendido%')
                     ${linea_producto ? 'AND COALESCE(p.linea_producto, \'Sin línea\') = $2' : ''}
                 GROUP BY p.id, p.codigo, p.descripcion, p.linea_producto, p.sublinea_producto, p.precio_sin_igv, p.marca
                 ORDER BY cantidad_total_vendida DESC NULLS LAST, p.precio_sin_igv DESC
@@ -1604,7 +1604,7 @@ const dashboardProductos = async (req, res) => {
             JOIN ventas v ON vd.venta_id = v.id
             WHERE vd.activo = true
                 AND v.fecha_venta >= $1
-                AND v.estado_detallado = 'vendido'
+                AND v.estado_detallado LIKE 'vendido%'
         `, [fechaDesde]);
 
         const dashboard = {

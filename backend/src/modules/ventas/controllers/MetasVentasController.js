@@ -420,7 +420,7 @@ class MetasVentasController {
                         COUNT(*) as total_ventas,
                         SUM(valor_final) as valor_total
                     FROM ventas
-                    WHERE estado_detallado = 'vendido' AND activo = true
+                    WHERE estado_detallado LIKE 'vendido%' AND activo = true
                         AND EXTRACT(YEAR FROM fecha_venta) = $1
                         AND EXTRACT(MONTH FROM fecha_venta) = $2
                     GROUP BY asesor_id

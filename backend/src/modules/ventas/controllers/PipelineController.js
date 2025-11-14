@@ -207,7 +207,7 @@ const dashboardPipeline = async (req, res) => {
         COUNT(*) as ventas_cerradas
       FROM ventas
       WHERE activo = true
-        AND estado_detallado = 'vendido'
+        AND estado_detallado LIKE 'vendido%'
         AND fecha_venta::date BETWEEN $1 AND $2
         ${asesor_id ? 'AND asesor_id = $3' : ''}
     `;

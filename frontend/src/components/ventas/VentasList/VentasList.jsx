@@ -258,6 +258,10 @@ const VentasList = ({
   const [ventaParaRecepcion, setVentaParaRecepcion] = useState(null);
   const [modalProductos, setModalProductos] = useState({ isOpen: false, venta: null, productos: [] });
 
+  // ✅ NUEVOS ESTADOS PARA FILTRO DE FECHAS
+  const [fechaDesde, setFechaDesde] = useState('');
+  const [fechaHasta, setFechaHasta] = useState('');
+
   // 🔐 NUEVOS ESTADOS PARA CONTROL POR ROLES
   const [asesorSeleccionado, setAsesorSeleccionado] = useState(null);
   const [asesoresDisponibles, setAsesoresDisponibles] = useState([]);
@@ -473,6 +477,25 @@ const VentasList = ({
       );
     }
 
+    // ✅ FILTRO POR RANGO DE FECHAS (sin problemas de timezone)
+    if (fechaDesde) {
+      resultado = resultado.filter(v => {
+        if (!v.fecha_creacion) return false;
+        // Extraer solo la fecha (YYYY-MM-DD) de la fecha de creación
+        const fechaVentaStr = v.fecha_creacion.split('T')[0].split(' ')[0]; // "2025-11-14"
+        return fechaVentaStr >= fechaDesde; // Comparación de strings YYYY-MM-DD
+      });
+    }
+
+    if (fechaHasta) {
+      resultado = resultado.filter(v => {
+        if (!v.fecha_creacion) return false;
+        // Extraer solo la fecha (YYYY-MM-DD) de la fecha de creación
+        const fechaVentaStr = v.fecha_creacion.split('T')[0].split(' ')[0]; // "2025-11-14"
+        return fechaVentaStr <= fechaHasta; // Comparación de strings YYYY-MM-DD
+      });
+    }
+
     // Aplicar otros filtros si existen
     // (podrías agregar más filtros aquí si los necesitas)
 
@@ -497,7 +520,7 @@ const VentasList = ({
     });
 
     return resultado;
-  }, [ventasCache, busquedaLocal, ordenamiento]);
+  }, [ventasCache, busquedaLocal, fechaDesde, fechaHasta, ordenamiento]);
 
   // Paginación client-side
   const ventasPaginadas = useMemo(() => {
@@ -537,6 +560,24 @@ const VentasList = ({
   const handleBusqueda = useCallback((valor) => {
     setBusquedaLocal(valor);
     setPaginacion(prev => ({ ...prev, pagina: 1 })); // Reset a página 1
+  }, []);
+
+  // ✅ HANDLERS PARA FILTROS DE FECHA
+  const handleFechaDesde = useCallback((valor) => {
+    setFechaDesde(valor);
+    setPaginacion(prev => ({ ...prev, pagina: 1 }));
+  }, []);
+
+  const handleFechaHasta = useCallback((valor) => {
+    setFechaHasta(valor);
+    setPaginacion(prev => ({ ...prev, pagina: 1 }));
+  }, []);
+
+  const handleLimpiarFiltros = useCallback(() => {
+    setBusquedaLocal('');
+    setFechaDesde('');
+    setFechaHasta('');
+    setPaginacion(prev => ({ ...prev, pagina: 1 }));
   }, []);
 
   const handleOrdenamiento = useCallback((campo) => {
@@ -846,6 +887,46 @@ const VentasList = ({
             onChange={(e) => handleBusqueda(e.target.value)}
             className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
           />
+        </div>
+
+        {/* ✅ FILTROS DE FECHA */}
+        <div className="mt-4 p-4 bg-gradient-to-r from-blue-50 to-purple-50 rounded-lg border border-blue-200">
+          <div className="flex flex-wrap items-center gap-4">
+            <div className="flex items-center">
+              <Calendar className="h-5 w-5 text-blue-600 mr-2" />
+              <span className="text-sm font-medium text-gray-700">Filtrar por fecha:</span>
+            </div>
+
+            <div className="flex items-center space-x-2">
+              <label className="text-sm text-gray-600">Desde:</label>
+              <input
+                type="date"
+                value={fechaDesde}
+                onChange={(e) => handleFechaDesde(e.target.value)}
+                className="px-3 py-1 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+            </div>
+
+            <div className="flex items-center space-x-2">
+              <label className="text-sm text-gray-600">Hasta:</label>
+              <input
+                type="date"
+                value={fechaHasta}
+                onChange={(e) => handleFechaHasta(e.target.value)}
+                className="px-3 py-1 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+            </div>
+
+            {(fechaDesde || fechaHasta || busquedaLocal) && (
+              <button
+                onClick={handleLimpiarFiltros}
+                className="inline-flex items-center px-3 py-1 text-sm font-medium text-red-600 bg-red-50 border border-red-200 rounded-md hover:bg-red-100 transition-colors"
+              >
+                <X className="h-4 w-4 mr-1" />
+                Limpiar filtros
+              </button>
+            )}
+          </div>
         </div>
       </div>
 
