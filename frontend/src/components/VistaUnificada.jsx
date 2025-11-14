@@ -258,57 +258,81 @@ const VistaUnificada = ({
           loading={loading}
         />
 
-      {/* Métricas de Crecimiento */}
-      {comparativas.metricas && (
-        <div className="bg-gradient-to-r from-green-500 to-emerald-600 rounded-lg shadow p-6 text-white">
-          <div className="flex items-center justify-between">
+      {/* Métricas de Crecimiento vs Período Anterior */}
+      {comparativas.metricas && (() => {
+        const ventasVariacion = comparativas.metricas.ventas?.variacion?.porcentaje || 0;
+        const ingresosVariacion = comparativas.metricas.ingresos?.variacion?.porcentaje || 0;
+        const ticketVariacion = comparativas.metricas.ticket_promedio?.variacion?.porcentaje || 0;
+
+        // Determinar color general basado en ingresos (más importante)
+        const esPositivo = ingresosVariacion >= 0;
+        const colorClasses = esPositivo
+          ? 'from-green-500 to-emerald-600'
+          : 'from-red-500 to-rose-600';
+
+        const renderMetrica = (label, variacion, actual, anterior, formatFn = (v) => v, icon = null) => {
+          const esPos = variacion >= 0;
+          const IconoTendencia = esPos ? TrendingUp : TrendingDown;
+          const signo = esPos ? '+' : '';
+
+          return (
             <div>
-              <h3 className="text-2xl font-bold mb-2">Crecimiento vs Período Anterior</h3>
-              <div className="grid grid-cols-3 gap-6">
-                <div>
-                  <p className="text-green-100 text-sm">Ventas</p>
-                  <div className="flex items-center">
-                    <TrendingUp className="h-5 w-5 mr-2" />
-                    <span className="text-2xl font-bold">
-                      +{comparativas.metricas.ventas?.variacion?.porcentaje}%
-                    </span>
-                  </div>
-                  <p className="text-green-100 text-xs">
-                    {comparativas.metricas.ventas?.actual} vs {comparativas.metricas.ventas?.anterior}
-                  </p>
+              <p className="text-white text-sm font-medium mb-1">{label}</p>
+              <div className="flex items-center mb-2">
+                <IconoTendencia className="h-5 w-5 mr-2" />
+                <span className="text-2xl font-bold">
+                  {signo}{Math.round(variacion)}%
+                </span>
+              </div>
+              <div className="text-sm">
+                <div className="flex items-center space-x-2">
+                  <span className="font-semibold">Actual:</span>
+                  <span className="bg-white/20 px-2 py-0.5 rounded">{formatFn(actual)}</span>
                 </div>
-                <div>
-                  <p className="text-green-100 text-sm">Ingresos</p>
-                  <div className="flex items-center">
-                    <DollarSign className="h-5 w-5 mr-2" />
-                    <span className="text-2xl font-bold">
-                      +{Math.round(comparativas.metricas.ingresos?.variacion?.porcentaje || 0)}%
-                    </span>
-                  </div>
-                  <p className="text-green-100 text-xs">
-                    {formatearMonto(comparativas.metricas.ingresos?.actual)} vs {formatearMonto(comparativas.metricas.ingresos?.anterior)}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-green-100 text-sm">Ticket Promedio</p>
-                  <div className="flex items-center">
-                    <BarChart3 className="h-5 w-5 mr-2" />
-                    <span className="text-2xl font-bold">
-                      +{Math.round(comparativas.metricas.ticket_promedio?.variacion?.porcentaje || 0)}%
-                    </span>
-                  </div>
-                  <p className="text-green-100 text-xs">
-                    {formatearMonto(comparativas.metricas.ticket_promedio?.actual)} vs {formatearMonto(comparativas.metricas.ticket_promedio?.anterior)}
-                  </p>
+                <div className="flex items-center space-x-2 mt-1 opacity-75">
+                  <span className="text-xs">Anterior:</span>
+                  <span className="text-xs">{formatFn(anterior)}</span>
                 </div>
               </div>
             </div>
-            <div>
-              <Activity className="h-16 w-16 text-green-200" />
+          );
+        };
+
+        return (
+          <div className={`bg-gradient-to-r ${colorClasses} rounded-lg shadow-lg p-6 text-white`}>
+            <div className="flex items-center justify-between">
+              <div className="flex-1">
+                <div className="flex items-center mb-4">
+                  <Activity className="h-6 w-6 mr-3" />
+                  <h3 className="text-2xl font-bold">Comparativa con Período Anterior</h3>
+                </div>
+                <div className="grid grid-cols-3 gap-8">
+                  {renderMetrica(
+                    'Ventas',
+                    ventasVariacion,
+                    comparativas.metricas.ventas?.actual,
+                    comparativas.metricas.ventas?.anterior
+                  )}
+                  {renderMetrica(
+                    'Ingresos',
+                    ingresosVariacion,
+                    comparativas.metricas.ingresos?.actual,
+                    comparativas.metricas.ingresos?.anterior,
+                    formatearMonto
+                  )}
+                  {renderMetrica(
+                    'Ticket Promedio',
+                    ticketVariacion,
+                    comparativas.metricas.ticket_promedio?.actual,
+                    comparativas.metricas.ticket_promedio?.anterior,
+                    formatearMonto
+                  )}
+                </div>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* KPIs principales */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">

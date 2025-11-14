@@ -46,7 +46,7 @@ router.get('/maestro', authenticateToken, requireRole(GRUPOS_ROLES.JEFES_Y_EJECU
         const ventasData = await query(`
             SELECT 
                 COUNT(*) as total_ventas,
-                COUNT(CASE WHEN estado_detallado = 'vendido' THEN 1 END) as ventas_completadas,
+                COUNT(CASE WHEN estado_detallado LIKE 'vendido%' THEN 1 END) as ventas_completadas,
                 COALESCE(SUM(valor_final), 0) as ingresos_totales,
                 COALESCE(AVG(valor_final), 0) as ticket_promedio
             FROM ventas 

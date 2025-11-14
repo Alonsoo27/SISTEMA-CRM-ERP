@@ -509,9 +509,9 @@ router.get('/metricas-asesor/:id', authenticateToken, requireVentasAccess, async
             WITH metricas_mes AS (
                 SELECT 
                     COUNT(*) as ventas_mes,
-                    COUNT(CASE WHEN estado_detallado = 'vendido' THEN 1 END) as ventas_completadas,
-                    SUM(CASE WHEN estado_detallado = 'vendido' THEN valor_final ELSE 0 END) as ingresos_mes,
-                    AVG(CASE WHEN estado_detallado = 'vendido' THEN valor_final END) as ticket_promedio,
+                    COUNT(CASE WHEN estado_detallado LIKE 'vendido%' THEN 1 END) as ventas_completadas,
+                    SUM(CASE WHEN estado_detallado LIKE 'vendido%' THEN valor_final ELSE 0 END) as ingresos_mes,
+                    AVG(CASE WHEN estado_detallado LIKE 'vendido%' THEN valor_final END) as ticket_promedio,
                     COUNT(CASE WHEN DATE(fecha_creacion) = CURRENT_DATE THEN 1 END) as ventas_hoy,
                     COUNT(CASE WHEN estado_detallado = 'anulado' THEN 1 END) as ventas_canceladas
                 FROM ventas 

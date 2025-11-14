@@ -144,7 +144,7 @@ router.get('/dashboard', authenticateToken, async (req, res) => {
                 COUNT(DISTINCT cliente_empresa) as clientes_unicos
             FROM ventas
             WHERE asesor_id = $1
-            AND estado_detallado = 'vendido'
+            AND estado_detallado LIKE 'vendido%'
             AND fecha_venta >= $2
             AND fecha_venta <= $3
             AND activo = true
