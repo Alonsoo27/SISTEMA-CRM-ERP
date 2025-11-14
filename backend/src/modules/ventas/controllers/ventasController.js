@@ -465,7 +465,7 @@ exports.crearVenta = async (req, res) => {
         cliente_email, cliente_telefono, canal_contacto,
         ciudad, departamento, distrito, valor_total,
         descuento_porcentaje = 0, descuento_monto = 0,
-        estado_detallado LIKE 'vendido%', canal_origen = 'venta-directa',
+        estado_detallado = 'vendido', canal_origen = 'venta-directa',
         tipo_venta = 'boleta', probabilidad_cierre = 50,
         fecha_entrega_estimada, fecha_venta, notas_internas,
         condiciones_especiales, detalles = [], productos = [],
