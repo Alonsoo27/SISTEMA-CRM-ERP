@@ -1712,6 +1712,13 @@ const response = await ventasService.crearVentaCompleta(datosVenta);
 
                   console.log('🔒 Cliente registrado encontrado:', cliente);
 
+                  // ⚠️ EVITAR SOBRESCRIBIR SI YA ESTÁ CARGADO
+                  // Solo cargar datos si es un cliente diferente o es la primera carga
+                  if (formData.cliente_id === cliente.id) {
+                    console.log('⏭️ Cliente ya cargado, no sobrescribir datos');
+                    return;
+                  }
+
                   handleInputChange('cliente_id', cliente.id);
 
                   // 🔒 ACTIVAR BLOQUEO - Los datos del cliente ya NO son editables
@@ -1738,15 +1745,13 @@ const response = await ventasService.crearVentaCompleta(datosVenta);
                   if (cliente.provincia) handleInputChange('ciudad', cliente.provincia);
                   if (cliente.distrito) handleInputChange('distrito', cliente.distrito);
 
-                  // Mostrar notificación solo si es un cliente diferente al actual
-                  if (formData.cliente_id !== cliente.id) {
-                    const tipoTexto = tipoCliente === 'RUC' ? 'Empresa' : 'Cliente';
-                    setNotification({
-                      type: 'success',
-                      message: `${tipoTexto} ${cliente.nombre_completo || cliente.razon_social} cargado automáticamente`,
-                      id: Date.now()
-                    });
-                  }
+                  // Mostrar notificación
+                  const tipoTexto = tipoCliente === 'RUC' ? 'Empresa' : 'Cliente';
+                  setNotification({
+                    type: 'success',
+                    message: `${tipoTexto} ${cliente.nombre_completo || cliente.razon_social} cargado automáticamente`,
+                    id: Date.now()
+                  });
                 }}
                 onClienteNoEncontrado={(data) => {
                   // Limpiar campos cuando no encuentra cliente
