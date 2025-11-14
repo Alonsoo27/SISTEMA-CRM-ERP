@@ -1918,11 +1918,13 @@ const response = await ventasService.crearVentaCompleta(datosVenta);
 
               {/* SELECTOR DE UBICACIONES OFICIALES */}
               <div className="md:col-span-3">
-                <div className={`p-4 bg-gradient-to-r from-green-50 to-blue-50 rounded-lg border border-green-200 ${clienteRegistradoBloqueado ? 'opacity-60' : ''}`}>
+                <div className={`p-4 bg-gradient-to-r from-green-50 to-blue-50 rounded-lg border border-green-200 ${
+                  clienteRegistradoBloqueado && (formData.departamento || formData.ciudad || formData.distrito) ? 'opacity-60' : ''
+                }`}>
                   <div className="flex items-center mb-3">
                     <MapPin className="h-5 w-5 text-green-600 mr-2" />
                     <h4 className="text-lg font-semibold text-gray-900">Ubicación del Cliente</h4>
-                    {clienteRegistradoBloqueado && (
+                    {clienteRegistradoBloqueado && (formData.departamento || formData.ciudad || formData.distrito) && (
                       <span className="ml-2 px-2 py-1 bg-yellow-100 text-yellow-800 text-xs font-medium rounded-full">
                         🔒 Bloqueado
                       </span>
@@ -1936,8 +1938,13 @@ const response = await ventasService.crearVentaCompleta(datosVenta);
                       distrito: formData.distrito
                     }}
                     onChange={(ubicacion) => {
-                      // 🔒 No permitir cambios si el cliente está bloqueado
-                      if (clienteRegistradoBloqueado) return;
+                      // 🔒 LÓGICA MEJORADA: Permitir editar si la ubicación está vacía
+                      const ubicacionVacia = !formData.departamento && !formData.ciudad && !formData.distrito;
+
+                      // Si el cliente está bloqueado pero la ubicación está vacía, permitir editar
+                      if (clienteRegistradoBloqueado && !ubicacionVacia) {
+                        return;
+                      }
 
                       // Actualizar los campos del formulario
                       handleInputChange('departamento', ubicacion.departamento);

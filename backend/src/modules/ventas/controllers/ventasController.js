@@ -615,6 +615,29 @@ exports.crearVenta = async (req, res) => {
                     // Cliente existe
                     clienteId = clienteExistente.rows[0].id;
                     console.log(`✅ Cliente existente encontrado: ID ${clienteId}`);
+
+                    // 🔄 ACTUALIZAR UBICACIÓN SI ESTÁ VACÍA
+                    // Verificar si el cliente tiene ubicación completa
+                    const ubicacionActual = await query(
+                        'SELECT departamento, provincia, distrito FROM clientes WHERE id = $1',
+                        [clienteId]
+                    );
+
+                    if (ubicacionActual.rows.length > 0) {
+                        const { departamento: depActual, provincia: provActual, distrito: distActual } = ubicacionActual.rows[0];
+                        const ubicacionVacia = !depActual && !provActual && !distActual;
+
+                        // Si la ubicación está vacía y vienen datos nuevos, actualizar
+                        if (ubicacionVacia && (departamento || ciudad || distrito)) {
+                            await query(
+                                `UPDATE clientes
+                                 SET departamento = $1, provincia = $2, distrito = $3, updated_at = NOW(), updated_by = $4
+                                 WHERE id = $5`,
+                                [departamento?.trim() || null, ciudad?.trim() || null, distrito?.trim() || null, req.user.id, clienteId]
+                            );
+                            console.log(`🔄 Ubicación actualizada para cliente ID ${clienteId}`);
+                        }
+                    }
                 } else {
                     // ⚡ DETECTAR TIPO POR DOCUMENTO, NO POR CAMPO EMPRESA
                     const tipoCliente = tipo_documento === 'RUC' ? 'empresa' : 'persona';
